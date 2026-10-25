@@ -12,7 +12,7 @@ Use the project's Python interpreter (`.venv/Scripts/python.exe` on Windows). Co
 1. Check `python -m movelyth doctor` if the environment has not been checked in this session.
 2. Read `python -m movelyth status` and `python -m movelyth ideas` for history and actual feedback.
 3. Run `python -m movelyth create "<title>"`. A title starts the complete chain; no manual script is required. Do not add `--new` unless the user explicitly wants another production of the same title.
-4. Keep the user informed while long role calls or rendering run. The task's `render.log`, agent event logs and SQLite events identify the current stage. Do not start a duplicate worker to check progress.
+4. Keep the user informed while long role calls or rendering run. The task's `render.log`, agent event logs and SQLite events identify the current stage. A role's `latest.json` points to its most recent attempt; older attempts remain available. Do not start a duplicate worker to check progress.
 5. On failure, inspect the relevant report/log, fix a demonstrated issue within scope and use `python -m movelyth resume VID-000001`. Valid stages and voice requests are cached. Do not hide errors or switch to a fixture/imported script and claim title-driven automation succeeded.
 6. Report the exact `delivery/待上传/VID-.../r.../` path only after status is ready and the manifest verifies. Link the two MP4s, covers and publishing copy. State any untested review limits recorded in `质检报告.json`.
 

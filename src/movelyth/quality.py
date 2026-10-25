@@ -12,7 +12,18 @@ from .media import ffmpeg, ffprobe
 from .util import run
 
 
-def verify_video(path: Path, *, width: int, height: int, seconds: float, fps: int) -> dict:
+def duration_policy(config: dict, cut: str) -> dict:
+    target = config[f"{cut}_seconds"]
+    low = config.get(f"{cut}_min_seconds", target * 0.55)
+    high = config.get(f"{cut}_max_seconds", target * 1.55)
+    if not 0 < low <= target <= high:
+        raise ValueError(f"{cut} 时长范围必须满足 0 < min <= target <= max")
+    return {"target_seconds": target, "minimum_seconds": low, "maximum_seconds": high,
+            "target_is_approximate": True}
+
+
+def verify_video(path: Path, *, width: int, height: int, seconds: float, fps: int,
+                 policy: dict | None = None) -> dict:
     """Decode the actual deliverable, inspect stream metadata, signal and temporal samples."""
     result = run([ffmpeg(), "-hide_banner", "-nostats", "-threads", "2", "-i", str(path),
                   "-map", "0:v:0", "-map", "0:a:0", "-af", "volumedetect", "-f", "null", "-"], timeout=600)
@@ -32,10 +43,12 @@ def verify_video(path: Path, *, width: int, height: int, seconds: float, fps: in
         "aac": audio.get("codec_name") == "aac",
         "dimensions": (video.get("width"), video.get("height")) == (width, height),
         "fps": abs(frame_rate - fps) < 0.01,
-        "duration": actual_seconds is not None and abs(actual_seconds - seconds) <= 0.2,
+        "duration_matches_timeline": actual_seconds is not None and abs(actual_seconds - seconds) <= 0.2,
         "audible": bool(mean and float(mean[1]) > -40),
         "no_clipping": bool(peak and float(peak[1]) < -0.2),
     }
+    if policy:
+        checks["requested_duration_range"] = policy["minimum_seconds"] <= actual_seconds <= policy["maximum_seconds"]
     sample = subprocess.run([ffmpeg(), "-v", "error", "-threads", "2", "-i", str(path),
                              "-vf", "fps=1,scale=128:72,format=gray", "-an", "-f", "rawvideo", "-"],
                             capture_output=True, timeout=300, check=True)
@@ -44,6 +57,7 @@ def verify_video(path: Path, *, width: int, height: int, seconds: float, fps: in
     checks["moving_picture"] = movement > 0.15
     checks["not_black"] = bool(len(frames) and np.mean(frames) > 6)
     return {"passed": all(checks.values()), "checks": checks, "duration": actual_seconds,
+            "timeline_seconds": seconds, "duration_policy": policy,
             "width": video.get("width"), "height": video.get("height"), "fps": frame_rate,
             "max_volume_db": float(peak[1]) if peak else None,
             "mean_volume_db": float(mean[1]) if mean else None,

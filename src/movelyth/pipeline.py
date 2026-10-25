@@ -15,7 +15,7 @@ from .agents import CodexAgents
 from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
 from .models import Film, Research, Review
-from .quality import contact_sheet, encoded_stills, srt, validate_script, verify_video
+from .quality import contact_sheet, duration_policy, encoded_stills, srt, validate_script, verify_video
 from .util import atomic_json, file_hash, fingerprint, now, read_json, run
 
 
@@ -215,7 +215,8 @@ class Studio:
                 data[name], generated = prepare_cut(film[name], config, self.workspace / "voice-cache",
                                                      job / "audio" / name, portrait=name == "short")
                 target = config["long_seconds" if name == "long" else "short_seconds"]
-                if not target * 0.55 <= data[name]["seconds"] <= target * 1.55:
+                policy = duration_policy(config, name)
+                if not policy["minimum_seconds"] <= data[name]["seconds"] <= policy["maximum_seconds"]:
                     raise RuntimeError(f"{name} 实际旁白时长 {data[name]['seconds']:.1f}s 偏离目标 {target}s")
                 paths.extend(generated)
             out = job / "timelines.json"
@@ -271,7 +272,8 @@ class Studio:
                     timeout=600, log=job / f"mux-{name}.log")
                 metadata = renders[name]
                 reports[name] = verify_video(video, width=metadata["width"], height=metadata["height"],
-                                              fps=config["fps"], seconds=timelines[name]["seconds"])
+                                              fps=config["fps"], seconds=timelines[name]["seconds"],
+                                              policy=duration_policy(config, name))
                 if not reports[name]["passed"]:
                     atomic_json(job / "quality-failed.json", reports)
                     raise RuntimeError(f"{name} 成片检查未通过：{reports[name]['checks']}")
@@ -287,6 +289,7 @@ class Studio:
             evidence = collect_sources(research_data["sources"], job / "source-evidence")
             visual = agents.call("reviewer", {"stage": "visual", "film": film, "research": research_data,
                                   "source_evidence": evidence, "technical_reports": reports,
+                                  "duration_policy": {k: duration_policy(config, k) for k in ["long", "short"]},
                                   "image_order": ["long contact sheet", "short contact sheet"]},
                                  Review, job / "agents" / "visual-review", images=images)
             atomic_json(job / "visual-review.json", visual.model_dump())

@@ -29,6 +29,8 @@ cd Movelyth-From-Idea-to-Final-Cut
 
 配置位于 `movelyth.toml`：默认中文，B站约 3 分钟横版，抖音约 1 分钟独立编排的竖版；实际时长由旁白决定，输出 1080p / 30fps。默认单渲染并发、编码 2 线程，避免占满机器。
 
+时长目标用于创作参考，硬范围单独配置：默认横版 120–300 秒、竖版 45–90 秒。程序分别检查文件与配音时间轴是否一致、成片是否落在允许范围；审片不会把参考目标当成精确截止时间。
+
 Python 依赖解析锁定在 `uv.lock`，Node 依赖锁定在 `studio/package-lock.json`。需要严格复现 Python 环境时可使用 `uv sync --locked --extra dev`；setup.ps1 的 pip 路线用于普通安装。
 
 ## 一句话调用与日常管理

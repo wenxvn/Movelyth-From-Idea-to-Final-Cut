@@ -17,6 +17,13 @@ def test_real_decoded_file_passes_and_wrong_dimensions_fail(tmp_path):
     assert report["passed"], report
     wrong = verify_video(path, width=1080, height=1920, fps=10, seconds=2)
     assert not wrong["passed"] and not wrong["checks"]["dimensions"]
+    approximate = {"target_seconds": 1.8, "minimum_seconds": 1.5, "maximum_seconds": 2.5,
+                   "target_is_approximate": True}
+    allowed = verify_video(path, width=320, height=180, fps=10, seconds=2, policy=approximate)
+    assert allowed["passed"] and allowed["checks"]["requested_duration_range"]
+    forbidden = verify_video(path, width=320, height=180, fps=10, seconds=2,
+                              policy={**approximate, "maximum_seconds": 1.9})
+    assert not forbidden["passed"] and not forbidden["checks"]["requested_duration_range"]
 
 
 def test_silent_audio_stream_does_not_pass_as_sound(tmp_path):

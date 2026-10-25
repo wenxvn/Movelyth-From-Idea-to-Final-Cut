@@ -10,4 +10,6 @@ passed 仅在没有需要修复的问题时为 true，issues 列出具体问题�
 
 warnings 记录非阻断的验证边界，例如尚未人工实听或某个来源暂时不可达；若同一数学主张已有其它一手来源支持，不要仅因一个 HTTP 获取失败而将它当成事实错误。真正影响内容正确性或画面理解的问题仍必须写入 issues 并拒绝。
 
+时长规则：duration_policy 的 minimum/maximum 才是硬范围；target_seconds 是参考目标。研究 brief 里的“180秒版”等同于参考目标，范围内不能仅因偏离 target 而拒绝或自行发明百分比阈值。duration_matches_timeline 检查文件与真实配音时间轴相差不超过0.2秒；requested_duration_range 检查实际时长在允许范围内。技术检查已经明确通过这两项时，不要把“约3分钟”重新解释为严格180秒。内容冗余仍可指出，但必须定位具体重复段落。
+
 只返回符合 schema 的 JSON。不写代码、不修改文件、不委派其它 Agent，不调用外部写操作。

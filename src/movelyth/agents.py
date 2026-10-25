@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import subprocess
 import uuid
 from importlib.resources import files
@@ -50,16 +51,19 @@ class CodexAgents:
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         with (directory / "events.log").open("w", encoding="utf-8") as log:
             proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT,
-                                    cwd=self.root, text=True, encoding="utf-8", creationflags=flags)
+                                    cwd=self.root, text=True, encoding="utf-8", creationflags=flags,
+                                    start_new_session=os.name != "nt")
             try:
                 proc.communicate(prompt, timeout=self.config.get("timeout_seconds", 600))
-            except subprocess.TimeoutExpired as exc:
+            except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
                 if os.name == "nt":
                     subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
                                    capture_output=True, creationflags=flags, check=False)
                 else:
-                    proc.kill()
+                    os.killpg(proc.pid, signal.SIGTERM)
                 proc.wait()
+                if isinstance(exc, KeyboardInterrupt):
+                    raise
                 raise RuntimeError(f"{role} 超时；已终止本次子进程，日志：{directory}") from exc
         if proc.returncode or not output.exists():
             raise RuntimeError(f"{role} 未生成有效结果；查看 {directory / 'events.log'}")
