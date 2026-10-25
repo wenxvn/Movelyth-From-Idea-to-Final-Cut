@@ -59,9 +59,11 @@ def film(long_scenes: list[dict] | None = None, short_scenes: list[dict] | None 
     return {"title": "测试影片", "thesis": "用可组合图层讲清一个具体问题", "long": {
         "title": "横版测试", "description": "这是横版发布说明，用于离线测试，不代表真实发布内容。",
         "tags": ["测试", "科普"], "scenes": long_scenes, "schema_version": 1, "style": style,
+        "title_candidates": ["横版候选标题一", "横版候选标题二"], "cover_caption": "横版封面文案",
     }, "short": {
         "title": "竖版测试", "description": "这是竖版发布说明，用于离线测试，不代表真实发布内容。",
         "tags": ["测试", "科普"], "scenes": short_scenes, "schema_version": 1, "style": style,
+        "title_candidates": ["竖版候选标题一"], "cover_caption": "竖版封面文案",
     }}
 
 

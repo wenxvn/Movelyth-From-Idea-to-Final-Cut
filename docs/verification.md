@@ -34,6 +34,12 @@ npm.cmd --prefix studio run typecheck                        → 通过
 阶段耗时（`workspace/v1-demo/metrics.csv`）：research 0.02 s、script 0.06 s、sound 23.43 s、
 assets 0.22 s、render 90.49 s、check 84.03 s（首次，40s+15s 双画幅，1080p）。
 第二次同题生产（VID-000002）sound 0.15 s、render 107.63 s、check 73.38 s。
+带 brief 的生产（VID-000005/000006）流程相同，`制作溯源.json` 记录 `brief_used: true` 与
+`brief_hash`。
+
+按 cut 复用已实测：用 VID-000005 的既有 `render-result.json` 与相同 `render-spec.json`
+重跑渲染器，日志只输出 `cut_cached`（long / short），未重新编码。`revise` 的 `sound`
+阶段 0.2 s（语音缓存全命中）。
 
 音频机器指标：长版混音/原声能量比峰值 1.196、均值 0.889；短版 1.157 / 0.875（阈值 1.6）。
 ASR 未安装，报告如实写 `disabled`。

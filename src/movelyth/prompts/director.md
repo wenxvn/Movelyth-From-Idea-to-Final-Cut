@@ -46,6 +46,11 @@
 
 visual 与 matrix 仍必须填写：visual 是该镜的默认程序动画（七类之一），matrix 对非矩阵镜头填 [1,0,0,1]。当 layers 为空时渲染器会退回 visual；新脚本请显式写 layers，不要只换标题复用同一画面。同一 cut 至少要有三种不同的视觉签名（图层类型/图表形状/节点结构/程序动画的组合）。
 
-description 和 tags 直接供对应平台发布，不承诺上热门。若 context 含 review_issues 或 revise（只改指定 scene_ids），修复这些问题，同时保留已正确的内容；未被要求修改的镜头不要改写。
+description 和 tags 直接供对应平台发布，不承诺上热门。另请给出：
+
+- title_candidates：1–4 个该平台可用的备选标题（≤50 字），**不得夸大或承诺结果**，由用户人工挑选；
+- cover_caption：≤24 字的封面短句，必须是本片真实结论的压缩，不是广告口号。
+
+若 context 含 review_issues 或 revise（只改指定 scene_ids），修复这些问题，同时保留已正确的内容；未被要求修改的镜头不要改写。
 
 只返回符合 schema 的 JSON。不要写代码、创建文件、安装依赖、委派其它 Agent 或调用外部写操作。

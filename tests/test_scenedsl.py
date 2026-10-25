@@ -159,6 +159,16 @@ def _cut_with(*scenes):
                                "tags": ["测试", "布局"], "scenes": padded, "schema_version": 1})
 
 
+def test_cover_layout_exists_for_both_orientations():
+    from movelyth.scenedsl import HEADING_BANDS, LAYOUTS, regions
+
+    for orientation in ("landscape", "portrait"):
+        assert "cover" in LAYOUTS[orientation]
+        assert "cover" in HEADING_BANDS[orientation]
+        boxes = regions(orientation, "cover")
+        assert boxes["main"]["w"] > 0 and boxes["main"]["h"] > 0
+
+
 def test_scene_signature_distinguishes_real_composition_changes():
     a = Scene.model_validate(scene("a", "这是一段足够长的旁白内容用于测试。", [layer()]))
     b = Scene.model_validate(scene("b", "这是一段足够长的旁白内容用于测试。", [chart_layer("loss")]))

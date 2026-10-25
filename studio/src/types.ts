@@ -78,6 +78,7 @@ export type MovieProps = {
   sources: {label: string; url: string}[];
   layers: string[];
   cover: boolean;
+  coverCaption: string;
   style: StyleName;
   schema_version: number;
 };

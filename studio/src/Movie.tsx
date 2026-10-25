@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
 import type {MovieProps} from './types';
 import {SceneStage} from './Stage';
@@ -34,7 +34,7 @@ export const Movie: React.FC<MovieProps> = (props) => {
   const theme = themeFor(props.style);
   const scenes = props.scenes;
   const {scene, index, local} = sceneAt(scenes, frame);
-  const layout = props.cover ? 'diagram' : scene.layout;
+  const layout: string = props.cover ? 'cover' : scene.layout;
   const progress = props.cover ? 0.62 : clamp(local / Math.max(1, scene.frames - 1));
   const accentColor = accent[scene.color] || accent.cyan;
   const fade = props.cover ? 1 : Math.min(1, local / 12, (scene.frames - local) / 10);
@@ -62,20 +62,24 @@ export const Movie: React.FC<MovieProps> = (props) => {
     <div style={{position: 'absolute', top: vertical ? 92 : 48, right: vertical ? 88 : 85, fontSize: 20, color: theme.muted}}>
       {props.episode}
     </div>
-    <div style={{position: 'absolute', left: headingBox.x, top: headingBox.y, width: headingBox.w, height: headingBox.h,
+    <div style={{position: 'absolute', left: headingBox.x, top: headingBox.y,
+      width: headingBox.w, height: headingBox.h,
       opacity: Math.max(0, fade), display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
       translate: `0px ${props.cover ? 0 : 14 * (1 - Math.min(1, local / 18))}px`}}>
       <div style={{width: 65, height: 5, borderRadius: 5, background: accentColor, marginBottom: vertical ? 24 : 20,
         flexShrink: 0}}/>
       <div style={{fontSize: headingSize, lineHeight: 1.3, fontWeight: theme.headingWeight,
         letterSpacing: theme.letterSpacing, overflowWrap: 'anywhere', wordBreak: 'break-word'}}>{heading}</div>
-      <div style={{fontSize: vertical ? 23 : 20, letterSpacing: 3, color: theme.muted, marginTop: vertical ? 20 : 14,
+      <div style={{fontSize: props.cover ? (vertical ? 30 : 27) : (vertical ? 23 : 20),
+        letterSpacing: 3, color: theme.muted, marginTop: props.cover ? 26 : (vertical ? 20 : 14),
         flexShrink: 0}}>
-        {props.cover ? tagline : `CHAPTER ${String(index + 1).padStart(2, '0')} / ${String(scenes.length).padStart(2, '0')}`}
+        {props.cover
+          ? (props.coverCaption || tagline)
+          : `CHAPTER ${String(index + 1).padStart(2, '0')} / ${String(scenes.length).padStart(2, '0')}`}
       </div>
     </div>
     <AbsoluteFill style={{opacity: Math.max(0, fade)}}>
-      <SceneStage scene={scene} time={props.cover ? 4 : local / fps} progress={progress}
+      <SceneStage scene={scene} layout={layout} time={props.cover ? 4 : local / fps} progress={progress}
         layers={props.layers} vertical={vertical} theme={theme}/>
     </AbsoluteFill>
     {labels.length > 0 && <div style={{position: 'absolute', left: labelBox.x, top: labelBox.y,
@@ -102,3 +106,5 @@ export const Movie: React.FC<MovieProps> = (props) => {
       width: `${(index + progress) / scenes.length * 100}%`, background: accentColor}}/>
   </AbsoluteFill>;
 };
+
+

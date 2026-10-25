@@ -26,7 +26,7 @@
 
 输入原始文本固化在 `tests/fixtures/topics/`。
 
-## 2. T03 离线演示（VID-000002 / 000003 / 000004）
+## 2. T03 离线演示（VID-000002 / 000003 / 000004 / 000005 / 000006）
 
 **必须明确**：这一组任务使用 `tests/fixtures/demo/movelyth-demo.toml`，`provider = "mock"`，
 研究/编导/审片脚本来自 `tests/fixtures/demo/*.json`。**不是真实模型创作**，因此不能用来证明
@@ -38,6 +38,8 @@
 | VID-000002 | 首次双画幅成片 | `ready`，横版 41.0 s / 竖版 17.0 s |
 | VID-000003 | `--preview` 故事板 + 12 s 低分辨率片段 | `previewed`，960×540，12.0 s |
 | VID-000004 | `revise`（只改镜头 3） | `ready`，语音全部命中缓存（sound 阶段 0.2 s） |
+| VID-000005 | 同题 + `--brief-file`（面向高中生、强调学习率过大） | `ready`，`制作溯源.json` 记录 `brief_used: true` 与 brief hash |
+| VID-000006 | 同题 + 同一 brief 再跑 `--new` | `ready`，revision 递增，独立交付目录 |
 
 技术检查（VID-000002）：两版均 H.264/AAC、画幅、30fps、时长与时间轴一致、音量、
 时长范围、运动采样、非黑屏全部通过；`audio_listened=false`、`asr_checked=false`。
@@ -50,6 +52,8 @@
 ```text
 delivery/v1-demo/待上传/VID-000002_梯度下降为什么能让模型逐步减少错误？/r002/
 delivery/v1-demo/待上传/VID-000004_梯度下降为什么能让模型逐步减少错误？/r004/
+delivery/v1-demo/待上传/VID-000005_梯度下降为什么能让模型逐步减少错误？/r001/
+delivery/v1-demo/待上传/VID-000006_梯度下降为什么能让模型逐步减少错误？/r002/
 workspace/v1-demo/VID-000003/storyboard.json
 ```
 

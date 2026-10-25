@@ -35,10 +35,10 @@ const renderers: Record<Layer['type'], (props: RenderProps) => React.ReactNode> 
 };
 
 export const SceneStage: React.FC<{
-  scene: Scene; time: number; progress: number; layers: string[]; vertical: boolean; theme: Theme;
-}> = ({scene, time, progress, layers, vertical, theme}) => {
+  scene: Scene; layout?: string; time: number; progress: number; layers: string[]; vertical: boolean; theme: Theme;
+}> = ({scene, layout, time, progress, layers, vertical, theme}) => {
   const {width, height} = useVideoConfig();
-  const boxes = regions(vertical, scene.layout);
+  const boxes = regions(vertical, layout || scene.layout);
   return <AbsoluteFill>
     {scene.layers.map((layer, index) => {
       const motion = motionFor(layer, scene.actions_resolved || [], progress, index, theme.motion);
@@ -58,4 +58,5 @@ export const SceneStage: React.FC<{
     })}
   </AbsoluteFill>;
 };
+
 

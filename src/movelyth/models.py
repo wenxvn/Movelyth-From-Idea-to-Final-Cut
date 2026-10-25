@@ -269,6 +269,16 @@ class Cut(Contract):
     scenes: list[Scene] = Field(min_length=3, max_length=14)
     schema_version: int = Field(default=SCHEMA_VERSION, ge=1, le=SCHEMA_VERSION)
     style: StyleName = "tech"
+    # Optional platform-specific title candidates; the user still picks and uploads.
+    title_candidates: list[str] = Field(default_factory=list, max_length=4)
+    cover_caption: str = Field(default="", max_length=24)
+
+    @field_validator("title_candidates")
+    @classmethod
+    def bounded_titles(cls, values: list[str]) -> list[str]:
+        if any(not v.strip() or len(v) > 50 for v in values):
+            raise ValueError("标题候选需为 1–50 字")
+        return values
 
     @field_validator("scenes")
     @classmethod

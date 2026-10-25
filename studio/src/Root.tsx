@@ -1,10 +1,10 @@
-import React from 'react';
+﻿import React from 'react';
 import {Composition} from 'remotion';
 import {Movie} from './Movie';
 import type {MovieProps} from './types';
 
 const defaults: MovieProps = {
-  title: '看见结构的力量', episode: 'Movelyth', fps: 30, cover: false, style: 'tech', schema_version: 1,
+  title: '看见结构的力量', episode: 'Movelyth', fps: 30, cover: false, coverCaption: '', style: 'tech', schema_version: 1,
   sources: [], layers: [],
   scenes: [{
     id: 'intro', heading: '让数学动起来', narration: '每一次变化，都有可以理解的结构。',
@@ -31,3 +31,4 @@ export const Root: React.FC = () => <>
     })}
   />)}
 </>;
+

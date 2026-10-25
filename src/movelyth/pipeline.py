@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import copy
 import csv
@@ -18,6 +18,7 @@ from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
 from .metrics import Metrics
 from .models import SCHEMA_VERSION, Film, Research, Review
+from .publish import audit_summary, credits, publishing_copy
 from .quality import contact_sheet, duration_policy, encoded_stills, srt, validate_script, verify_video
 from .scenedsl import resolve_data_layers, validate_cut_timeline
 from .util import atomic_json, file_hash, fingerprint, now, read_json, run
@@ -362,7 +363,8 @@ class Studio:
             return {"title": film[name]["title"], "episode": f"VID-{episode['id']:06d}",
                     "fps": config["fps"], "scenes": scenes,
                     "sources": research_data["sources"], "layers": assets["layers"], "cover": False,
-                    "style": film[name].get("style", "tech"), "schema_version": SCHEMA_VERSION}
+                    "style": film[name].get("style", "tech"), "schema_version": SCHEMA_VERSION,
+                    "coverCaption": film[name].get("cover_caption", "")}
 
         if preview_only:
             def preview_action():
@@ -526,6 +528,14 @@ class Studio:
             if (job / "storyboard.json").is_file():
                 shutil.copy2(job / "storyboard.json", staging / "分镜预览.json")
             quality = read_json(job / "quality.json")
+            model = Film.model_validate(film)
+            research_model = Research.model_validate(research)
+            copy = publishing_copy(model, research_model)
+            credits_text = credits(research_model)
+            (staging / "素材来源与署名.md").write_text(credits_text, encoding="utf-8")
+            (staging / "发布文案.md").write_text(copy, encoding="utf-8")
+            (staging / "交付审计.md").write_text(
+                audit_summary(quality, episode=code, schema_version=SCHEMA_VERSION), encoding="utf-8")
             atomic_json(staging / "制作溯源.json", {"engine_version": __version__, "python": sys.version.split()[0],
                          "schema_version": SCHEMA_VERSION, "settings": self.config,
                          "title": episode["title"], "brief_hash": episode.get("brief_hash"),
@@ -540,14 +550,6 @@ class Studio:
                                           for k, v in quality.get("audio", {}).items()},
                          "human_review": quality.get("human_review"),
                          "script_hash": file_hash(job / "film.json"), "research_hash": file_hash(job / "research.json")})
-            copy = []
-            for cut, platform in [("long", "B站"), ("short", "抖音")]:
-                copy.extend([f"## {platform}\n", film[cut]["title"], "", film[cut]["description"], "",
-                             " ".join("#" + tag.lstrip("#") for tag in film[cut]["tags"]), ""])
-            source_lines = [f"- [{s['label']}]({s['url']})：{s['supports']}" for s in research["sources"]]
-            credits = "\n".join(source_lines) + "\n\n画面：Movelyth 程序动画与受控图层；山水图像为程序绘制，低秩重建由 NumPy SVD 计算。\n配乐和音效：Movelyth 原创程序合成。旁白：Edge TTS。\n制作：Movelyth — 幕绎 / Remotion。来源链接不代表取得第三方素材转载许可；本片未直接使用外部图像/视频。\n"
-            (staging / "素材来源与署名.md").write_text(credits, encoding="utf-8")
-            (staging / "发布文案.md").write_text("\n".join(copy) + "\n## 来源与署名\n" + credits, encoding="utf-8")
             files = {p.name: file_hash(p) for p in staging.iterdir() if p.is_file() and p.name != "manifest.json"}
             atomic_json(staging / "manifest.json", {"id": code, "title": episode["title"],
                          "revision": episode["revision"], "status": "ready", "published": False,
@@ -587,3 +589,4 @@ class Studio:
                 for cut in data["cuts"]:
                     self.ledger.record_assets(episode["id"], cut["name"], cut["props"]["scenes"], data["version"])
         return self.ledger.asset_observations()
+

@@ -119,6 +119,11 @@
   `movelyth revise VID-000002 --notes …` → VID-000004 `ready`。
 - 有无调用模型/TTS/渲染：演示用 mock provider + 真实 TTS + 真实渲染。
 - 验证类型：片段 + 真实长短版（mock 剧本）。
+- 缓存证据（真实执行）：把 VID-000005 的 `render-result.json` 复制成探针结果文件后重跑同一
+  `render-spec.json`，渲染日志只输出
+  `{"event":"cut_cached","cut":"long"}` 与 `{"event":"cut_cached","cut":"short"}`，
+  **没有重新编码任何一帧**；`revise` 生成的 VID-000004 `sound` 阶段 0.2 s（首次 23.4 s）。
+  也就是说，输入 hash 未变的 cut 会整体复用，改动只影响真正变化的阶段。
 - 已知未验证/风险：**未实现按单镜重新编码再拼接**；revision 仍重渲染整条 cut。
   原因：当前 Remotion 按 composition 整体渲染，逐镜拼接需要额外处理转场与音画对齐，
   属于提纲允许的"按 cut 复用"，已在本文档与 README 如实记录，未做脆弱重构。
@@ -177,6 +182,33 @@
 - 未实现（如实记录）：网络队列/丢包示意、算法状态机、读取用户 CSV 的通用数据面板、
   外部素材搜索与授权管理。这些留给下一轮，避免"堆组件"。
 - 验证类型：静帧（`tests/test_render_smoke.py`）+ 单元。
+
+## Task ID：P1-07 发布包改进（标题候选、封面文案、交付审计）
+
+- 目标与实际改变：
+  - `Cut` 新增 `title_candidates`（≤4 个、每个 ≤50 字）与 `cover_caption`（≤24 字），编导 prompt
+    要求给出"不夸大、不承诺结果"的平台备选标题和真实结论压缩成的封面短句。
+  - 新增 `publish.py`：`publishing_copy()` 为 B站/抖音分别输出采用标题、备选标题、封面文案、
+    简介、标签与来源署名；`audit_summary()` 生成 `交付审计.md`，逐条列出机器检查结果、
+    ASR/长静音/混音状态、人工观看与实听是否执行、以及"ready 不等于已发布"。
+  - 新增封面专用构图（`cover` 布局，横版左文右图 / 竖版上文下图），修掉首版封面文字压住图表的问题。
+  - 交付包新增 `交付审计.md`，`发布文案.md` 结构化为平台分段；上传仍由用户手动完成。
+- 修改文件：`models.py`、`publish.py`、`pipeline.py`、`scenedsl.py`、`studio/src/{Movie,Stage,types}.tsx|ts`、
+  `prompts/director.md`。
+- 新增/调整测试：`tests/test_publish.py`（4 项：平台分段与候选标题、署名措辞、审计摘要如实标注
+  未执行的人工检查、候选标题上限）、`test_cover_layout_exists_for_both_orientations`。
+- 执行命令与结果：`pytest -q` → 80 passed；真实封面渲染复核（`workspace/cover-probe/`，
+  横竖两版文字与图表不再重叠）。
+- 验证类型：单元 + 静帧。
+- 已知未验证/风险：候选标题只由编导模型生成，仍需人工挑选；没有平台端实际投放与数据回流。
+
+## Task ID：P1-06 时间戳与时区（跨模块细节）
+
+- 目标与实际改变：`util.now()` 不再固定 `Asia/Taipei`，改为 `MOVELYTH_TZ` 可配置（默认
+  `Asia/Shanghai`），并保持带偏移的 ISO 时间戳；历史记录里的 `+08:00` 不会被改写。
+- 修改文件：`util.py`。
+- 新增/调整测试：`tests/test_util.py`（2 项）。
+- 验证类型：单元。
 
 ## Task ID：P1-08 CI 与测试分层
 

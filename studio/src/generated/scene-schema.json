@@ -100,6 +100,12 @@
     "Cut": {
       "additionalProperties": false,
       "properties": {
+        "cover_caption": {
+          "default": "",
+          "maxLength": 24,
+          "title": "Cover Caption",
+          "type": "string"
+        },
         "description": {
           "maxLength": 1200,
           "minLength": 20,
@@ -146,6 +152,14 @@
           "minLength": 2,
           "title": "Title",
           "type": "string"
+        },
+        "title_candidates": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Title Candidates",
+          "type": "array"
         }
       },
       "required": [

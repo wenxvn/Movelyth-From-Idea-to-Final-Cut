@@ -42,6 +42,10 @@ LAYOUTS: dict[str, dict[str, dict[str, tuple[int, int, int, int]]]] = {
         "compare": {"main": (85, 270, 850, 410), "side": (985, 270, 850, 410),
                     "top": (85, 270, 850, 80), "annotation": (85, 690, 1750, 50),
                     "bottom": (985, 270, 850, 60), "full": (0, 0, 1920, 1080)},
+        # Cover composition: title block on the left, one visual on the right.
+        "cover": {"main": (700, 130, 1140, 620), "top": (700, 130, 1140, 120),
+                  "side": (700, 780, 1140, 60), "annotation": (700, 780, 1140, 60),
+                  "bottom": (700, 700, 1140, 60), "full": (0, 0, 1920, 1080)},
     },
     "portrait": {
         # The visual keeps a 16:10-ish box so charts and diagrams are not letterboxed;
@@ -55,6 +59,10 @@ LAYOUTS: dict[str, dict[str, dict[str, tuple[int, int, int, int]]]] = {
         "compare": {"main": (50, 460, 980, 300), "side": (50, 790, 980, 300),
                     "top": (50, 460, 980, 80), "annotation": (50, 1110, 980, 60),
                     "bottom": (50, 790, 980, 60), "full": (0, 0, 1080, 1920)},
+        # Cover composition: title on top, one visual below it.
+        "cover": {"main": (50, 700, 980, 620), "top": (50, 700, 980, 130),
+                  "side": (50, 1340, 980, 60), "annotation": (50, 1340, 980, 60),
+                  "bottom": (50, 1280, 980, 60), "full": (0, 0, 1080, 1920)},
     },
 }
 
@@ -63,15 +71,15 @@ LAYOUTS: dict[str, dict[str, dict[str, tuple[int, int, int, int]]]] = {
 # above the visual (portrait).
 HEADING_BANDS: dict[str, dict[str, tuple[int, int, int, int]]] = {
     "landscape": {"immersive": (85, 150, 540, 300), "diagram": (85, 110, 660, 310),
-                  "compare": (85, 105, 1750, 150)},
+                  "compare": (85, 105, 1750, 150), "cover": (85, 220, 600, 520)},
     "portrait": {"immersive": (70, 170, 940, 240), "diagram": (70, 170, 940, 290),
-                 "compare": (70, 170, 940, 250)},
+                 "compare": (70, 170, 940, 250), "cover": (70, 200, 940, 430)},
 }
 LABEL_BANDS: dict[str, dict[str, tuple[int, int, int, int]]] = {
     "landscape": {"immersive": (85, 470, 540, 200), "diagram": (85, 690, 660, 190),
-                  "compare": (85, 750, 1750, 150)},
+                  "compare": (85, 750, 1750, 150), "cover": (85, 780, 600, 120)},
     "portrait": {"immersive": (70, 1220, 940, 310), "diagram": (70, 1220, 940, 310),
-                 "compare": (70, 1220, 940, 310)},
+                 "compare": (70, 1220, 940, 310), "cover": (70, 1420, 940, 120)},
 }
 
 # Captions and the source footer are reserved bands: no layer may be placed there.
