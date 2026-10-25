@@ -415,7 +415,8 @@ def resolve_data_layers(scenes: list[dict], data_dir: Path, assets: list[str]) -
                 layer["source_note"] = layer["source_note"] or f"本地数据 · {layer['data_ref']}"
             if layer["type"] == "image":
                 dashed = layer["data_ref"].replace("_", "-")
-                if not any(name.startswith(dashed) for name in assets):
+                candidates = (dashed, f"asset-{layer['data_ref']}")
+                if not any(name.startswith(candidates) for name in assets):
                     raise ValueError(f"镜头 {scene['id']} 的图片素材 {layer['data_ref']} 不在受控素材目录")
             if layer["type"] == "chart" and not layer["series"]:
                 raise ValueError(f"镜头 {scene['id']} 的图表 {layer['id']} 没有数据")

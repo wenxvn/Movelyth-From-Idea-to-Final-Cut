@@ -231,6 +231,66 @@ def test_full_offline_pipeline_delivers_manifest_and_quality_report(offline_pipe
         studio.close()
 
 
+def test_user_library_asset_flows_into_render_and_credits(offline_pipeline):
+    from movelyth.assets import register
+    from tests.factories import scene as make_scene
+
+    provider = MockProvider({"research": research_payload(), "director": film(),
+                             "reviewer": review_payload()})
+    studio = make_studio(offline_pipeline, provider)
+    try:
+        source = offline_pipeline / "own-photo.png"
+        source.write_bytes(b"\x89PNG\r\n\x1a\n" + b"1" * 128)
+        register(studio.workspace, source, asset_id="my_shot", source="用户拍摄", author="wenxvn",
+                 license="自有素材", scope="本片使用")
+        image_scene = make_scene("own", "这张照片是用户自己拍摄的素材，用于说明图层来源。", [
+            layer("pic", type="image", procedural="", data_ref="my_shot", region="main"),
+            layer("note", type="text", text="自有素材", procedural="", region="annotation"),
+        ])
+        payload = film()
+        payload["long"]["scenes"][0] = image_scene
+        payload["short"]["scenes"][0] = image_scene
+        provider.responses["director"] = payload
+        episode = studio.create("本地素材测试")
+        result = studio.produce(episode["id"])
+        assert result["status"] == "ready"
+        spec = json.loads((studio.workspace / f"VID-{episode['id']:06d}" / "render-spec.json")
+                          .read_text(encoding="utf-8"))
+        staged = studio.workspace / f"VID-{episode['id']:06d}" / "assets" / "asset-my_shot.png"
+        assert staged.is_file(), "素材应被复制进受控渲染目录"
+        assert Path(spec["assets"]) == staged.parent
+        assert spec["cuts"][0]["props"]["scenes"][0]["layers"][0]["data_ref"] == "my_shot"
+        credits = (Path(result["delivery"]) / "素材来源与署名.md").read_text(encoding="utf-8")
+        assert "my_shot" in credits and "自有素材" in credits
+        provenance = json.loads((Path(result["delivery"]) / "制作溯源.json").read_text(encoding="utf-8"))
+        assert "my_shot" in provenance["library_assets"]
+    finally:
+        studio.close()
+
+
+def test_missing_library_asset_fails_before_rendering(offline_pipeline):
+    from movelyth.assets import AssetError
+    from tests.factories import scene as make_scene
+
+    provider = MockProvider({"research": research_payload(), "director": film(),
+                             "reviewer": review_payload()})
+    studio = make_studio(offline_pipeline, provider)
+    try:
+        payload = film()
+        payload["long"]["scenes"][0] = make_scene("own", "引用一个没有登记过的素材，应该在渲染前失败。", [
+            layer("pic", type="image", procedural="", data_ref="ghost_asset", region="main"),
+        ])
+        provider.responses["director"] = payload
+        episode = studio.create("缺失素材测试")
+        with pytest.raises(AssetError, match="asset-add"):
+            studio.produce(episode["id"])
+        assert studio.ledger.get(episode["id"])["status"] == "failed"
+        job = studio.workspace / f"VID-{episode['id']:06d}"
+        assert not (job / "render-spec.json").exists(), "不得在素材缺失时启动渲染"
+    finally:
+        studio.close()
+
+
 def test_local_revision_only_rewrites_targeted_scenes():
     frozen = Film.model_validate(film())
     revised = frozen.model_copy(deep=True)

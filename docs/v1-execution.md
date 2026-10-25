@@ -185,10 +185,31 @@
 ## Task ID：P1-01/P1-02/P1-03（部分）视觉组件、风格与素材
 
 - 已实现：图表（真实数值/本地 JSON 数据）、有向图与步骤、公式、图形原语、程序动画作为图层；
-  三套风格；本地受控图片素材（`data_ref` 绑定已生成的 SVD 图层，拒绝远程 URL）。
+  三套风格；本地受控图片素材（`asset-add` 登记 + hash/授权校验 + 复制进受控渲染目录，
+  拒绝远程 URL 与未登记文件）。
 - 未实现（如实记录）：网络队列/丢包示意、算法状态机、读取用户 CSV 的通用数据面板、
-  外部素材搜索与授权管理。这些留给下一轮，避免"堆组件"。
-- 验证类型：静帧（`tests/test_render_smoke.py`）+ 单元。
+  外部素材搜索与在线许可核查。这些留给下一轮，避免"堆组件"。
+- 验证类型：静帧（`tests/test_render_smoke.py`）+ 单元 + 真实长短版（VID-000009/000010）。
+
+## Task ID：P1-03 本地素材库、授权与来源管理
+
+- 目标与实际改变：新增 `assets.py` 与 `movelyth asset-add`：
+  - 素材必须显式登记（`--source/--author/--license/--scope`），复制进 `workspace/assets/files/`，
+    记录 sha256、字节数、登记时间；**不会自动下载任何来路不明的素材**。
+  - 支持 png/jpg/jpeg/webp/svg，单文件 ≤40MB；同一 id 不会被静默覆盖。
+  - 渲染前校验：文件存在、后缀白名单、路径不逃逸、hash 与登记一致；缺任一授权字段直接拒绝。
+  - 素材被复制进任务受控目录（`asset-<id>.png`），`image` 图层的 `data_ref` 用素材 id 引用；
+    `发布文案.md` 与 `素材来源与署名.md` 追加真实授权行，`制作溯源.json` 记录 `library_assets` hash。
+- 修改文件：`assets.py`、`pipeline.py`、`cli.py`、`scenedsl.py`、`studio/src/components/ImageLayer.tsx`。
+- 新增/调整测试：`tests/test_assets.py`（7 项：登记与署名、拒绝覆盖/缺许可、类型与大小上限、
+  文件被篡改、手改库缺字段、未登记素材、复制进渲染目录）、
+  `test_user_library_asset_flows_into_render_and_credits`、
+  `test_missing_library_asset_fails_before_rendering`（断言渲染前就失败、不生成 render-spec）。
+- 执行命令与结果：`pytest -q` → 89 passed；真实演示 VID-000009/000010 使用已登记素材
+  `demo_scene`，成片抽帧确认图片在区域内不压字幕，`制作溯源.json` 含素材 hash。
+- 验证类型：单元 + 真实长短版（mock 剧本）。
+- 已知未验证/风险：**没有接入外部素材搜索**（提纲要求设置显式开关与许可核查，本轮未做）；
+  图片只做"放进区域、contain 缩放"，没有做内容审核或人脸/隐私识别。
 
 ## Task ID：P1-07 发布包改进（标题候选、封面文案、交付审计）
 

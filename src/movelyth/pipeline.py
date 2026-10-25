@@ -13,6 +13,8 @@ from pathlib import Path
 
 from . import __version__
 from .agents import create_provider
+from .assets import credit_lines, stage_for_render
+from .assets import resolve as resolve_library
 from .audioqc import audio_qc
 from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
@@ -117,6 +119,20 @@ RENDERER_CAPABILITIES = {
     "time_reference": "start/end/0–1 小数/narration:旁白片段",
     "styles": ["minimal", "tech", "documentary"],
 }
+
+
+def library_inputs(film: dict, workspace: Path) -> tuple[list[str], dict]:
+    """Verify every image layer that references a user asset before any rendering."""
+    identifiers = sorted({layer["data_ref"]
+                          for name in ("long", "short")
+                          for scene in film[name]["scenes"]
+                          for layer in scene.get("layers", [])
+                          if layer.get("type") == "image" and layer.get("data_ref")
+                          and not layer["data_ref"].startswith("svd_")})
+    hashes = {}
+    for asset_id in identifiers:
+        hashes[asset_id] = file_hash(resolve_library(workspace, asset_id))
+    return identifiers, hashes
 
 
 class Studio:
@@ -319,6 +335,7 @@ class Studio:
         film = Film.model_validate(film).model_dump()
         warnings = validate_script(Film.model_validate(film), research, config["long_seconds"],
                                    config["short_seconds"])
+        library_ids, library_hashes = library_inputs(film, self.workspace)
         if plan_only:
             self.ledger.status(episode["id"], "planned")
             return {"id": episode["id"], "status": "planned", "script": str(job / "film.json"),
@@ -349,9 +366,13 @@ class Studio:
 
         def assets_action():
             names, paths, metrics = image_layers(job / "assets")
-            return {"layers": names, "metrics": metrics}, paths
+            for asset_id in library_ids:
+                names.append(stage_for_render(self.workspace, asset_id, job / "assets"))
+                paths.append(resolve_library(self.workspace, asset_id))
+            return {"layers": names, "metrics": metrics, "library": library_ids}, paths
 
-        assets = self.stage(episode, "assets", {"algorithm": "procedural-landscape-rgb-svd-v1"}, assets_action)
+        assets = self.stage(episode, "assets", {"algorithm": "procedural-landscape-rgb-svd-v1",
+                             "library": library_hashes}, assets_action)
         studio_files = list((self.root / "studio" / "src").rglob("*")) + [self.root / "studio" / "render.mjs",
                                                                         self.root / "studio" / "package-lock.json"]
         renderer_version = fingerprint({str(p.relative_to(self.root)): file_hash(p)
@@ -490,7 +511,7 @@ class Studio:
                    "audioqc": file_hash(Path(__file__).with_name("audioqc.py")),
                    "renders": renders, "timelines": timelines, "review_prompt": prompts["reviewer.md"]},
                    check_action)
-        return self.deliver(episode, job, film, research_data, timelines)
+        return self.deliver(episode, job, film, research_data, timelines, library_ids)
 
     @staticmethod
     def _keep_untouched_scenes(frozen: Film, revised: Film, targets: set[str]) -> Film:
@@ -508,7 +529,7 @@ class Studio:
             data[cut_name]["scenes"] = merged
         return Film.model_validate(data)
 
-    def deliver(self, episode, job, film, research, timelines):
+    def deliver(self, episode, job, film, research, timelines, library_ids=()):
         name = f"VID-{episode['id']:06d}_{safe_title(episode['title'])}"
         destination = self.delivery / "待上传" / name / f"r{episode['revision']:03d}"
         if destination.exists():
@@ -531,8 +552,13 @@ class Studio:
             quality = read_json(job / "quality.json")
             model = Film.model_validate(film)
             research_model = Research.model_validate(research)
-            copy = publishing_copy(model, research_model)
-            credits_text = credits(research_model)
+            external = bool(library_ids)
+            copy = publishing_copy(model, research_model, external_media=external)
+            credits_text = credits(research_model, external_media=external)
+            asset_credits = credit_lines(self.workspace, library_ids)
+            if asset_credits:
+                credits_text += "\n本地素材授权：\n" + "\n".join(asset_credits) + "\n"
+                copy += "\n本地素材授权：\n" + "\n".join(asset_credits) + "\n"
             (staging / "素材来源与署名.md").write_text(credits_text, encoding="utf-8")
             (staging / "发布文案.md").write_text(copy, encoding="utf-8")
             (staging / "交付审计.md").write_text(
@@ -550,6 +576,8 @@ class Studio:
                                               "ducking": v["ducking"]["status"]}
                                           for k, v in quality.get("audio", {}).items()},
                          "human_review": quality.get("human_review"),
+                         "library_assets": {asset_id: file_hash(resolve_library(self.workspace, asset_id))
+                                            for asset_id in library_ids},
                          "script_hash": file_hash(job / "film.json"), "research_hash": file_hash(job / "research.json")})
             files = {p.name: file_hash(p) for p in staging.iterdir() if p.is_file() and p.name != "manifest.json"}
             atomic_json(staging / "manifest.json", {"id": code, "title": episode["title"],

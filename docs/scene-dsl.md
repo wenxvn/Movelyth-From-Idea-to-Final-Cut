@@ -52,7 +52,7 @@
 | `shape` | 点/线/矩形/圆/箭头/多边形/括号 | `shape`、`points`（x,y 对，0–1000 / 0–640） |
 | `chart` | 折线/柱状/散点 | `chart`、`series` 或本地 `data_ref`、`unit`、`axis`、`source_note` |
 | `diagram` | 有向节点图 | `nodes`（2–12）、`edges`、`steps`（≤6） |
-| `image` | 本地受控素材 | `data_ref`（默认只有 `svd_1/4/12/32`） |
+| `image` | 本地受控素材 | `data_ref` 为已登记素材 id（`movelyth asset-add`）或内置 `svd_1/4/12/32` |
 | `procedural` | 原有七类程序动画 | `procedural` = matrix/vectors/projection/wave/network/image_layers/orbit |
 
 ### 布局与区域
@@ -77,7 +77,8 @@ TypeScript，两侧不会各自漂移。
 ## 3. 校验边界
 
 - 文本长度、坐标范围、元素数量、帧数、时长全部有上限；拒绝 `NaN`/`Infinity`、超大列表。
-- `data_ref` 只能是小写标识符，不能是路径或 URL；`image` 只能引用受控素材目录中已存在的文件。
+- `data_ref` 只能是小写标识符，不能是路径或 URL；`image` 只能引用受控素材目录中已存在的文件
+  （内置 SVD 图或 `movelyth asset-add` 登记的素材，登记时会校验 hash 与授权字段）。
 - `chart` 必须由 `series` 或 `workspace/VID-xxxxxx/data/<data_ref>.json` 提供真实数值，缺失时在渲染前报错。
   数据文件格式：`{"label": "误差", "unit": "%", "axis": "轮次", "values": [0.9, 0.6, 0.3]}`，
   或 `{"series": [{"label": "...", "values": [...]}, ...]}`；上限 256 KB、每序列 2–60 个有限数。

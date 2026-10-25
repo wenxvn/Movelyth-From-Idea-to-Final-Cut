@@ -394,7 +394,7 @@
         ],
         "color": "amber",
         "source_index": 0,
-        "layout": "immersive",
+        "layout": "compare",
         "beats": [
           {
             "at": "start",
@@ -421,6 +421,26 @@
             "text": "一次一小步，累积成大变化",
             "color": "amber",
             "emphasis": 2
+          },
+          {
+            "id": "photo",
+            "type": "image",
+            "region": "side",
+            "text": "演示素材：自有授权",
+            "shape": "rect",
+            "chart": "line",
+            "procedural": "",
+            "series": [],
+            "nodes": [],
+            "edges": [],
+            "steps": [],
+            "points": [],
+            "data_ref": "demo_scene",
+            "unit": "",
+            "axis": "",
+            "source_note": "",
+            "color": "amber",
+            "emphasis": 1
           }
         ],
         "actions": [
@@ -432,6 +452,12 @@
           },
           {
             "target": "sum",
+            "kind": "appear",
+            "start": "narration:许多次",
+            "end": "end"
+          },
+          {
+            "target": "photo",
             "kind": "appear",
             "start": "narration:许多次",
             "end": "end"

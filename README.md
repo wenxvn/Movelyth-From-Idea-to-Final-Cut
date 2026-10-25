@@ -66,7 +66,13 @@ cd Movelyth-From-Idea-to-Final-Cut
 .\.venv\Scripts\python.exe -m movelyth ideas
 .\.venv\Scripts\python.exe -m movelyth assets
 .\.venv\Scripts\python.exe -m movelyth schema            # 输出 Scene DSL 的 JSON Schema
+.\.venv\Scripts\python.exe -m movelyth asset-add .\我的图.png --id my_photo `
+    --source "我自己拍摄" --author "我" --license "自有素材" --scope "本片使用"
 ```
+
+登记后的素材在脚本里用 `image` 图层引用：`"type": "image", "data_ref": "my_photo"`。
+素材会被校验 hash、复制进任务受控目录，并在发布文案里自动附上授权行；未登记或授权信息不全
+的素材在渲染前就会失败，不会静默换成别的图。
 
 `revise` 的 notes 里写清"镜头 3"或具体的 `scene_id`；只有被点名的镜头会交给编导重写，
 其余镜头原样保留，并生成新的 revision，不覆盖已交付版本。

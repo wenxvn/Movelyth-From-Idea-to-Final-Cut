@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -29,18 +30,22 @@ def emit(value):
 def doctor(root: Path) -> dict:
     from .agents import resolve_codex
     from .audioqc import asr_status
+    from .pipeline import settings
     from .scenedsl import renderer_contract
 
     binary = ffmpeg()
     node = shutil.which("node")
     npm = shutil.which("npm.cmd") or shutil.which("npm")
     codex = resolve_codex()
+    config = settings(root) if (root / "movelyth.toml").is_file() or os.getenv("MOVELYTH_CONFIG") else {}
+    provider = (config.get("agents") or {}).get("provider", "codex")
     check = {
         "project": str(root), "python": sys.version.split()[0], "node": node,
         "npm": npm, "codex": codex, "browser": browser(), "ffmpeg": binary,
         "ffprobe": ffprobe(),
         "renderer_installed": (root / "studio/node_modules/@remotion/renderer/package.json").is_file(),
-        "config": (root / "movelyth.toml").is_file(),
+        "config": bool(config),
+        "provider": provider,
         "schema_version": renderer_contract()["schema_version"],
         "asr": asr_status(),
         "checked_at": now(), "tts": "Edge TTS（联网，doctor 尚未调用语音服务）",
@@ -48,7 +53,11 @@ def doctor(root: Path) -> dict:
     if node:
         check["node_version"] = run([node, "--version"], timeout=15).stdout.strip()
     check["ffmpeg_version"] = run([binary, "-version"], timeout=15).stdout.splitlines()[0]
-    check["ready_for_generation"] = bool(node and codex and check["renderer_installed"] and check["config"])
+    needs_codex = provider == "codex"
+    check["ready_for_generation"] = bool(node and check["renderer_installed"] and check["config"]
+                                        and (codex if needs_codex else True))
+    if provider == "mock":
+        check["mock_note"] = "provider=mock：只用于离线测试与预览，产物不是真实模型创作"
     check["note"] = "环境检查不等同于 Codex 配额、TTS 连通性或视频生成验证"
     return check
 
@@ -90,6 +99,13 @@ def main(argv=None) -> int:
     status.add_argument("id", nargs="?", type=number)
     sub.add_parser("ideas", help="查看尚未制作的 idea 和历史反馈")
     sub.add_parser("assets", help="查看程序素材使用记录和关联成片的真实反馈")
+    asset_add = sub.add_parser("asset-add", help="登记本地素材（记录 hash、作者、许可），不自动下载")
+    asset_add.add_argument("file", type=Path)
+    asset_add.add_argument("--id", required=True, help="小写标识符，脚本里用 data_ref 引用")
+    asset_add.add_argument("--source", required=True, help="素材来源说明")
+    asset_add.add_argument("--author", required=True)
+    asset_add.add_argument("--license", required=True, help="授权依据，例如 自有素材 / CC BY 4.0")
+    asset_add.add_argument("--scope", default="本片使用")
     sub.add_parser("schema", help="输出 Scene DSL v1 的 JSON Schema")
     feedback = sub.add_parser("feedback", help="记录手动上传后的真实链接与数据")
     feedback.add_argument("id", type=number)
@@ -136,6 +152,13 @@ def main(argv=None) -> int:
             emit(studio.ledger.context())
         elif args.command == "assets":
             emit(studio.asset_observations())
+        elif args.command == "asset-add":
+            from .assets import register
+
+            entry = register(studio.workspace, args.file, asset_id=args.id, source=args.source,
+                             author=args.author, license=args.license, scope=args.scope)
+            emit({"registered": args.id, **entry,
+                  "note": "已复制到 workspace/assets/files；脚本中用 image 图层 data_ref 引用该 id"})
         elif args.command == "feedback":
             metrics = {k: v for k, v in {"views": args.views, "likes": args.likes,
                        "completion_rate": args.completion_rate}.items() if v is not None}
