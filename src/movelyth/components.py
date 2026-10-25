@@ -39,11 +39,11 @@ COMPONENTS: dict[str, dict] = {
     "chart": {
         "purpose": "折线/柱状/散点，展示真实或明确标注为示意的数据",
         "required": ["chart", "series 或 data_ref"],
-        "limits": "每条 2–60 个有限数，最多 4 条；>24 个点会警告；必须写 unit/axis/source_note",
+        "limits": "每条 2–60 个有限数，最多 4 条；x_values 可选且必须等长；>24 个点会警告；必须写 unit/axis/source_note",
         "regions": ["main", "side(仅 compare)"],
         "portrait": "坐标轴与刻度字号随区域放大，首末值标签自动避让",
         "sample": {"id": "loss", "type": "chart", "region": "main", "chart": "line",
-                   "series": [{"label": "误差", "values": [0.9, 0.6, 0.3], "unit": ""}],
+                   "series": [{"label": "误差", "values": [0.9, 0.6, 0.3], "unit": "", "x_values": []}],
                    "axis": "更新轮次", "source_note": "示意数据"},
     },
     "diagram": {

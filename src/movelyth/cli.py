@@ -108,6 +108,9 @@ def main(argv=None) -> int:
     asset_add.add_argument("--scope", default="本片使用")
     sub.add_parser("schema", help="输出 Scene DSL v1 的 JSON Schema")
     sub.add_parser("components", help="输出可视化组件元数据（用途/必需字段/限制/横竖适配）")
+    check = sub.add_parser("check", help="离线校验脚本 JSON（不调用模型、不渲染）")
+    check.add_argument("--film", type=Path, required=True, help="Film JSON 路径")
+    check.add_argument("--research", type=Path, required=True, help="Research JSON 路径")
     feedback = sub.add_parser("feedback", help="记录手动上传后的真实链接与数据")
     feedback.add_argument("id", type=number)
     feedback.add_argument("--platform", choices=["bilibili", "douyin"], required=True)
@@ -132,6 +135,22 @@ def main(argv=None) -> int:
             from .components import registry
 
             emit(registry())
+            return 0
+        if args.command == "check":
+            from .models import Film, Research
+            from .quality import validate_script
+            from .util import read_json
+
+            config = Studio(root).config["studio"]
+            film = Film.model_validate(read_json(args.film.resolve()))
+            research = Research.model_validate(read_json(args.research.resolve()))
+            try:
+                warnings = validate_script(film, research, config["long_seconds"], config["short_seconds"])
+            except ValueError as exc:
+                emit({"passed": False, "errors": str(exc).split("；"), "warnings": []})
+                return 1
+            emit({"passed": True, "errors": [], "warnings": warnings,
+                  "note": "离线契约校验通过；未调用模型、未渲染、未检查声音与观感"})
             return 0
         studio = Studio(root)
         if args.command == "create":

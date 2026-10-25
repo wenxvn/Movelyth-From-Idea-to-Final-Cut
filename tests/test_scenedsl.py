@@ -97,6 +97,17 @@ def test_timeline_layer_requires_real_steps():
         Layer.model_validate({**timeline, "steps": ["好" * 25, "第二步"]})
 
 
+def test_x_values_must_match_length():
+    base = layer()
+    with pytest.raises(ValidationError, match="等长"):
+        Layer.model_validate({**base, "type": "chart", "procedural": "",
+                              "series": [{"label": "x", "values": [1, 2, 3], "unit": "", "x_values": [1, 2]}]})
+    ok = Layer.model_validate({**base, "type": "chart", "procedural": "",
+                               "series": [{"label": "tri", "values": [0, 1, 0.5], "unit": "",
+                                           "x_values": [0, 1, 0.5]}]})
+    assert ok.series[0].x_values == [0, 1, 0.5]
+
+
 def test_chart_trend_must_match_narration():
     falling = Scene.model_validate(scene("trend", "误差不断上升，情况越来越糟，问题仍然存在。",
                                         [chart_layer("loss", [0.9, 0.7, 0.5, 0.3])]))
@@ -183,6 +194,18 @@ def test_cover_layout_exists_for_both_orientations():
         assert "cover" in HEADING_BANDS[orientation]
         boxes = regions(orientation, "cover")
         assert boxes["main"]["w"] > 0 and boxes["main"]["h"] > 0
+
+
+def test_scene_needs_a_real_visual_layer():
+    text_only = Scene.model_validate(scene("words", "这是一段足够长的旁白内容用于测试。", [
+        layer("note", type="text", procedural="", text="只有一句注解", region="main"),
+        layer("formula", type="math", procedural="", text="x → −y", region="side")]))
+    problems = validate_cut_dsl(_cut_with(text_only), vertical=False)
+    assert any("动态字幕" in problem for problem in problems)
+    with_shape = Scene.model_validate(scene("drawn", "这是一段足够长的旁白内容用于测试。", [
+        layer("line", type="shape", procedural="", shape="arrow", points=[100, 300, 800, 300], region="main"),
+        layer("note", type="text", procedural="", text="方向", region="side")]))
+    assert not [p for p in validate_cut_dsl(_cut_with(with_shape), vertical=False) if "动态字幕" in p]
 
 
 def test_visual_layers_must_use_a_large_region():

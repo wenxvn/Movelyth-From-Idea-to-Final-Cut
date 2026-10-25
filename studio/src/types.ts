@@ -8,7 +8,7 @@ export type ShapeKind = 'point' | 'line' | 'rect' | 'circle' | 'arrow' | 'polygo
 export type ChartKind = 'line' | 'bar' | 'scatter';
 export type StyleName = 'minimal' | 'tech' | 'documentary';
 
-export type Series = {label: string; values: number[]; unit: string};
+export type Series = {label: string; values: number[]; unit: string; x_values: number[]};
 export type DiagramNode = {id: string; label: string; x: number; y: number};
 export type DiagramEdge = {source: string; target: string; label: string};
 

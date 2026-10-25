@@ -26,38 +26,50 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
   if (!series.length) {
     return <div style={{color: theme.muted, fontSize: 26}}>缺少数据，不能凭空绘制曲线</div>;
   }
-  const all = series.flatMap((s) => s.values);
-  const rawMin = Math.min(...all);
-  const rawMax = Math.max(...all);
+  // Explicit x coordinates (polygon vertices, uneven sampling) take precedence over index.
+  const explicitX = series.every((s) => s.x_values && s.x_values.length === s.values.length);
+  const xs = series.flatMap((s) => (explicitX ? s.x_values : s.values.map((_v, i) => i)));
+  const ys = series.flatMap((s) => s.values);
+  const rawXMin = Math.min(...xs);
+  const rawXMax = Math.max(...xs);
+  const xSpan = rawXMax - rawXMin || 1;
+  const xMin = rawXMin - xSpan * 0.08;
+  const xMax = rawXMax + xSpan * 0.08;
+  const rawMin = Math.min(...ys);
+  const rawMax = Math.max(...ys);
   const span = rawMax - rawMin || Math.max(1, Math.abs(rawMax) * 0.2);
   const min = rawMin - span * 0.12;
   const max = rawMax + span * 0.12;
-  const left = vertical ? 92 : 84;
-  const right = 36;
-  const top = 42;
-  const bottom = 74;
+  const left = vertical ? 96 : 88;
+  const right = 44;
+  const top = 48;
+  const bottom = 80;
   const width = 1000 - left - right;
   const height = 640 - top - bottom;
-  const xAt = (index: number, count: number): number => left + (count <= 1 ? width / 2 : (index / (count - 1)) * width);
+  const xAt = (value: number): number => left + ((value - xMin) / (xMax - xMin)) * width;
   const yAt = (value: number): number => top + height - ((value - min) / (max - min)) * height;
   const colors = palette(layer);
   const grid = ticks(min, max).map((value) => ({value, y: yAt(value)}));
+  const xTicks = ticks(xMin, xMax, 4).map((value) => ({value, x: xAt(value)}));
   const count = Math.max(...series.map((s) => s.values.length));
   const barWidth = Math.max(6, (width / count) * 0.55);
   return (
     <svg viewBox="0 0 1000 640" width="100%" height="100%" style={{overflow: 'hidden'}}>
-      {grid.map((tick) => <g key={tick.value}>
+      {grid.map((tick) => <g key={`y${tick.value}`}>
         <line x1={left} y1={tick.y} x2={left + width} y2={tick.y} stroke={theme.grid} strokeOpacity={0.18}/>
-        <text x={left - 12} y={tick.y + 6} textAnchor="end" fill={theme.muted} fontSize={22}>{format(tick.value)}</text>
+        <text x={left - 14} y={tick.y + 7} textAnchor="end" fill={theme.muted} fontSize={22}>{format(tick.value)}</text>
       </g>)}
+      {xTicks.map((tick) => <text key={`x${tick.value}`} x={tick.x} y={top + height + 32} textAnchor="middle"
+        fill={theme.muted} fontSize={21}>{format(tick.value)}</text>)}
       <line x1={left} y1={top + height} x2={left + width} y2={top + height} stroke={theme.grid} strokeOpacity={0.5}/>
       <line x1={left} y1={top} x2={left} y2={top + height} stroke={theme.grid} strokeOpacity={0.5}/>
       {series.map((s, sIndex) => {
         const color = colors[sIndex % colors.length];
-        const points = s.values.map((value, index) => [xAt(index, s.values.length), yAt(value)] as const);
+        const xValues = explicitX ? s.x_values : s.values.map((_v, i) => i);
+        const points = s.values.map((value, index) => [xAt(xValues[index]), yAt(value)] as const);
         if (layer.chart === 'bar') {
           return <g key={s.label}>{s.values.map((value, index) => {
-            const x = xAt(index, s.values.length) - barWidth / 2;
+            const x = xAt(xValues[index]) - barWidth / 2;
             const y = yAt(value);
             const h = (top + height - y) * reveal;
             return <rect key={index} x={x} y={top + height - h} width={barWidth} height={h} fill={color} opacity={0.82} rx={3}/>;
@@ -66,47 +78,43 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
         if (layer.chart === 'scatter') {
           const path = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
           return <g key={s.label}>
-            {layer.connect && <path d={`${path} Z`} fill={`${color}18`} stroke={color} strokeWidth={4}
-              strokeLinejoin="round" opacity={0.9}/>}
+            {layer.connect && <path d={`${path} Z`} fill={`${color}1f`} stroke={color} strokeWidth={5}
+              strokeLinejoin="round" opacity={0.95}/>}
             {points.map(([x, y], index) =>
-              <circle key={index} cx={x} cy={y} r={9} fill={color}
+              <circle key={index} cx={x} cy={y} r={10} fill={color}
                 opacity={reveal > index / Math.max(1, points.length) ? 0.95 : 0.2}/>)}
           </g>;
         }
         const d = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
         const last = points[points.length - 1];
         const label = (x: number, y: number, text: string, anchor: 'start' | 'end') => {
-          const width = text.length * 11 + 14;
-          const left = anchor === 'start' ? x + 8 : x - width - 8;
-          const labelTop = Math.min(top + height - 24, Math.max(top + 4, y - 34));
+          const labelWidth = text.length * 12 + 16;
+          const leftEdge = anchor === 'start' ? x + 10 : x - labelWidth - 10;
+          const labelTop = Math.min(top + height - 26, Math.max(top + 4, y - 36));
           return <g>
-            <rect x={left} y={labelTop} width={width} height={24} rx={5} fill={theme.surface} fillOpacity={0.92}/>
-            <text x={left + 7} y={labelTop + 17} fill={color} fontSize={20}>{text}</text>
+            <rect x={leftEdge} y={labelTop} width={labelWidth} height={26} rx={5} fill={theme.surface} fillOpacity={0.92}/>
+            <text x={leftEdge + 8} y={labelTop + 19} fill={color} fontSize={20}>{text}</text>
           </g>;
         };
         return <g key={s.label}>
-          <path d={d} fill="none" stroke={color} strokeWidth={5} strokeLinecap="round" pathLength={1}
+          <path d={d} fill="none" stroke={color} strokeWidth={6} strokeLinecap="round" pathLength={1}
             strokeDasharray={1} strokeDashoffset={1 - reveal}/>
-          {points.map(([x, y], index) => <circle key={index} cx={x} cy={y} r={4.5} fill={color} opacity={reveal}/>)}
+          {points.map(([x, y], index) => <circle key={index} cx={x} cy={y} r={5} fill={color} opacity={reveal}/>)}
           {label(points[0][0], points[0][1], format(s.values[0]), 'start')}
           {label(last[0], last[1], format(s.values[s.values.length - 1]), 'end')}
         </g>;
       })}
-      <text x={left} y={640 - 24} fill={theme.muted} fontSize={22}>{layer.axis || '步骤'}</text>
-      <text x={left + width} y={640 - 24} textAnchor="end" fill={theme.muted} fontSize={22}>{layer.unit || series[0].unit}</text>
-      {layer.source_note && <text x={left + width} y={top - 14} textAnchor="end" fill={theme.muted} fontSize={17}>
+      <text x={left} y={640 - 18} fill={theme.muted} fontSize={22}>{layer.axis || (explicitX ? 'x' : '步骤')}</text>
+      <text x={left + width} y={640 - 18} textAnchor="end" fill={theme.muted} fontSize={22}>{layer.unit || series[0].unit}</text>
+      {layer.source_note && <text x={left + width} y={top - 16} textAnchor="end" fill={theme.muted} fontSize={20}>
         {layer.source_note}
       </text>}
-      {series.length > 1 && <g transform={`translate(${left + 12}, ${top + 6})`}>
-        {series.map((s, index) => <g key={s.label} transform={`translate(0, ${index * 26})`}>
-          <rect width={14} height={14} y={2} fill={colors[index % colors.length]} rx={3}/>
-          <text x={22} y={15} fill={theme.text} fontSize={20}>{s.label}</text>
+      {series.length > 1 && <g transform={`translate(${left + 14}, ${top + 8})`}>
+        {series.map((s, index) => <g key={s.label} transform={`translate(0, ${index * 30})`}>
+          <rect width={16} height={16} y={3} fill={colors[index % colors.length]} rx={3}/>
+          <text x={26} y={18} fill={theme.text} fontSize={20}>{s.label}</text>
         </g>)}
       </g>}
     </svg>
   );
 };
-
-
-
-

@@ -87,7 +87,8 @@ def encoded_stills(video: Path, cut: dict, fps: int, directory: Path, *, portrai
     directory.mkdir(parents=True, exist_ok=True)
     offset, images = 0, []
     for index, scene in enumerate(cut["scenes"]):
-        seconds = (offset + int(scene["frames"] * 0.55)) / fps
+        # 82% of the scene: after appear/draw actions finish, before the fade-out.
+        seconds = (offset + int(scene["frames"] * 0.82)) / fps
         output = directory / f"scene-{index + 1:02d}.jpg"
         run([ffmpeg(), "-y", "-v", "error", "-ss", f"{seconds:.6f}", "-threads", "2", "-i", str(video),
              "-frames:v", "1", "-vf", "scale=540:-2" if portrait else "scale=960:-2",

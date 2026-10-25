@@ -545,6 +545,14 @@
           "minItems": 2,
           "title": "Values",
           "type": "array"
+        },
+        "x_values": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 60,
+          "title": "X Values",
+          "type": "array"
         }
       },
       "required": [

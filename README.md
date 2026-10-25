@@ -67,6 +67,7 @@ cd Movelyth-From-Idea-to-Final-Cut
 .\.venv\Scripts\python.exe -m movelyth assets
 .\.venv\Scripts\python.exe -m movelyth schema            # 输出 Scene DSL 的 JSON Schema
 .\.venv\Scripts\python.exe -m movelyth components        # 组件元数据：用途/必需字段/限制/横竖适配
+.\.venv\Scripts\python.exe -m movelyth check --film .\film.json --research .\research.json  # 离线校验脚本
 .\.venv\Scripts\python.exe -m movelyth asset-add .\我的图.png --id my_photo `
     --source "我自己拍摄" --author "我" --license "自有素材" --scope "本片使用"
 ```

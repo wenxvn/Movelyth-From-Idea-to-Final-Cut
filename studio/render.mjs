@@ -38,7 +38,9 @@ try {
     let offset = 0;
     for (let i = 0; i < cut.props.scenes.length; i++) {
       const scene = cut.props.scenes[i];
-      const frame = Math.min(composition.durationInFrames - 1, offset + Math.floor(scene.frames * 0.55));
+      // Sample late enough that appear/draw actions have finished: a review still
+      // taken at 55% could show an intentionally half-built scene.
+      const frame = Math.min(composition.durationInFrames - 1, offset + Math.floor(scene.frames * 0.82));
       const output = path.join(cut.output, `scene-${String(i + 1).padStart(2, '0')}.jpg`);
       await renderStill({...common, composition, output, frame, imageFormat: 'jpeg', scale: 0.5});
       stills.push(output);

@@ -269,6 +269,16 @@ def layer_font(layer: Layer) -> tuple[int, int]:
 
 
 VISUAL_TYPES = {"chart", "diagram", "timeline", "procedural"}
+# A scene must draw something; text/math alone is "a dynamic subtitle", not a visual.
+DRAWING_TYPES = {"shape", "chart", "diagram", "timeline", "image", "procedural"}
+
+
+def scene_visual_errors(scene: Scene) -> list[str]:
+    layers = effective_layers(scene)
+    if not any(layer.type in DRAWING_TYPES for layer in layers):
+        return [f"镜头 {scene.id} 只有文字/公式，等于动态字幕，没有真正的画面；"
+                f"至少加一个 shape/chart/diagram/timeline/image/procedural 图层"]
+    return []
 
 
 def layout_errors(scene: Scene, *, vertical: bool) -> list[str]:
@@ -276,7 +286,7 @@ def layout_errors(scene: Scene, *, vertical: bool) -> list[str]:
     orientation = "portrait" if vertical else "landscape"
     boxes = regions(orientation, scene.layout)
     reserved = reserved_bands(orientation, scene.layout)
-    errors: list[str] = []
+    errors: list[str] = scene_visual_errors(scene)
     used: list[tuple[str, dict]] = []
     for layer in effective_layers(scene):
         box = boxes.get(layer.region)

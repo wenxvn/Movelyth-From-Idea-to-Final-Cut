@@ -83,17 +83,25 @@ TypeScript，两侧不会各自漂移。**同一布局内的区域互不重叠**
 ## 3. 校验边界
 
 - 文本长度、坐标范围、元素数量、帧数、时长全部有上限；拒绝 `NaN`/`Infinity`、超大列表。
+- **每镜至少一个画面图层**（shape/chart/diagram/timeline/image/procedural）；只有 text + math 的镜头
+  视为"动态字幕"，在脚本审批阶段拒绝。
+- **同一布局内的区域互不重叠**，且图表/图示/时间线/程序动画只能放 `main`（compare 可 `main` + `side`），
+  避免把核心画面塞进注脚条后被判为不可读。
 - `data_ref` 只能是小写标识符，不能是路径或 URL；`image` 只能引用受控素材目录中已存在的文件
   （内置 SVD 图或 `movelyth asset-add` 登记的素材，登记时会校验 hash 与授权字段）。
-- `chart` 必须由 `series` 或 `workspace/VID-xxxxxx/data/<data_ref>.json` 提供真实数值，缺失时在渲染前报错。
-  数据文件格式：`{"label": "误差", "unit": "%", "axis": "轮次", "values": [0.9, 0.6, 0.3]}`，
-  或 `{"series": [{"label": "...", "values": [...]}, ...]}`；上限 256 KB、每序列 2–60 个有限数。
+- `chart` 必须由 `series` 或 `workspace/VID-xxxxxx/data/<data_ref>.json|.csv` 提供真实数值，
+  缺失时在渲染前报错。JSON 格式：`{"label": "误差", "unit": "%", "axis": "轮次", "values": [0.9, 0.6, 0.3]}`
+  或 `{"series": [{"label": "...", "values": [...]}, ...]}`；CSV 支持单列数值或带表头的多列序列；
+  上限 256 KB、每序列 2–60 个有限数。`x_values` 可选，给散点/折线提供真实 x 坐标。
 - 旁白与画面一致性检查见 `consistency.py`：数据趋势、面积/长度/塌缩断言、示意数据被说成实测等。
 - 渲染器无法表达的动作或数据在脚本审批阶段拒绝，不会退化成一张无关的通用图。
 
 ## 4. 生成与校验命令
 
 ```powershell
+# 离线校验一份脚本（不调用模型、不渲染），适合反复修改 JSON 时用
+.\.venv\Scripts\python.exe -m movelyth check --film .\film.json --research .\research.json
+
 # 重新生成渲染端契约（修改布局或模型后必须执行）
 .\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0,'src'); from pathlib import Path; from movelyth.scenedsl import write_renderer_contracts; write_renderer_contracts(Path('studio/src'))"
 

@@ -17,7 +17,7 @@ def chart_layer(layer_id: str = "loss", values: list[float] | None = None, **ove
     value = layer(layer_id, type="chart", procedural="", chart="line", source_note="示意")
     value["series"] = overrides.pop(
         "series", [{"label": "损失", "values": values if values is not None else [0.9, 0.7, 0.5, 0.3],
-                    "unit": "%"}])
+                    "unit": "%", "x_values": []}])
     value.update(overrides)
     return value
 

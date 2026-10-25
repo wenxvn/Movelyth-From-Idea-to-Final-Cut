@@ -95,11 +95,20 @@ class Series(Contract):
     label: str = Field(min_length=1, max_length=16)
     values: list[float] = Field(min_length=2, max_length=60)
     unit: str = Field(default="", max_length=8)
+    # Optional explicit x coordinates (same length as values) for scatter/line plots
+    # that are not evenly spaced, e.g. polygon vertices on a real coordinate axis.
+    x_values: list[float] = Field(default_factory=list, max_length=60)
 
-    @field_validator("values")
+    @field_validator("values", "x_values")
     @classmethod
     def finite_series(cls, values: list[float]) -> list[float]:
         return _finite(values, 1_000_000, "数据序列必须是绝对值不超过 1000000 的有限数")
+
+    @model_validator(mode="after")
+    def x_matches_y(self):
+        if self.x_values and len(self.x_values) != len(self.values):
+            raise ValueError("x_values 必须与 values 等长")
+        return self
 
 
 class DiagramNode(Contract):

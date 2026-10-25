@@ -22,15 +22,19 @@
   放在 top/side/bottom/annotation 会因为区域太小被判为不可读并拒绝脚本。
   需要并排比较时用 `layout: "compare"` 的 `main` + `side`；需要多个公式时**合并成一个 math 图层**，
   用 `\n` 换行，不要拆成多个同区域图层。
+- 每镜至少要有一个**真正的画面图层**：`shape`、`chart`、`diagram`、`timeline`、`image` 或
+  `procedural` 之一。只有 text + math 的镜头会被判为"动态字幕"并拒绝脚本。
 - text：text/math 的正文（≤120 字）；也可作为 image 的说明。
 - shape：point / line / rect / circle / arrow / polygon / bracket（shape 图层）。`line` 会按 `points`
   依次连成折线（给 6 个数就是两段折线），`polygon` 自动闭合。
 - chart：line / bar / scatter（chart 图层）。
 - connect：布尔值。`chart: "scatter"` 时把散点连成闭合轮廓，用来画三角形/多边形对比；
-  不需要轮廓就保持 false。
+  `shape: "line"` 时给折线加起点圆点与箭头（表示行进方向）。不需要时保持 false。
 - timeline：横向里程碑/阶段条，用 `steps` 提供 2–6 个阶段名（每个 ≤ 24 字），当前阶段会随节拍高亮。
 - procedural：matrix / vectors / projection / wave / network / image_layers / orbit（procedural 图层）。
-- series：图表数据，每项 {label, values, unit}，values 2–60 个有限数。
+- series：图表数据，每项 {label, values, unit, x_values}。values 2–60 个有限数；`x_values` 可选，
+  给出时必须是等长的 x 坐标，散点/折线会按真实坐标绘制（可用于三角形顶点、非等距采样）。
+- connect：布尔值。`chart: "scatter"` 时把点按顺序连成闭合轮廓；`shape: "line"` 时加起点与箭头。
 - nodes：diagram 节点，每项 {id, label, x, y}，坐标范围 x 0–1000、y 0–640，2–12 个。
 - edges：diagram 连线，每项 {source, target, label}，必须引用已存在节点。
 - steps：diagram/timeline 的步骤文字，≤6 条，每条 ≤24 字。

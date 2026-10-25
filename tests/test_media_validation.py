@@ -43,3 +43,11 @@ def test_review_frames_are_extracted_from_encoded_video(tmp_path):
     with Image.open(frames[0]) as first, Image.open(frames[1]) as second:
         assert first.size == second.size == (960, 540)
         assert ImageChops.difference(first.convert("RGB"), second.convert("RGB")).getbbox() is not None
+
+
+def test_review_frames_are_sampled_after_scene_actions_finish():
+    """A still at 55% could show a scene whose key layer has not appeared yet."""
+    import inspect
+
+    source = inspect.getsource(encoded_stills)
+    assert "0.82" in source
