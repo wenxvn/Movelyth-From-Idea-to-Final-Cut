@@ -13,6 +13,7 @@ dependencies = ["edge-tts>=7,<8", "imageio-ffmpeg>=0.6,<0.7", "numpy>=1.24,<3", 
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.11"]
+asr = ["faster-whisper>=1.1,<2"]
 
 [project.scripts]
 movelyth = "movelyth.cli:main"
@@ -29,6 +30,10 @@ movelyth = ["prompts/*.md"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+  "slow: real renderer or media encoding (skippable in CI)",
+  "live: calls a real model or online TTS service",
+]
 
 [tool.ruff]
 line-length = 110

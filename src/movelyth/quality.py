@@ -61,6 +61,9 @@ def verify_video(path: Path, *, width: int, height: int, seconds: float, fps: in
             "width": video.get("width"), "height": video.get("height"), "fps": frame_rate,
             "max_volume_db": float(peak[1]) if peak else None,
             "mean_volume_db": float(mean[1]) if mean else None,
+            "audio_signal": {"mean_volume_db": float(mean[1]) if mean else None,
+                             "max_volume_db": float(peak[1]) if peak else None,
+                             "meaning": "audible 只表示音轨非静音；不表示发音、语速或听感正确"},
             "mean_sample_motion": movement, "audio_listened": False,
             "asr_checked": False, "full_motion_aesthetic_review": False}
 
@@ -94,16 +97,27 @@ def encoded_stills(video: Path, cut: dict, fps: int, directory: Path, *, portrai
     return images
 
 
-def validate_script(film, research, long_seconds: int, short_seconds: int) -> None:
+def validate_script(film, research, long_seconds: int, short_seconds: int) -> list[str]:
+    """Reject scripts the renderer cannot honestly draw; return non-blocking warnings."""
+    from .consistency import check_film
+    from .scenedsl import scene_signature, validate_cut_dsl
+
     for name, target in [("long", long_seconds), ("short", short_seconds)]:
         cut = getattr(film, name)
         characters = sum(len(scene.narration) for scene in cut.scenes)
         if not target * 3.4 <= characters <= target * 6.5:
             raise ValueError(f"{name} 旁白长度 {characters} 字不适配目标 {target} 秒")
-        if len({s.visual for s in cut.scenes}) < 3:
+        if len({scene_signature(scene) for scene in cut.scenes}) < 3:
             raise ValueError(f"{name} 至少应有三种与内容相关的视觉表达")
         if any(s.source_index >= len(research.sources) for s in cut.scenes):
             raise ValueError("source_index 引用了不存在的来源")
+        problems = validate_cut_dsl(cut, vertical=name == "short")
+        if problems:
+            raise ValueError("；".join(problems[:6]))
+    errors, warnings = check_film(film)
+    if errors:
+        raise ValueError("旁白与画面不一致：" + "；".join(errors[:6]))
+    return warnings
 
 
 def srt(cut: dict, fps: int) -> str:

@@ -16,7 +16,10 @@ const digest = (value) => createHash('sha256').update(value).digest('hex');
 const fileDigest = async (name) => digest(await fs.readFile(name));
 try {
   bundlePath = await bundle({entryPoint: path.join(here, 'src/index.ts'), publicDir: spec.assets, outDir: bundleTarget});
-  browser = await openBrowser('chrome', spec.browser ? {browserExecutable: spec.browser} : {});
+  if (!spec.browser) {
+    throw new Error('未找到 Chrome/Edge 可执行文件：请设置 MOVELYTH_BROWSER，不会静默下载浏览器');
+  }
+  browser = await openBrowser('chrome', {browserExecutable: spec.browser});
   for (const cut of spec.cuts) {
     const fingerprint = digest(JSON.stringify({props: cut.props, composition: cut.composition, version: spec.version}));
     const previous = result[cut.name];
@@ -46,7 +49,20 @@ try {
     const cover = path.join(cut.output, 'cover.png');
     await renderStill({...common, composition: coverComp, inputProps: coverProps, output: cover, frame: 45});
     if (spec.stillsOnly) {
-      result[cut.name] = {cover, stills, frames: composition.durationInFrames, width: composition.width, height: composition.height, fps: composition.fps};
+      let preview;
+      if (spec.previewSeconds) {
+        preview = path.join(cut.output, 'preview.mp4');
+        const lastFrame = Math.min(composition.durationInFrames - 1,
+          Math.max(1, Math.round(spec.previewSeconds * composition.fps) - 1));
+        console.log(JSON.stringify({event: 'preview_start', cut: cut.name, seconds: spec.previewSeconds}));
+        await renderMedia({...common, composition, codec: 'h264', outputLocation: preview,
+          scale: spec.scale ?? 0.5, frameRange: [0, lastFrame], concurrency: spec.concurrency,
+          crf: 23, x264Preset: 'veryfast', pixelFormat: 'yuv420p', disableSharedMemoryCapture: true,
+          mediaCacheSizeInBytes: 128 * 1024 * 1024, offthreadVideoCacheSizeInBytes: 128 * 1024 * 1024,
+          offthreadVideoThreads: 1});
+      }
+      result[cut.name] = {cover, stills, preview, frames: composition.durationInFrames,
+        width: composition.width, height: composition.height, fps: composition.fps};
       await fs.writeFile(spec.result, JSON.stringify(result, null, 2));
       continue;
     }

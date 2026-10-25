@@ -1,0 +1,567 @@
+{
+  "$defs": {
+    "Action": {
+      "additionalProperties": false,
+      "description": "A reviewable animation primitive.  Time references resolve against real TTS.",
+      "properties": {
+        "degrees": {
+          "default": 0,
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Degrees",
+          "type": "number"
+        },
+        "dx": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Dx",
+          "type": "number"
+        },
+        "dy": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Dy",
+          "type": "number"
+        },
+        "end": {
+          "maxLength": 48,
+          "minLength": 1,
+          "title": "End",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "appear",
+            "fade",
+            "move",
+            "scale",
+            "rotate",
+            "highlight",
+            "draw",
+            "morph"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "scale": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 0.2,
+          "title": "Scale",
+          "type": "number"
+        },
+        "start": {
+          "maxLength": 48,
+          "minLength": 1,
+          "title": "Start",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[a-z][a-z0-9_]{0,23}$",
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "kind",
+        "start",
+        "end"
+      ],
+      "title": "Action",
+      "type": "object"
+    },
+    "Beat": {
+      "additionalProperties": false,
+      "description": "A narrative beat. ``at`` is start/end/a 0–1 fraction/narration:substring.",
+      "properties": {
+        "at": {
+          "maxLength": 48,
+          "minLength": 1,
+          "title": "At",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 60,
+          "minLength": 2,
+          "title": "Purpose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "purpose"
+      ],
+      "title": "Beat",
+      "type": "object"
+    },
+    "Cut": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 1200,
+          "minLength": 20,
+          "title": "Description",
+          "type": "string"
+        },
+        "scenes": {
+          "items": {
+            "$ref": "#/$defs/Scene"
+          },
+          "maxItems": 14,
+          "minItems": 3,
+          "title": "Scenes",
+          "type": "array"
+        },
+        "schema_version": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "style": {
+          "default": "tech",
+          "enum": [
+            "minimal",
+            "tech",
+            "documentary"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 2,
+          "title": "Tags",
+          "type": "array"
+        },
+        "title": {
+          "maxLength": 50,
+          "minLength": 2,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "tags",
+        "scenes"
+      ],
+      "title": "Cut",
+      "type": "object"
+    },
+    "DiagramEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "default": "",
+          "maxLength": 12,
+          "title": "Label",
+          "type": "string"
+        },
+        "source": {
+          "pattern": "^[a-z][a-z0-9_]{0,15}$",
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[a-z][a-z0-9_]{0,15}$",
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "title": "DiagramEdge",
+      "type": "object"
+    },
+    "DiagramNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,15}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 18,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "x": {
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 640,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y"
+      ],
+      "title": "DiagramNode",
+      "type": "object"
+    },
+    "Layer": {
+      "additionalProperties": false,
+      "description": "One bounded visual layer inside a scene.\n\nOnly enumerations, numbers and short strings are accepted.  File paths,\nURLs, code and unbounded lists are rejected by construction.",
+      "properties": {
+        "axis": {
+          "default": "",
+          "maxLength": 16,
+          "title": "Axis",
+          "type": "string"
+        },
+        "chart": {
+          "default": "line",
+          "enum": [
+            "line",
+            "bar",
+            "scatter"
+          ],
+          "title": "Chart",
+          "type": "string"
+        },
+        "color": {
+          "default": "cyan",
+          "enum": [
+            "cyan",
+            "amber",
+            "coral",
+            "mint"
+          ],
+          "title": "Color",
+          "type": "string"
+        },
+        "data_ref": {
+          "default": "",
+          "maxLength": 32,
+          "title": "Data Ref",
+          "type": "string"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/DiagramEdge"
+          },
+          "maxItems": 24,
+          "title": "Edges",
+          "type": "array"
+        },
+        "emphasis": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Emphasis",
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,23}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/DiagramNode"
+          },
+          "maxItems": 12,
+          "title": "Nodes",
+          "type": "array"
+        },
+        "points": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 64,
+          "title": "Points",
+          "type": "array"
+        },
+        "procedural": {
+          "default": "",
+          "maxLength": 16,
+          "title": "Procedural",
+          "type": "string"
+        },
+        "region": {
+          "default": "main",
+          "enum": [
+            "main",
+            "side",
+            "top",
+            "bottom",
+            "annotation",
+            "full"
+          ],
+          "title": "Region",
+          "type": "string"
+        },
+        "series": {
+          "items": {
+            "$ref": "#/$defs/Series"
+          },
+          "maxItems": 4,
+          "title": "Series",
+          "type": "array"
+        },
+        "shape": {
+          "default": "rect",
+          "enum": [
+            "point",
+            "line",
+            "rect",
+            "circle",
+            "arrow",
+            "polygon",
+            "bracket"
+          ],
+          "title": "Shape",
+          "type": "string"
+        },
+        "source_note": {
+          "default": "",
+          "maxLength": 60,
+          "title": "Source Note",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 6,
+          "title": "Steps",
+          "type": "array"
+        },
+        "text": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "text",
+            "shape",
+            "math",
+            "chart",
+            "diagram",
+            "image",
+            "procedural"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "unit": {
+          "default": "",
+          "maxLength": 8,
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "Layer",
+      "type": "object"
+    },
+    "Scene": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/Action"
+          },
+          "maxItems": 12,
+          "title": "Actions",
+          "type": "array"
+        },
+        "beats": {
+          "items": {
+            "$ref": "#/$defs/Beat"
+          },
+          "maxItems": 6,
+          "title": "Beats",
+          "type": "array"
+        },
+        "color": {
+          "enum": [
+            "cyan",
+            "amber",
+            "coral",
+            "mint"
+          ],
+          "title": "Color",
+          "type": "string"
+        },
+        "heading": {
+          "maxLength": 24,
+          "minLength": 2,
+          "title": "Heading",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Labels",
+          "type": "array"
+        },
+        "layers": {
+          "items": {
+            "$ref": "#/$defs/Layer"
+          },
+          "maxItems": 6,
+          "title": "Layers",
+          "type": "array"
+        },
+        "layout": {
+          "default": "diagram",
+          "enum": [
+            "immersive",
+            "diagram",
+            "compare"
+          ],
+          "title": "Layout",
+          "type": "string"
+        },
+        "matrix": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Matrix",
+          "type": "array"
+        },
+        "narration": {
+          "maxLength": 500,
+          "minLength": 15,
+          "title": "Narration",
+          "type": "string"
+        },
+        "source_index": {
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Source Index",
+          "type": "integer"
+        },
+        "visual": {
+          "enum": [
+            "matrix",
+            "vectors",
+            "projection",
+            "wave",
+            "network",
+            "image_layers",
+            "orbit"
+          ],
+          "title": "Visual",
+          "type": "string"
+        },
+        "visual_intent": {
+          "default": "",
+          "maxLength": 240,
+          "title": "Visual Intent",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "heading",
+        "narration",
+        "visual",
+        "labels",
+        "matrix",
+        "color",
+        "source_index"
+      ],
+      "title": "Scene",
+      "type": "object"
+    },
+    "Series": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "maxLength": 16,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "unit": {
+          "default": "",
+          "maxLength": 8,
+          "title": "Unit",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 60,
+          "minItems": 2,
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "values"
+      ],
+      "title": "Series",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "long": {
+      "$ref": "#/$defs/Cut"
+    },
+    "short": {
+      "$ref": "#/$defs/Cut"
+    },
+    "thesis": {
+      "maxLength": 300,
+      "minLength": 8,
+      "title": "Thesis",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 80,
+      "minLength": 2,
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "thesis",
+    "long",
+    "short"
+  ],
+  "title": "Film",
+  "type": "object"
+}
