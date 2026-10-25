@@ -1,0 +1,21 @@
+[studio]
+name = "Movelyth — 幕绎"
+tagline = "From Idea to Final Cut."
+language = "zh-CN"
+long_seconds = 180
+short_seconds = 60
+fps = 30
+render_concurrency = 1
+voice = "zh-CN-YunxiNeural"
+voice_rate = "+0%"
+max_retries = 2
+
+[agents]
+provider = "codex"
+timeout_seconds = 600
+# 留空时沿用 Codex 配置；不写入 API Key。
+model = ""
+
+[paths]
+workspace = "workspace"
+delivery = "delivery"
