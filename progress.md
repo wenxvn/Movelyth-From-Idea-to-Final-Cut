@@ -1,5 +1,35 @@
 # Movelyth 实施记录
 
+## 2026-10-25 · V1
+
+- 确认基线：HEAD `963b1aa`、工作区干净、远端一致；22 项 pytest / Ruff / TypeScript 通过。
+  记录在 `docs/v1-baseline.md`，并从 VID-000001 编码成片抽帧保存 V1 前视觉基线。
+- 发现本机 Codex 不可用：`%APPDATA%\npm` 的 `@openai/codex` 缺 `codex-win32-x64` 可选依赖；
+  可执行的 0.130.0-alpha.5 访问后端持续 `tls handshake eof`，代理下 `chatgpt.com` 亦不可达。
+  因此真实模型驱动的跨题材验收被阻塞，本轮只能标"代码阶段完成、实片验收未完成"。
+- P0-02：`--brief-file` 可选输入，brief 规范化 + hash 并入意图判定；旧库自动迁移
+  `brief`/`brief_hash`，历史任务不受影响。
+- P0-03/P0-04：新增版本化 Scene DSL v1（图层/布局/节拍/动作/结构化 findings），
+  Python 契约生成 TypeScript 侧 `layout.json` 与 `scene-schema.json` 并加漂移测试；
+  渲染端拆成组件注册表 + 三套布局 + 三套风格，图表/有向图/公式/图形/图片/程序动画可组合。
+- P0-05：节拍与动作绑定真实 TTS 词语边界，新增时间轴一致性校验（越界、交叠、无效区间）。
+- P0-06：研究输出 claims 映射，审稿输出结构化 findings；新增 `consistency.py`
+  拒绝"说下降画上升""示意数据说成实测""称旋转但矩阵不是旋转"等。
+- P0-07：`preview`（故事板 + 12s 低分辨率片段，不入交付）与 `revise`（只改指定镜头、
+  新 revision、不覆盖旧交付）；阶段耗时与缓存命中写入 `workspace/metrics.csv`。
+- P0-08：可选本地 ASR、长静音（区分片头片尾留白）、混音/原声能量比、三套配乐预设、
+  可选发音映射；`audible` 明确解释为"非静音"，不等于听感正确。
+- P0-09：来源抓取重写为 DNS 校验 + 固定公网 IP 连接 + 逐跳重定向校验 + MIME/大小/超时限制 +
+  成功 30 天/失败 6 小时缓存；本地素材路径白名单与逃逸阻断。
+- 真实渲染与 TTS 演示（mock 剧本）：VID-000002 双画幅 `ready`（41.0s / 17.0s，11 项检查通过），
+  VID-000003 `previewed`（storyboard + 12.0s 960×540 片段），VID-000004 `revise` 成功
+  （语音全命中缓存，sound 0.2s vs 首次 23.4s）。
+- 测试从 22 项增至 72 项（另有 1 项真实渲染 slow 测试），Ruff 与 TypeScript 通过。
+- 文档：`docs/scene-dsl.md`、`docs/v1-baseline.md`、`docs/v1-execution.md`、
+  `docs/v1-evaluation.md`，README/architecture/verification/skill 同步更新；新增 CI 工作流。
+- 未完成：真实模型三题材验收、ASR 实际执行、人工完整观看与实听、按单镜重编码的局部渲染、
+  P1 剩余视觉组件（网络队列、状态机、外部素材授权管理）、P2 全部。
+
 ## 2026-10-25
 - 用户确定项目名称 Movelyth — 幕绎、标语 From Idea to Final Cut.、仓库与联系邮箱。
 - 已克隆指定的空仓库，设置仓库级 Git 作者信息；上级原有视频与参考仓库保持原样。
