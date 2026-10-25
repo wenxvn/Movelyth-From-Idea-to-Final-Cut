@@ -446,6 +446,7 @@ class Studio:
                 audio_reports[name] = audio_qc(Path(timelines[name]["voice"]), Path(timelines[name]["mix"]),
                                                "".join(scene["narration"] for scene in timelines[name]["scenes"]),
                                                config=config)
+                reports[name]["asr_checked"] = audio_reports[name]["asr"]["status"] == "completed"
                 image = job / f"contact-{name}.jpg"
                 actual_stills = encoded_stills(video, timelines[name], config["fps"], job / "encoded-stills" / name,
                                                portrait=name == "short")

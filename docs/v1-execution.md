@@ -138,10 +138,17 @@
 - 修改文件：`audioqc.py`、`quality.py`、`media.py`、`pipeline.py`、`movelyth.toml`。
 - 新增/调整测试：`tests/test_audioqc.py`（6 项：ASR 可选、覆盖率、内部长静音、尾部留白、配乐过响、缺失文件）。
 - 执行命令与结果：`pytest tests/test_audioqc.py -q` → 6 passed。
-- 有无调用模型/TTS/渲染：真实 FFmpeg 分析 + 合成音频。
-- 验证类型：单元 + 真实音频分析。
-- 已知未验证/风险：**未安装 faster-whisper，ASR 未执行**；没有人工实听，报告里
-  `listened_by_human=false` 保持不变。
+- 有无调用模型/TTS/渲染：真实 FFmpeg 分析 + 合成音频；ASR 见下方实测。
+- 验证类型：单元 + 真实音频分析 + **真实 ASR**。
+- ASR 实测（本机 CPU，`faster-whisper` 1.2.1，模型 `small` int8）：
+  - VID-000008 长版旁白覆盖率 **0.949**、短版 **0.942**，`missing` 为空、无异常重复，
+    转写状态 `completed`，`质检报告.json` 的 `technical.<cut>.asr_checked = true`。
+  - 转写确实出现近音字（"梯度"→"T度"、"步长"→"不常"、"摆动"→"百动"），说明小模型
+    会把形近字写错；报告因此把覆盖率当作**下限信号**，不当成发音正确证明。
+  - 成本：模型首次加载约 139 s，40 s 旁白转写约 8 s；模型在进程内缓存，长短版共用。
+    因此 ASR 默认关闭，只在 `asr_enabled = true` 时执行。
+- 已知未验证/风险：**没有人工实听**，报告里 `listened_by_human=false` 保持不变；
+  ASR 只能发现漏词/重复/长空白，不能判断语气与发音是否自然。
 
 ## Task ID：P0-09 源信息安全与不可信内容边界
 

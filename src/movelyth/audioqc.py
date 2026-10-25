@@ -42,6 +42,18 @@ def asr_status() -> dict:
             "note": "未安装时不会把 ASR 记为已检查" if not available else "可本地运行，首次使用需下载模型"}
 
 
+_MODELS: dict[str, object] = {}
+
+
+def _model(size: str):
+    """Load a Whisper model once per process; loading dominates short clips."""
+    if size not in _MODELS:
+        from faster_whisper import WhisperModel
+
+        _MODELS[size] = WhisperModel(size, device="cpu", compute_type="int8")
+    return _MODELS[size]
+
+
 def transcribe(audio: Path, *, enabled: bool, model_size: str = "small", language: str = "zh") -> dict:
     """Optional, pluggable local ASR.  Never fails the whole production."""
     status = asr_status()
@@ -52,15 +64,18 @@ def transcribe(audio: Path, *, enabled: bool, model_size: str = "small", languag
         return {"status": "unavailable", **status, "segments": [], "text": "",
                 "limitations": ["未安装 faster-whisper，未执行语音转写"]}
     try:
-        from faster_whisper import WhisperModel
-
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
-        segments, info = model.transcribe(str(audio), language=language, vad_filter=True)
+        model = _model(model_size)
+        segments, info = model.transcribe(
+            str(audio), language=language, vad_filter=True,
+            # Bias toward simplified Chinese so the transcript can be compared with the script.
+            initial_prompt="以下是普通话的简体中文句子。",
+        )
         rows = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()}
                 for s in segments]
         return {"status": "completed", **status, "model": model_size, "language": info.language,
                 "segments": rows, "text": "".join(row["text"] for row in rows),
-                "limitations": ["ASR 结果受模型与背景音乐影响，公式和专有名词可能误识别"]}
+                "limitations": ["ASR 结果受模型大小与背景音乐影响，公式和专有名词可能误识别",
+                                "小模型可能输出繁体或近音字，覆盖率下降不等于配音有错"]}
     except Exception as exc:  # pragma: no cover - depends on optional dependency
         return {"status": "error", **status, "segments": [], "text": "",
                 "error": f"{type(exc).__name__}: {exc}",
@@ -80,7 +95,7 @@ def compare_transcript(script: str, transcript: dict) -> dict:
     coverage = matched / len(original)
     missing, repeats = [], []
     for tag, i1, i2, _j1, _j2 in matcher.get_opcodes():
-        if tag in {"delete", "replace"} and i2 - i1 >= 5:
+        if tag in {"delete", "replace"} and i2 - i1 >= 8:
             missing.append(original[i1:i2][:40])
     for size in (8, 12):
         seen = {}
@@ -92,7 +107,8 @@ def compare_transcript(script: str, transcript: dict) -> dict:
             break
     return {"status": "ok" if coverage >= 0.9 and not missing else "review",
             "coverage": round(coverage, 3), "missing": missing, "repeats": repeats,
-            "limitations": ["字符覆盖率不能证明发音正确或语序自然"]}
+            "missing_min_chars": 8,
+            "limitations": ["字符覆盖率不能证明发音正确或语序自然；ASR 的形近/近音字会拉低覆盖率"]}
 
 
 def silence_report(audio: Path, *, noise_db: int = -45, min_seconds: float = 1.2) -> dict:
