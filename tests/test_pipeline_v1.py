@@ -198,6 +198,10 @@ def test_preview_stage_produces_storyboard_without_final_render(offline_pipeline
         data = json.loads(storyboard.read_text(encoding="utf-8"))
         assert data["creation_mode"] == "preview" and data["provider"] == "mock"
         assert data["cuts"]["long"]["scenes"][0]["layers"]
+        first = data["cuts"]["long"]["scenes"][0]
+        assert first["start"] == 0 and first["end"] > 0
+        assert first["layers"][0]["region"] and "caption_timing" in first
+        assert data["cuts"]["long"]["seconds"] > 0
         job = studio.workspace / f"VID-{episode['id']:06d}"
         assert (job / "preview" / "long" / "preview.mp4").is_file()
         assert "面向高中生" in (job / "agents" / "research" / "prompt.txt").read_text(encoding="utf-8")

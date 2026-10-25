@@ -413,9 +413,9 @@ class Studio:
                     "schema_version": SCHEMA_VERSION, "provider": getattr(provider, "name", "unknown"),
                     "creation_mode": "preview", "episode": f"VID-{episode['id']:06d}",
                     "cuts": {name: {"stills": cut["stills"], "cover": cut["cover"],
-                                    "scenes": [{"index": i + 1, "id": s["id"], "layout": s["layout"],
-                                                "heading": s["heading"], "layers": [layer["type"] for layer in s["layers"]]}
-                                               for i, s in enumerate(timelines[name]["scenes"])]}
+                                    "preview": cut.get("preview"),
+                                    "seconds": round(timelines[name]["seconds"], 2),
+                                    "scenes": self._storyboard_scenes(timelines[name])}
                              for name, cut in data.items()},
                     "warning": "预览只渲染代表帧与短片段，不代表完整成片已通过",
                 })
@@ -519,6 +519,27 @@ class Studio:
                    "renders": renders, "timelines": timelines, "review_prompt": prompts["reviewer.md"]},
                    check_action)
         return self.deliver(episode, job, film, research_data, timelines, library_ids)
+
+    def _storyboard_scenes(self, cut: dict) -> list[dict]:
+        """Per-scene review sheet: real time range, layout, layers and beats."""
+        rows, offset, fps = [], 0.0, self.config["studio"]["fps"]
+        for index, scene in enumerate(cut["scenes"]):
+            seconds = scene["frames"] / fps
+            rows.append({
+                "index": index + 1, "id": scene["id"], "layout": scene["layout"],
+                "heading": scene["heading"], "start": round(offset, 2),
+                "end": round(offset + seconds, 2),
+                "layers": [{"id": layer["id"], "type": layer["type"], "region": layer["region"]}
+                           for layer in scene["layers"]],
+                "beats": scene.get("beat_times", []),
+                "actions": [{"target": item["target"], "kind": item["kind"],
+                             "from": item["from"], "to": item["to"]}
+                            for item in scene.get("actions_resolved", [])],
+                "caption_timing": scene.get("caption_timing"),
+                "layout_warnings": scene.get("layout_warnings", []),
+            })
+            offset += seconds
+        return rows
 
     @staticmethod
     def _keep_untouched_scenes(frozen: Film, revised: Film, targets: set[str]) -> Film:
