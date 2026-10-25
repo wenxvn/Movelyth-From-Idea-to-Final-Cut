@@ -126,29 +126,43 @@ def captions(text: str, boundaries: list[dict], duration: float, max_chars: int)
     return [p for p in pages if p["text"] and p["end"] > p["start"]], mode
 
 
-def soundtrack(voice_track: np.ndarray, scene_starts: list[float]) -> np.ndarray:
-    """Original four-chord bed, arpeggios and scene accents, ducked under actual speech."""
+def soundtrack(voice_track: np.ndarray, scene_starts: list[float], style: str = "tech") -> np.ndarray:
+    """Original local music bed with three restrained style presets, ducked under speech."""
     size = len(voice_track)
     t = np.arange(size, dtype=np.float32) / SAMPLE_RATE
     music = np.zeros(size, dtype=np.float32)
-    chords = [(130.81, 164.81, 196.00), (110, 130.81, 164.81),
-              (87.31, 110, 130.81), (98.00, 123.47, 146.83)]
+    presets = {
+        # key: (chords, bed gain, beat gain, accent gain, accent notes, beat period)
+        "tech": ([(130.81, 164.81, 196.00), (110, 130.81, 164.81),
+                  (87.31, 110, 130.81), (98.00, 123.47, 146.83)], 0.022, 0.025, 0.035,
+                 (523.25, 783.99), 0.6),
+        "minimal": ([(130.81, 196.00, 261.63), (116.54, 174.61, 233.08),
+                     (98.00, 146.83, 196.00), (110.00, 164.81, 220.00)], 0.016, 0.0, 0.020,
+                    (392.00,), 0.9),
+        "documentary": ([(65.41, 98.00, 130.81), (58.27, 87.31, 116.54),
+                         (49.00, 73.42, 98.00), (55.00, 82.41, 110.00)], 0.028, 0.008, 0.026,
+                        (329.63, 493.88), 1.2),
+    }
+    chords, bed_gain, beat_gain, accent_gain, accent_notes, period = presets.get(style, presets["tech"])
     for begin in range(0, size, SAMPLE_RATE * 8):
         end = min(size, begin + SAMPLE_RATE * 8)
         local = t[begin:end] - begin / SAMPLE_RATE
         chord = chords[(begin // (SAMPLE_RATE * 8)) % len(chords)]
         envelope = np.minimum(local / 1.1, 1) * np.minimum((end - begin) / SAMPLE_RATE - local, 1.1) / 1.1
         for freq in chord:
-            music[begin:end] += (0.022 * np.sin(2 * np.pi * freq * local)
+            music[begin:end] += (bed_gain * np.sin(2 * np.pi * freq * local)
                                  + 0.008 * np.sin(2 * np.pi * freq * 2 * local)) * envelope
-        beat = np.mod(local, 0.6)
-        music[begin:end] += 0.025 * np.exp(-beat * 9) * np.sin(2 * np.pi * chord[2] * 4 * local)
+        if beat_gain:
+            beat = np.mod(local, period)
+            music[begin:end] += beat_gain * np.exp(-beat * 9) * np.sin(2 * np.pi * chord[2] * 4 * local)
     for start in scene_starts:
         begin = int(start * SAMPLE_RATE)
         count = min(SAMPLE_RATE, size - begin)
         local = np.arange(count) / SAMPLE_RATE
-        music[begin:begin + count] += (0.035 * np.sin(2 * np.pi * 523.25 * local)
-                                     + 0.015 * np.sin(2 * np.pi * 783.99 * local)) * np.exp(-local * 6)
+        accent = np.zeros(count, dtype=np.float32)
+        for index, note in enumerate(accent_notes):
+            accent += (accent_gain / (index + 1)) * np.sin(2 * np.pi * note * local)
+        music[begin:begin + count] += accent * np.exp(-local * 6)
     window = SAMPLE_RATE // 20
     pad = (-size) % window
     energy = np.sqrt(np.mean(np.pad(voice_track, (0, pad)).reshape(-1, window) ** 2, axis=1))
@@ -158,11 +172,29 @@ def soundtrack(voice_track: np.ndarray, scene_starts: list[float]) -> np.ndarray
     return np.stack([voice_track * 0.85 + bed, voice_track * 0.85 + bed * 0.93], axis=1)
 
 
+def speech_text(text: str, replacements: dict | None = None) -> str:
+    """Optional, explicit pronunciation mapping applied to TTS *and* captions.
+
+    Defaults to no change so captions always match the written narration.
+    """
+    for source, target in (replacements or {}).items():
+        if isinstance(source, str) and isinstance(target, str) and source:
+            text = text.replace(source, target)
+    return text
+
+
 def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait: bool) -> tuple[dict, list[Path]]:
+    from .models import Scene
+    from .scenedsl import normalize_scene
+
     fps = config["fps"]
+    style = cut.get("style", "tech")
+    replacements = config.get("speech_replace") or {}
     chunks, starts, paths, scenes, cursor = [], [], [], [], 0
-    for scene in cut["scenes"]:
-        audio, boundaries, generated = voice(scene["narration"], config, cache)
+    for raw in cut["scenes"]:
+        scene = Scene.model_validate(raw)
+        spoken = speech_text(scene.narration, replacements)
+        audio, boundaries, generated = voice(spoken, config, cache)
         paths.extend(generated)
         lead = 0.25
         seconds = len(audio) / SAMPLE_RATE
@@ -171,11 +203,17 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
         chunk = np.zeros(samples, dtype=np.float32)
         begin = round(lead * SAMPLE_RATE)
         chunk[begin:begin + len(audio)] = audio
-        pages, timing = captions(scene["narration"], boundaries, seconds, 16 if portrait else 25)
+        pages, timing = captions(spoken, boundaries, seconds, 16 if portrait else 25)
         for page in pages:
             page["start"] += lead
             page["end"] += lead
-        scenes.append({**scene, "frames": frames, "captions": pages, "caption_timing": timing})
+        shifted = [{"text": b["text"], "start": b["start"] + lead, "end": b["end"] + lead}
+                   for b in boundaries]
+        normalized = normalize_scene(scene, duration=frames / fps, boundaries=shifted, vertical=portrait)
+        normalized.update({"frames": frames, "captions": pages, "caption_timing": timing})
+        if spoken != scene.narration:
+            normalized["spoken_narration"] = spoken
+        scenes.append(normalized)
         starts.append(cursor / SAMPLE_RATE)
         cursor += samples
         chunks.append(chunk)
@@ -183,10 +221,11 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
     output.mkdir(parents=True, exist_ok=True)
     dry, mixed = output / "narration.wav", output / "mix.wav"
     write_wav(dry, narration)
-    write_wav(mixed, soundtrack(narration, starts))
+    write_wav(mixed, soundtrack(narration, starts, style))
     paths.extend([dry, mixed])
     return {"title": cut["title"], "scenes": scenes, "frames": sum(s["frames"] for s in scenes),
-            "seconds": len(narration) / SAMPLE_RATE, "mix": str(mixed)}, paths
+            "seconds": len(narration) / SAMPLE_RATE, "mix": str(mixed), "voice": str(dry),
+            "style": style}, paths
 
 
 def image_layers(output: Path) -> tuple[list[str], list[Path], dict]:

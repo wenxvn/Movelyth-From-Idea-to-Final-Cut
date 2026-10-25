@@ -1,0 +1,50 @@
+{
+  "title": "梯度下降为什么能让模型逐步减少错误？",
+  "question": "梯度下降如何让损失函数逐步下降？",
+  "angle": "从一次参数更新出发，展示损失曲线上每一步都在沿最陡方向下降，并说明学习率的作用。",
+  "facts": [
+    "梯度方向是函数在当前点上升最快的方向，反方向即下降最快的方向",
+    "每次更新让参数沿负梯度移动一个与学习率成比例的距离",
+    "学习率过大会越过最低点，过小则收敛很慢"
+  ],
+  "sources": [
+    {
+      "label": "Deep Learning 第 4 章 数值计算",
+      "url": "https://www.deeplearningbook.org/contents/numerical.html",
+      "supports": "支持梯度方向为上升最快方向、沿负梯度下降的解释"
+    },
+    {
+      "label": "scikit-learn 用户指南 · 随机梯度下降",
+      "url": "https://scikit-learn.org/stable/modules/sgd.html",
+      "supports": "支持学习率与迭代更新形式的说明"
+    }
+  ],
+  "cautions": [
+    "片中的损失曲线与更新步数是用于解释机制的示意数据，不是某次真实训练的实测记录",
+    "真实模型的高维损失曲面无法直接画出，二维曲线只是便于理解的截面示意"
+  ],
+  "next_ideas": ["为什么学习率太大会震荡", "动量法为什么能加速收敛"],
+  "claims": [
+    {
+      "claim_id": "c1",
+      "statement": "梯度指向函数上升最快的方向，因此沿负梯度走会让函数值下降",
+      "source_index": 0,
+      "excerpt": "the directional derivative is maximized when the direction aligns with the gradient",
+      "scope": "established"
+    },
+    {
+      "claim_id": "c2",
+      "statement": "参数更新步长与学习率成正比",
+      "source_index": 1,
+      "excerpt": "the learning rate controls the step size in parameter space",
+      "scope": "established"
+    },
+    {
+      "claim_id": "c3",
+      "statement": "片中的损失曲线是示意，不是真实训练日志",
+      "source_index": 0,
+      "excerpt": "illustrative curve only",
+      "scope": "illustrative"
+    }
+  ]
+}

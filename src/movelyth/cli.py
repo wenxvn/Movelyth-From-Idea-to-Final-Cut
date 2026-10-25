@@ -27,16 +27,22 @@ def emit(value):
 
 
 def doctor(root: Path) -> dict:
+    from .agents import resolve_codex
+    from .audioqc import asr_status
+    from .scenedsl import renderer_contract
+
     binary = ffmpeg()
     node = shutil.which("node")
     npm = shutil.which("npm.cmd") or shutil.which("npm")
-    codex = shutil.which("codex")
+    codex = resolve_codex()
     check = {
         "project": str(root), "python": sys.version.split()[0], "node": node,
         "npm": npm, "codex": codex, "browser": browser(), "ffmpeg": binary,
         "ffprobe": ffprobe(),
         "renderer_installed": (root / "studio/node_modules/@remotion/renderer/package.json").is_file(),
         "config": (root / "movelyth.toml").is_file(),
+        "schema_version": renderer_contract()["schema_version"],
+        "asr": asr_status(),
         "checked_at": now(), "tts": "Edge TTS（联网，doctor 尚未调用语音服务）",
     }
     if node:
@@ -47,24 +53,44 @@ def doctor(root: Path) -> dict:
     return check
 
 
+def read_brief(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    path = path.resolve()
+    if not path.is_file():
+        raise ValueError(f"brief 文件不存在：{path}")
+    if path.stat().st_size > 64 * 1024:
+        raise ValueError("brief 文件超过 64KB，请只保留背景、受众、风格与重点")
+    return path.read_text(encoding="utf-8-sig")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="movelyth", description="Movelyth — 幕绎 · From Idea to Final Cut.")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="Movelyth 项目根目录")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="检查本地工具和配置")
-    create = sub.add_parser("create", help="从一个标题自动制作完整上传包")
+    create = sub.add_parser("create", help="从一个标题（可选 brief）自动制作完整上传包")
     create.add_argument("title")
     create.add_argument("--new", action="store_true", help="明确要求同题另做一个新任务")
     create.add_argument("--plan-only", action="store_true", help="完成真实研究/编导/审稿后停在脚本阶段")
+    create.add_argument("--preview", action="store_true", help="只生成故事板与低分辨率片段，不渲染成片")
+    create.add_argument("--brief-file", type=Path, help="可选：背景/受众/风格/重点的文本或 Markdown 文件")
     create.add_argument("--import-film", type=Path)
     create.add_argument("--import-research", type=Path)
     resume = sub.add_parser("resume", help="从失败/中断阶段继续，复用有效缓存")
     resume.add_argument("id", type=number)
     resume.add_argument("--plan-only", action="store_true")
+    resume.add_argument("--preview", action="store_true")
+    preview = sub.add_parser("preview", help="生成故事板与短预览（低成本预检）")
+    preview.add_argument("id", type=number)
+    revise = sub.add_parser("revise", help="按审阅意见局部修改镜头，生成新 revision")
+    revise.add_argument("id", type=number)
+    revise.add_argument("--notes", type=Path, required=True, help="审阅意见文本，需包含镜头编号或 scene id")
     status = sub.add_parser("status", help="查看任务、失败和交付记录")
     status.add_argument("id", nargs="?", type=number)
     sub.add_parser("ideas", help="查看尚未制作的 idea 和历史反馈")
     sub.add_parser("assets", help="查看程序素材使用记录和关联成片的真实反馈")
+    sub.add_parser("schema", help="输出 Scene DSL v1 的 JSON Schema")
     feedback = sub.add_parser("feedback", help="记录手动上传后的真实链接与数据")
     feedback.add_argument("id", type=number)
     feedback.add_argument("--platform", choices=["bilibili", "douyin"], required=True)
@@ -80,15 +106,27 @@ def main(argv=None) -> int:
             result = doctor(root)
             emit(result)
             return 0 if result["ready_for_generation"] else 1
+        if args.command == "schema":
+            from .models import Film
+
+            emit(Film.model_json_schema())
+            return 0
         studio = Studio(root)
         if args.command == "create":
-            episode = studio.create(args.title, new=args.new)
-            print(f"Movelyth · VID-{episode['id']:06d} · {episode['title']}", flush=True)
-            emit(studio.produce(episode["id"], plan_only=args.plan_only,
+            brief = read_brief(args.brief_file)
+            episode = studio.create(args.title, brief=brief, new=args.new)
+            print(f"Movelyth · VID-{episode['id']:06d} · {episode['title']}"
+                  f"{' · 已附 brief' if brief else ''}", flush=True)
+            emit(studio.produce(episode["id"], plan_only=args.plan_only, preview_only=args.preview,
                                 import_film=args.import_film.resolve() if args.import_film else None,
                                 import_research=args.import_research.resolve() if args.import_research else None))
         elif args.command == "resume":
-            emit(studio.produce(args.id, plan_only=args.plan_only))
+            emit(studio.produce(args.id, plan_only=args.plan_only, preview_only=args.preview))
+        elif args.command == "preview":
+            emit(studio.preview(args.id))
+        elif args.command == "revise":
+            notes = args.notes.read_text(encoding="utf-8-sig")
+            emit(studio.revise(args.id, notes))
         elif args.command == "status":
             result = studio.ledger.get(args.id) if args.id else studio.ledger.list()
             if args.id:

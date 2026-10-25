@@ -6,17 +6,28 @@ import os
 import signal
 import subprocess
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+DEFAULT_TIMEZONE = "Asia/Shanghai"
+
+
+def display_timezone() -> str:
+    """Local timezone for human-facing timestamps (configurable, not hardcoded)."""
+    return os.getenv("MOVELYTH_TZ") or DEFAULT_TIMEZONE
+
 
 def now() -> str:
-    try:
-        return datetime.now(ZoneInfo("Asia/Taipei")).isoformat(timespec="seconds")
-    except ZoneInfoNotFoundError:
-        from datetime import timedelta, timezone
+    """Timezone-aware ISO timestamp.
 
+    Historical rows keep whatever offset they were written with (all ``+08:00``),
+    so switching the display timezone never invalidates stored records.
+    """
+    zone = display_timezone()
+    try:
+        return datetime.now(ZoneInfo(zone)).isoformat(timespec="seconds")
+    except (ZoneInfoNotFoundError, ValueError):
         return datetime.now(timezone(timedelta(hours=8))).isoformat(timespec="seconds")
 
 

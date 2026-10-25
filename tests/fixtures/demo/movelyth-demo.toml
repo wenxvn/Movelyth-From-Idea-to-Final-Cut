@@ -1,0 +1,30 @@
+[studio]
+name = "Movelyth — 幕绎"
+tagline = "From Idea to Final Cut."
+language = "zh-CN"
+# 演示用缩短时长，只为在真实 TTS + 真实渲染下验证 V1 链路，不代表正式成片时长。
+long_seconds = 40
+short_seconds = 15
+long_min_seconds = 20
+long_max_seconds = 80
+short_min_seconds = 8
+short_max_seconds = 30
+fps = 30
+render_concurrency = 1
+voice = "zh-CN-YunxiNeural"
+voice_rate = "+0%"
+max_retries = 0
+speech_replace = {}
+asr_enabled = false
+asr_model = "small"
+
+[agents]
+# 离线演示：使用预设的 research/director/reviewer JSON，不调用任何模型。
+provider = "mock"
+mock_dir = "tests/fixtures/demo"
+timeout_seconds = 600
+model = ""
+
+[paths]
+workspace = "workspace/v1-demo"
+delivery = "delivery/v1-demo"

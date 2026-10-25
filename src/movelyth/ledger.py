@@ -55,7 +55,8 @@ class Ledger:
                 intent TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'planned',
                 created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
                 revision INTEGER NOT NULL DEFAULT 1, delivery TEXT, error TEXT,
-                pid INTEGER, token TEXT, UNIQUE(intent, revision)
+                pid INTEGER, token TEXT, brief TEXT, brief_hash TEXT,
+                UNIQUE(intent, revision)
             );
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY, episode_id INTEGER NOT NULL, stage TEXT NOT NULL,
@@ -87,6 +88,10 @@ class Ledger:
             self.db.execute("ALTER TABLE ideas ADD COLUMN production_episode INTEGER")
             self.db.execute("INSERT OR IGNORE INTO ideas(title,state,production_episode) "
                             "SELECT title,CASE WHEN status='ready' THEN 'completed' ELSE 'selected' END,id FROM episodes")
+        episode_columns = {row[1] for row in self.db.execute("PRAGMA table_info(episodes)")}
+        for column in ("brief", "brief_hash"):
+            if column not in episode_columns:
+                self.db.execute(f"ALTER TABLE episodes ADD COLUMN {column} TEXT")
         self.db.executescript("""
             CREATE TRIGGER IF NOT EXISTS proposed_idea_is_not_a_finished_film
             BEFORE UPDATE OF state ON ideas
@@ -103,7 +108,7 @@ class Ledger:
             raise ValueError(f"未知视频编号：VID-{episode_id:06d}")
         return dict(row)
 
-    def reserve(self, title: str, intent: str, *, new: bool = False) -> dict:
+    def reserve(self, title: str, intent: str, *, new: bool = False, brief: str | None = None) -> dict:
         self.db.execute("BEGIN IMMEDIATE")
         try:
             row = self.db.execute("SELECT * FROM episodes WHERE intent=? ORDER BY revision DESC LIMIT 1",
@@ -116,8 +121,9 @@ class Ledger:
             revision = row["revision"] + 1 if row else 1
             stamp = now()
             cursor = self.db.execute(
-                "INSERT INTO episodes(title,intent,created_at,updated_at,revision) VALUES (?,?,?,?,?)",
-                (title, intent, stamp, stamp, revision))
+                "INSERT INTO episodes(title,intent,created_at,updated_at,revision,brief,brief_hash) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (title, intent, stamp, stamp, revision, brief, fingerprint(brief) if brief else None))
             self.db.execute("INSERT OR IGNORE INTO ideas(title,state,production_episode) VALUES (?,'selected',?)",
                             (title, cursor.lastrowid))
             self.db.execute("UPDATE ideas SET state='selected',production_episode=? WHERE title=?",

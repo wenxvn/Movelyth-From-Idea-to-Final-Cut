@@ -13,12 +13,19 @@ render_concurrency = 1
 voice = "zh-CN-YunxiNeural"
 voice_rate = "+0%"
 max_retries = 2
+# 可选：把公式符号映射成更适合 TTS 的读法。会同时用于配音与字幕，默认不替换。
+speech_replace = {}
+# 可选本地 ASR 质检（需自行安装 faster-whisper）。未安装时报告为未检查，不影响制作。
+asr_enabled = false
+asr_model = "small"
 
 [agents]
 provider = "codex"
 timeout_seconds = 600
 # 留空时沿用 Codex 配置；不写入 API Key。
 model = ""
+# provider = "mock" 时用于离线测试的预设响应目录（不用于真实创作）。
+# mock_dir = "tests/fixtures/mock"
 
 [paths]
 workspace = "workspace"
