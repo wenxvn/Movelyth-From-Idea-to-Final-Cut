@@ -265,6 +265,11 @@
           "title": "Color",
           "type": "string"
         },
+        "connect": {
+          "default": false,
+          "title": "Connect",
+          "type": "boolean"
+        },
         "data_ref": {
           "default": "",
           "maxLength": 32,
@@ -375,6 +380,7 @@
             "math",
             "chart",
             "diagram",
+            "timeline",
             "image",
             "procedural"
           ],

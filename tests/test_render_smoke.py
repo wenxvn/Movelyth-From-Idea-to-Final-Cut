@@ -62,6 +62,11 @@ def test_composable_layers_render_real_distinct_frames(tmp_path):
                   points=[120, 120, 760, 420], color="amber"),
             layer("label", type="text", region="bottom", procedural="", text="低秩近似保留主要结构"),
         ], "低秩重建", "保留少数奇异值，图像的主要结构仍然可以辨认。"),
+        scene("stages", "diagram", [
+            layer("stages", type="timeline", region="main", procedural="",
+                  steps=["封装", "路由", "排队", "解封装"], color="mint"),
+            layer("note", type="text", region="side", procedural="", text="四步走完一条消息"),
+        ], "消息的四个阶段", "消息依次经过封装、路由、排队和解封装四个阶段。"),
     ]
     props = {"title": "图层组合静帧测试", "episode": "TEST-GALLERY", "fps": 30, "scenes": scenes,
              "sources": [{"label": "本地程序演示", "url": "https://example.com/demo"}],

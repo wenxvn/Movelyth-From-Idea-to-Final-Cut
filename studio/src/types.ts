@@ -1,6 +1,6 @@
 export type Color = 'cyan' | 'amber' | 'coral' | 'mint';
 export type VisualKind = 'matrix' | 'vectors' | 'projection' | 'wave' | 'network' | 'image_layers' | 'orbit';
-export type LayerKind = 'text' | 'shape' | 'math' | 'chart' | 'diagram' | 'image' | 'procedural';
+export type LayerKind = 'text' | 'shape' | 'math' | 'chart' | 'diagram' | 'timeline' | 'image' | 'procedural';
 export type Region = 'main' | 'side' | 'top' | 'bottom' | 'annotation' | 'full';
 export type LayoutKind = 'immersive' | 'diagram' | 'compare';
 export type ActionKind = 'appear' | 'fade' | 'move' | 'scale' | 'rotate' | 'highlight' | 'draw' | 'morph';
@@ -31,6 +31,7 @@ export type Layer = {
   source_note: string;
   color: Color;
   emphasis: number;
+  connect: boolean;
 };
 
 export type ResolvedAction = {

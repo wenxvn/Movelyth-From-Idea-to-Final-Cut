@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 SCHEMA_VERSION = 1
 
 VisualKind = Literal["matrix", "vectors", "projection", "wave", "network", "image_layers", "orbit"]
-LayerKind = Literal["text", "shape", "math", "chart", "diagram", "image", "procedural"]
+LayerKind = Literal["text", "shape", "math", "chart", "diagram", "timeline", "image", "procedural"]
 Region = Literal["main", "side", "top", "bottom", "annotation", "full"]
 LayoutKind = Literal["immersive", "diagram", "compare"]
 ActionKind = Literal["appear", "fade", "move", "scale", "rotate", "highlight", "draw", "morph"]
@@ -147,6 +147,9 @@ class Layer(Contract):
     source_note: str = Field(default="", max_length=60)
     color: Color = "cyan"
     emphasis: int = Field(default=1, ge=1, le=3)
+    # Connect scattered points into a path (closed shape when the first and last
+    # point coincide is up to the data).  Used for triangles, polygons and routes.
+    connect: bool = False
 
     @field_validator("points")
     @classmethod
@@ -193,6 +196,8 @@ class Layer(Contract):
             if any(edge.source not in identifiers or edge.target not in identifiers
                    for edge in self.edges):
                 raise ValueError("diagram 连线引用了不存在的节点")
+        if self.type == "timeline" and len(self.steps) < 2:
+            raise ValueError("timeline 图层至少需要两个步骤")
         return self
 
 

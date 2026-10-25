@@ -48,7 +48,7 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
     <svg viewBox="0 0 1000 640" width="100%" height="100%" style={{overflow: 'hidden'}}>
       {grid.map((tick) => <g key={tick.value}>
         <line x1={left} y1={tick.y} x2={left + width} y2={tick.y} stroke={theme.grid} strokeOpacity={0.18}/>
-        <text x={left - 12} y={tick.y + 6} textAnchor="end" fill={theme.muted} fontSize={18}>{format(tick.value)}</text>
+        <text x={left - 12} y={tick.y + 6} textAnchor="end" fill={theme.muted} fontSize={22}>{format(tick.value)}</text>
       </g>)}
       <line x1={left} y1={top + height} x2={left + width} y2={top + height} stroke={theme.grid} strokeOpacity={0.5}/>
       <line x1={left} y1={top} x2={left} y2={top + height} stroke={theme.grid} strokeOpacity={0.5}/>
@@ -64,8 +64,14 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
           })}</g>;
         }
         if (layer.chart === 'scatter') {
-          return <g key={s.label}>{points.map(([x, y], index) =>
-            <circle key={index} cx={x} cy={y} r={7} fill={color} opacity={reveal > index / Math.max(1, points.length) ? 0.9 : 0.15}/>)}</g>;
+          const path = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+          return <g key={s.label}>
+            {layer.connect && <path d={`${path} Z`} fill={`${color}18`} stroke={color} strokeWidth={4}
+              strokeLinejoin="round" opacity={0.9}/>}
+            {points.map(([x, y], index) =>
+              <circle key={index} cx={x} cy={y} r={9} fill={color}
+                opacity={reveal > index / Math.max(1, points.length) ? 0.95 : 0.2}/>)}
+          </g>;
         }
         const d = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
         const last = points[points.length - 1];
@@ -75,7 +81,7 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
           const labelTop = Math.min(top + height - 24, Math.max(top + 4, y - 34));
           return <g>
             <rect x={left} y={labelTop} width={width} height={24} rx={5} fill={theme.surface} fillOpacity={0.92}/>
-            <text x={left + 7} y={labelTop + 17} fill={color} fontSize={17}>{text}</text>
+            <text x={left + 7} y={labelTop + 17} fill={color} fontSize={20}>{text}</text>
           </g>;
         };
         return <g key={s.label}>
@@ -86,20 +92,21 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
           {label(last[0], last[1], format(s.values[s.values.length - 1]), 'end')}
         </g>;
       })}
-      <text x={left} y={640 - 24} fill={theme.muted} fontSize={19}>{layer.axis || '步骤'}</text>
-      <text x={left + width} y={640 - 24} textAnchor="end" fill={theme.muted} fontSize={19}>{layer.unit || series[0].unit}</text>
+      <text x={left} y={640 - 24} fill={theme.muted} fontSize={22}>{layer.axis || '步骤'}</text>
+      <text x={left + width} y={640 - 24} textAnchor="end" fill={theme.muted} fontSize={22}>{layer.unit || series[0].unit}</text>
       {layer.source_note && <text x={left + width} y={top - 14} textAnchor="end" fill={theme.muted} fontSize={17}>
         {layer.source_note}
       </text>}
       {series.length > 1 && <g transform={`translate(${left + 12}, ${top + 6})`}>
         {series.map((s, index) => <g key={s.label} transform={`translate(0, ${index * 26})`}>
           <rect width={14} height={14} y={2} fill={colors[index % colors.length]} rx={3}/>
-          <text x={22} y={15} fill={theme.text} fontSize={17}>{s.label}</text>
+          <text x={22} y={15} fill={theme.text} fontSize={20}>{s.label}</text>
         </g>)}
       </g>}
     </svg>
   );
 };
+
 
 
 

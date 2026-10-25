@@ -107,6 +107,7 @@ def main(argv=None) -> int:
     asset_add.add_argument("--license", required=True, help="授权依据，例如 自有素材 / CC BY 4.0")
     asset_add.add_argument("--scope", default="本片使用")
     sub.add_parser("schema", help="输出 Scene DSL v1 的 JSON Schema")
+    sub.add_parser("components", help="输出可视化组件元数据（用途/必需字段/限制/横竖适配）")
     feedback = sub.add_parser("feedback", help="记录手动上传后的真实链接与数据")
     feedback.add_argument("id", type=number)
     feedback.add_argument("--platform", choices=["bilibili", "douyin"], required=True)
@@ -126,6 +127,11 @@ def main(argv=None) -> int:
             from .models import Film
 
             emit(Film.model_json_schema())
+            return 0
+        if args.command == "components":
+            from .components import registry
+
+            emit(registry())
             return 0
         studio = Studio(root)
         if args.command == "create":

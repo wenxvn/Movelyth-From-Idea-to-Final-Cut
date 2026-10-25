@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import type {Layer} from '../types';
 import type {Theme} from '../theme';
 import {accent} from '../theme';
@@ -33,18 +33,23 @@ export const DiagramLayer: React.FC<{layer: Layer; theme: Theme; time: number; r
       })}
       {nodes.map((node, index) => {
         const appear = Math.min(1, Math.max(0, reveal * 2 - index * 0.08));
+        const width = Math.max(150, node.label.length * 32 + 48);
         return <g key={node.id} opacity={appear}>
-          <circle cx={node.x} cy={node.y} r={46} fill={theme.surface} stroke={color} strokeWidth={3}/>
-          <text x={node.x} y={node.y + 7} textAnchor="middle" fill={theme.text} fontSize={20}>{node.label}</text>
+          <rect x={node.x - width / 2} y={node.y - 42} width={width} height={84} rx={16}
+            fill={theme.surface} stroke={color} strokeWidth={4}/>
+          <text x={node.x} y={node.y + 10} textAnchor="middle" fill={theme.text} fontSize={30}>
+            {node.label}
+          </text>
         </g>;
       })}
       {steps.map((step, index) => <g key={step} opacity={index <= active ? 1 : 0.32}>
-        <rect x={40} y={496 + index * 24} width={Math.min(920, 34 + step.length * 18)} height={22} rx={5}
+        <rect x={40} y={470 + index * 30} width={Math.min(920, 34 + step.length * 18)} height={28} rx={6}
           fill={index === active ? `${color}33` : 'transparent'}/>
-        <text x={50} y={513 + index * 24} fill={index === active ? theme.text : theme.muted} fontSize={18}>
+        <text x={50} y={493 + index * 30} fill={index === active ? theme.text : theme.muted} fontSize={23}>
           {index + 1}. {step}
         </text>
       </g>)}
     </svg>
   );
 };
+

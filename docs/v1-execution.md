@@ -191,6 +191,32 @@
   外部素材搜索与在线许可核查。这些留给下一轮，避免"堆组件"。
 - 验证类型：静帧（`tests/test_render_smoke.py`）+ 单元 + 真实长短版（VID-000009/000010）。
 
+## Task ID：P1-01 视觉组件元数据与真实数值图表
+
+- 目标与实际改变：
+  - 新增 `components.py` 与 `movelyth components`：为 8 种图层统一给出用途、必需字段、
+    限制、可用区域、横竖适配说明和合法样例；测试断言 DSL 类型、文档、样例与
+    `Stage.tsx` 渲染器注册表四者一致。
+  - `chart` 支持本地 JSON **与 CSV**（单列数值或带表头的多列序列），上限 256KB / 每条 2–60 个有限数；
+    数据来源写入 `source_note`，缺数据在渲染前报错。
+  - `shape.line` 改为按全部顶点画折线，`connect=true` 时加起点圆点与箭头，可表达有方向的路径；
+    `chart.scatter` 的 `connect` 会连成闭合轮廓，用于三角形/多边形前后对比。
+  - 新增 `timeline` 图层（阶段条，当前阶段随旁白高亮）与 `diagram` 的方框节点，替代"小圆挤字"。
+- 修改文件：`components.py`、`scenedsl.py`、`models.py`、`cli.py`、`prompts/director.md`、
+  `studio/src/components/{Shape,Chart,Diagram,Timeline}Layer.tsx`、`studio/src/{Stage,types}.tsx|ts`。
+- 新增/调整测试：`tests/test_components.py`（4 项）、`test_csv_data_is_read_with_labels_and_bounded`、
+  `test_timeline_layer_requires_real_steps`、`test_visual_layers_must_use_a_large_region`。
+- 执行命令与结果：`pytest -q -m "not slow"` → 92 passed；真实渲染静帧复核通过。
+- 验证类型：单元 + 静帧。
+- 已知未验证/风险：仍未提供"网络队列/丢包"专用动画与通用状态机组件；
+  这些用 `diagram` + `timeline` + `chart` 组合表达，必要时下一轮再加。
+
+## Task ID：P1-02 多风格
+
+- 目标与实际改变：`theme.ts` 三套风格（minimal/tech/documentary）只管理配色、字体层级、
+  标题字重、动效倍率与圆角，不改变事实与功能约束；编导通过 `style` 字段选择，用户可改。
+- 验证类型：静帧（同一 DSL 在不同 style 下渲染）。
+
 ## Task ID：P1-03 本地素材库、授权与来源管理
 
 - 目标与实际改变：新增 `assets.py` 与 `movelyth asset-add`：

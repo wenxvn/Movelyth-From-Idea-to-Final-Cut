@@ -7,7 +7,7 @@ def layer(layer_id: str = "visual", **overrides) -> dict:
         "id": layer_id, "type": "procedural", "region": "main", "text": "", "shape": "rect",
         "chart": "line", "procedural": "matrix", "series": [], "nodes": [], "edges": [], "steps": [],
         "points": [], "data_ref": "", "unit": "", "axis": "", "source_note": "", "color": "cyan",
-        "emphasis": 1,
+        "emphasis": 1, "connect": False,
     }
     value.update(overrides)
     return value

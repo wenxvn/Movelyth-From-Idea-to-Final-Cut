@@ -287,7 +287,9 @@ class Studio:
         self.ledger.add_ideas(research.next_ideas, episode["id"])
 
         def script_action():
-            issues = visual_feedback["issues"] if visual_feedback else []
+            script_feedback = job / "script-feedback.json"
+            carried = read_json(script_feedback).get("issues", []) if script_feedback.is_file() else []
+            issues = list(carried) or (visual_feedback["issues"] if visual_feedback else [])
             warnings: list[str] = []
             frozen = None
             if target_scenes:
@@ -319,10 +321,14 @@ class Studio:
                     path, report = job / "film.json", job / "script-review.json"
                     atomic_json(path, film.model_dump())
                     atomic_json(report, review.model_dump() | {"validation_warnings": warnings})
+                    script_feedback.unlink(missing_ok=True)
                     return film.model_dump(), [path, report]
                 issues = review.issues or ["审片未通过，需重写"]
                 if import_film:
                     break
+            # Keep the last rejection so a later resume starts from the same feedback
+            # instead of silently regenerating an identical script.
+            atomic_json(job / "script-feedback.json", {"issues": issues, "at": now()})
             raise RuntimeError("脚本审片未通过：" + "；".join(issues))
 
         film = self.stage(episode, "script", {"research": research_data, "prompts": prompts,
@@ -486,7 +492,8 @@ class Studio:
                                   Review, job / "agents" / "visual-review", images=images)
             atomic_json(job / "visual-review.json", visual.model_dump())
             if not visual.passed or visual.issues:
-                atomic_json(feedback_file, {"issues": visual.issues, "findings": visual.findings,
+                atomic_json(feedback_file, {"issues": visual.issues,
+                                           "findings": [finding.model_dump() for finding in visual.findings],
                                            "at": now(), "prior_film_hash": fingerprint(film)})
                 raise VisualReviewError("实际画面审片未通过：" + "；".join(visual.issues))
             report = job / "quality.json"

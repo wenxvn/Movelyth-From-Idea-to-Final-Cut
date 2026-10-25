@@ -2,49 +2,35 @@ import React from 'react';
 import type {Layer} from '../types';
 import type {Theme} from '../theme';
 import {accent} from '../theme';
+import type {Box} from '../Stage';
 
-const tokenize = (text: string): React.ReactNode[] => {
-  const nodes: React.ReactNode[] = [];
-  let buffer = '';
-  let index = 0;
-  const flush = () => {
-    if (buffer) {
-      nodes.push(<React.Fragment key={`t${index++}`}>{buffer.replace(/\*/g, '·')}</React.Fragment>);
-      buffer = '';
-    }
-  };
-  while (index < text.length) {
-    const char = text[index];
-    if ((char === '^' || char === '_') && index + 1 < text.length) {
-      flush();
-      let value = '';
-      let cursor = index + 1;
-      if (text[cursor] === '{') {
-        const close = text.indexOf('}', cursor);
-        value = close > cursor ? text.slice(cursor + 1, close) : text.slice(cursor + 1);
-        index = close > cursor ? close + 1 : text.length;
-      } else {
-        value = text[cursor];
-        index = cursor + 1;
-      }
-      nodes.push(char === '^' ? <sup key={`s${index}`}>{value}</sup> : <sub key={`s${index}`}>{value}</sub>);
-      continue;
-    }
-    buffer += char;
-    index += 1;
+/** Keep explicit line breaks so matrix rows written by the director stay rows. */
+const withBreaks = (text: string): React.ReactNode[] =>
+  text.split('\n').flatMap((line, index) => (index === 0 ? [line] : [<br key={`br${index}`}/>, line]));
+
+const BASE = {text: [30, 36, 44], math: [56, 68, 86]};
+const MIN = {text: 22, math: 34};
+
+/** Largest size (down to the minimum) whose wrapped text still fits the box. */
+const fitSize = (text: string, box: Box, base: number, min: number): number => {
+  const lines = text.split('\n');
+  let size = base;
+  while (size > min) {
+    const perLine = Math.max(1, Math.floor(box.w / (size * 1.02)));
+    const needed = lines.reduce((total, line) => total + Math.max(1, Math.ceil(line.length / perLine)), 0);
+    if (needed * size * 1.42 <= box.h) return size;
+    size -= 2;
   }
-  flush();
-  return nodes;
+  return min;
 };
 
-export const TextLayer: React.FC<{layer: Layer; theme: Theme; vertical: boolean; reveal: number; math: boolean}> =
-({layer, theme, vertical, reveal, math}) => {
-  const base = [30, 36, 44][Math.max(0, Math.min(2, layer.emphasis - 1))];
-  const size = Math.round(base * (vertical ? 1.18 : 1));
+export const TextLayer: React.FC<{
+  layer: Layer; theme: Theme; vertical: boolean; reveal: number; math: boolean; box: Box;
+}> = ({layer, theme, vertical, reveal, math, box}) => {
+  const emphasis = Math.max(0, Math.min(2, layer.emphasis - 1));
+  const base = BASE[math ? 'math' : 'text'][emphasis];
+  const size = fitSize(layer.text, box, Math.round(base * (vertical ? 1.1 : 1)), MIN[math ? 'math' : 'text']);
   const color = layer.color ? accent[layer.color] : theme.text;
-  // Fit long strings into the box instead of overflowing into the captions.
-  const perLine = Math.max(1, Math.floor(100 / (size * 1.02)));
-  const fit = layer.text.length > perLine ? Math.max(18, Math.round(size * perLine / layer.text.length * 1.6)) : size;
   return (
     <div style={{
       width: '100%', height: '100%', display: 'flex',
@@ -53,25 +39,26 @@ export const TextLayer: React.FC<{layer: Layer; theme: Theme; vertical: boolean;
       opacity: reveal,
     }}>
       <div style={{
-        fontSize: fit,
-        lineHeight: 1.35,
-        fontWeight: math ? 500 : 600,
+        fontSize: size,
+        lineHeight: math ? 1.42 : 1.42,
+        fontWeight: 600,
         color: math ? color : theme.text,
-        fontFamily: math ? '"Cambria Math", "Times New Roman", serif' : theme.fontFamily,
-        letterSpacing: math ? 0.5 : theme.letterSpacing * 0.5,
+        fontFamily: math ? '"Cascadia Mono", "Consolas", "Cambria Math", monospace' : theme.fontFamily,
+        letterSpacing: math ? 0.5 : theme.letterSpacing * 0.4,
         overflowWrap: 'anywhere',
         wordBreak: 'break-word',
+        whiteSpace: math ? 'pre-wrap' : 'normal',
         maxWidth: '100%',
         maxHeight: '100%',
         overflow: 'hidden',
         textAlign: math ? 'center' : 'left',
         background: math ? `${theme.surface}e6` : 'transparent',
-        borderLeft: math ? 'none' : `4px solid ${color}`,
+        borderLeft: math ? 'none' : `5px solid ${color}`,
         borderRadius: math ? theme.radius : 0,
-        padding: math ? '14px 20px' : '0 0 0 16px',
+        padding: math ? '14px 20px' : '0 0 0 18px',
         boxShadow: math ? '0 12px 40px #0006' : 'none',
       }}>
-        {math ? tokenize(layer.text) : layer.text}
+        {math ? withBreaks(layer.text) : layer.text}
       </div>
     </div>
   );

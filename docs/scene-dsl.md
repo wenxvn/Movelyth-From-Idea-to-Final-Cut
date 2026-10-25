@@ -45,13 +45,18 @@
 
 ### 图层类型
 
+`movelyth components` 会输出同一份元数据（用途、必需字段、限制、可用区域、横竖适配、合法样例），
+并由 `tests/test_components.py` 校验：每个 DSL 类型都有文档、每个样例都能通过 Pydantic、
+且与 `studio/src/Stage.tsx` 的渲染器注册表完全一致。
+
 | type | 用途 | 关键参数 |
 |---|---|---|
 | `text` | 短文本/注解 | `text` ≤120 字，`emphasis` 1–3 |
-| `math` | 公式行（Unicode `^`/`_`） | `text` |
-| `shape` | 点/线/矩形/圆/箭头/多边形/括号 | `shape`、`points`（x,y 对，0–1000 / 0–640） |
-| `chart` | 折线/柱状/散点 | `chart`、`series` 或本地 `data_ref`、`unit`、`axis`、`source_note` |
+| `math` | 公式行（Unicode `^`/`_`，`\n` 保留换行） | `text` |
+| `shape` | 点/线/矩形/圆/箭头/多边形/括号 | `shape`、`points`（x,y 对，0–1000 / 0–640）、`connect` |
+| `chart` | 折线/柱状/散点 | `chart`、`series` 或本地 `data_ref`、`unit`、`axis`、`source_note`、`connect` |
 | `diagram` | 有向节点图 | `nodes`（2–12）、`edges`、`steps`（≤6） |
+| `timeline` | 阶段/里程碑条 | `steps`（2–6，每个 ≤24 字） |
 | `image` | 本地受控素材 | `data_ref` 为已登记素材 id（`movelyth asset-add`）或内置 `svd_1/4/12/32` |
 | `procedural` | 原有七类程序动画 | `procedural` = matrix/vectors/projection/wave/network/image_layers/orbit |
 
@@ -59,7 +64,8 @@
 
 `layout`：`immersive`（全屏沉浸）、`diagram`（图解讲解）、`compare`（左右/上下对照）。
 `region`：`main`、`side`、`top`、`bottom`、`annotation`、`full`。每个布局的矩形由 Python 定义并生成给
-TypeScript，两侧不会各自漂移。
+TypeScript，两侧不会各自漂移。**同一布局内的区域互不重叠**，所以同一镜头里两个图层不能占同一区域
+（会被判为互相遮挡）；图表/图示/时间线/程序动画只能放在 `main`（compare 布局可放 `main` + `side`）。
 
 保留区：标题区、标签区、字幕区、页脚区。图层不得与之重叠，脚本审批前即报错。
 

@@ -291,6 +291,29 @@ def test_missing_library_asset_fails_before_rendering(offline_pipeline):
         studio.close()
 
 
+def test_script_rejection_is_kept_for_the_next_resume(offline_pipeline, monkeypatch):
+    """A rejected script must not be silently regenerated with the same prompt."""
+    provider = MockProvider({"research": research_payload(), "director": film(),
+                             "reviewer": review_payload(passed=False)})
+    studio = make_studio(offline_pipeline, provider)
+    try:
+        episode = studio.create("审稿拒绝留痕")
+        with pytest.raises(RuntimeError, match="脚本审片未通过"):
+            studio.produce(episode["id"])
+        feedback = studio.workspace / f"VID-{episode['id']:06d}" / "script-feedback.json"
+        assert feedback.is_file()
+        data = json.loads(feedback.read_text(encoding="utf-8"))
+        assert data["issues"] and data["at"]
+        prompts = list((studio.workspace / f"VID-{episode['id']:06d}" / "agents").glob("director-*/prompt.txt"))
+        assert "review_issues" in prompts[0].read_text(encoding="utf-8")
+        provider.responses["reviewer"] = review_payload(passed=True)
+        result = studio.produce(episode["id"])
+        assert result["status"] == "ready"
+        assert not feedback.exists(), "通过后应清掉旧的拒绝记录"
+    finally:
+        studio.close()
+
+
 def test_local_revision_only_rewrites_targeted_scenes():
     frozen = Film.model_validate(film())
     revised = frozen.model_copy(deep=True)
