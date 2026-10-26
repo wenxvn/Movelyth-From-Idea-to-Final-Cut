@@ -100,6 +100,11 @@ def main(argv=None) -> int:
     status = sub.add_parser("status", help="查看任务、失败和交付记录")
     status.add_argument("id", nargs="?", type=number)
     sub.add_parser("ideas", help="查看尚未制作的 idea 和历史反馈")
+    suggest = sub.add_parser("suggest", help="根据历史与当前能力提出候选选题（不制作）")
+    suggest.add_argument("--count", type=int, default=3, help="候选数量 1–5")
+    daily = sub.add_parser("daily", help="选一个可支持的候选并调用同一制作流水线（不自动定时）")
+    daily.add_argument("--count", type=int, default=3)
+    daily.add_argument("--preview", action="store_true", help="只生成故事板预览")
     sub.add_parser("assets", help="查看程序素材使用记录和关联成片的真实反馈")
     asset_add = sub.add_parser("asset-add", help="登记本地素材（记录 hash、作者、许可），不自动下载")
     asset_add.add_argument("file", type=Path)
@@ -178,6 +183,10 @@ def main(argv=None) -> int:
             emit(result)
         elif args.command == "ideas":
             emit(studio.ledger.context())
+        elif args.command == "suggest":
+            emit(studio.suggest(count=args.count))
+        elif args.command == "daily":
+            emit(studio.daily(count=args.count, preview_only=args.preview))
         elif args.command == "assets":
             emit(studio.asset_observations())
         elif args.command == "asset-add":

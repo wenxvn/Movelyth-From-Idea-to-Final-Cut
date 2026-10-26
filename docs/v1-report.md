@@ -13,10 +13,12 @@
 | C | P0-07 预览与局部修复 / P0-08 音频质检 / P0-09 来源安全 | 完成 |
 | D | P0-10 三题材真实验收 | **完成**（T01、T02、T03 双画幅均通过） |
 | E | P1-01 组件与元数据 / P1-02 风格 / P1-03 素材 / P1-05 provider / P1-06 时区与缓存 / P1-07 发布包 / P1-08 CI / P1-09 回归集 | 完成（P1-04 部分、P1 其余见 §7） |
-| F | P2 日更选题 / 工作台 / 队列 / 反馈策略 | **未实施**（不在 V1 完成条件内） |
+| F | P2-01 选题模式（`suggest`/`daily`） | 完成（不自动定时） |
+| F | P2-02～P2-04 工作台 / 队列 / 反馈策略 | **未实施**（提纲要求 P0/P1 稳定后再做，本轮不声称存在） |
 
-跳过项与原因：P2 全部（提纲要求 P0/P1 稳定后再做）；外部素材搜索与在线许可核查（不做自动转载）；
-按单镜重编码的局部渲染（Remotion 按 composition 整体渲染，做了按 cut 复用并如实记录）。
+跳过项与原因：P2-02～P2-04（需要长期运行的服务与界面，与当前 CLI 形态差别大）；
+外部素材搜索与在线许可核查（不做自动转载）；按单镜重编码的局部渲染
+（Remotion 按 composition 整体渲染，做了按 cut 复用并如实记录）。
 
 ## 2. 源码与文档
 
@@ -100,6 +102,8 @@ V1 前基线抽帧：`docs/baseline/v0/*.jpg`（来自 VID-000001 编码成片�
 | `2912760` | 故事板携带真实时间轴与动作窗口 |
 | `3ebdf98` | 每镜必须有真实画面图层；离线 `check`；审片抽帧时机 |
 | `5f9fafa` | 真实成片暴露的缺陷修复（分 cut 生成、契约失效、一致性措辞、版式） |
+| `c7209aa` | 第三个真实题材通过；图表图例带与柱状图数值 |
+| `a4f4c0e` / `1537307` | `--reuse-script`；图表画布按区域宽高比 |
 
 回归风险：渲染器重写（`Visual.tsx` → `components/`）是最大风险点，已用真实静帧覆盖
 8 种图层 × 横竖版；旧任务兼容由 `test_legacy_scene_without_layers_still_renders_as_procedural`
@@ -134,10 +138,15 @@ V1 前基线抽帧：`docs/baseline/v0/*.jpg`（来自 VID-000001 编码成片�
 
 # 登记自己的素材（记录作者/许可/来源，之后脚本用 data_ref 引用）
 .\.venv\Scripts\python.exe -m movelyth asset-add .\图.png --id my_photo --source "自己拍摄" --author "我" --license "自有素材"
+
+# 不知道做什么时：先看候选，再让 CLI 选一个可支持的题目
+.\.venv\Scripts\python.exe -m movelyth suggest --count 3
+.\.venv\Scripts\python.exe -m movelyth daily --preview
 ```
 
-`daily` / `suggest` **没有实现**，不是现有功能；"生成今日份视频"目前仍需助手先读历史再选题目，
-CLI 不会自动定时启动。
+`suggest` 与 `daily` 都是一次性命令：前者只读历史并输出候选（含画面计划与能力评估），
+后者取第一个 `supported` 候选走与 `create` 相同的流水线；候选都需要新增能力时会拒绝生成。
+**没有定时器，不会后台自动选题**，也不承诺播放量。
 
 ## Definition of Done 对照
 

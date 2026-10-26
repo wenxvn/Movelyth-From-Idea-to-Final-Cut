@@ -19,7 +19,7 @@ from .audioqc import audio_qc
 from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
 from .metrics import Metrics
-from .models import SCHEMA_VERSION, Cut, Film, Research, Review
+from .models import SCHEMA_VERSION, Cut, Film, Research, Review, TopicPlan
 from .publish import audit_summary, credits, publishing_copy
 from .quality import contact_sheet, duration_policy, encoded_stills, srt, validate_script, verify_video
 from .scenedsl import resolve_data_layers, validate_cut_timeline
@@ -231,6 +231,46 @@ class Studio:
 
     def preview(self, episode_id: int) -> dict:
         return self.produce(episode_id, preview_only=True)
+
+    def suggest(self, *, count: int = 3) -> dict:
+        """Propose next topics from history and current renderer capability.
+
+        Read-only: it does not reserve an episode, does not render, and never
+        schedules anything.  Candidates that need capabilities we lack are kept
+        but marked, so the user can see the concrete gap instead of a fake promise.
+        """
+        if not 1 <= count <= 5:
+            raise ValueError("候选数量需在 1–5 之间")
+        provider = self.provider_override or create_provider(self.root, self.config["agents"])
+        job = self.workspace / "topic-plan"
+        plan = provider.call("planner", {
+            "requested_count": count,
+            "history": self.ledger.context(),
+            "renderer_capabilities": RENDERER_CAPABILITIES,
+            "rules": "不要与已完成内容语义重复；不要承诺播放量；capability 必须如实",
+        }, TopicPlan, job / "agents" / "planner")
+        data = plan.model_dump()
+        data["supported"] = [item["title"] for item in data["candidates"]
+                             if item["capability"] == "supported"]
+        data["provider"] = getattr(provider, "name", "unknown")
+        atomic_json(job / "plan.json", data)
+        return {"plan": str(job / "plan.json"), **data}
+
+    def daily(self, *, count: int = 3, preview_only: bool = False) -> dict:
+        """Pick one supported candidate and run the same create pipeline.
+
+        Not a scheduler: it runs once when invoked and refuses to invent a topic
+        when every candidate needs capabilities we do not have.
+        """
+        plan = self.suggest(count=count)
+        supported = [item for item in plan["candidates"] if item["capability"] == "supported"]
+        if not supported:
+            raise ValueError("候选都需要新增能力或素材，未自动生成；请查看 topic-plan/plan.json 或自行给出标题")
+        chosen = supported[0]
+        episode = self.create(chosen["title"])
+        result = self.produce(episode["id"], preview_only=preview_only)
+        return {"chosen": chosen, "episode": result,
+                "note": "一次调用只生成一条；不会自动定时运行"}
 
     def revise(self, episode_id: int, notes: str) -> dict:
         """Create a new revision that only rewrites the scenes the notes point at."""

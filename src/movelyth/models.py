@@ -309,6 +309,29 @@ class Film(Contract):
     short: Cut
 
 
+class TopicCandidate(Contract):
+    """A proposed topic for the optional "what should I make next" flow."""
+
+    title: str = Field(min_length=2, max_length=80)
+    question: str = Field(min_length=5, max_length=200)
+    why_now: str = Field(min_length=5, max_length=240)
+    visual_plan: list[str] = Field(min_length=1, max_length=6)
+    capability: Literal["supported", "needs_extension", "unsupported"]
+    risks: list[str] = Field(default_factory=list, max_length=5)
+
+    @field_validator("visual_plan")
+    @classmethod
+    def bounded_plan(cls, values: list[str]) -> list[str]:
+        if any(not v.strip() or len(v) > 80 for v in values):
+            raise ValueError("visual_plan 每条需为 1–80 字")
+        return values
+
+
+class TopicPlan(Contract):
+    candidates: list[TopicCandidate] = Field(min_length=1, max_length=5)
+    notes: list[str] = Field(default_factory=list, max_length=5)
+
+
 class Finding(Contract):
     category: Literal["factual", "visual_mismatch", "visual_defect", "audio_defect", "warning"]
     scene_id: str = Field(default="", max_length=32)

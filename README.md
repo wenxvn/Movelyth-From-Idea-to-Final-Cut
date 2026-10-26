@@ -65,6 +65,8 @@ cd Movelyth-From-Idea-to-Final-Cut
 .\.venv\Scripts\python.exe -m movelyth resume VID-000002 --reuse-script   # 只修渲染器，不改写已审脚本
 .\.venv\Scripts\python.exe -m movelyth status [VID-000002]
 .\.venv\Scripts\python.exe -m movelyth ideas
+.\.venv\Scripts\python.exe -m movelyth suggest --count 3     # 候选选题（含画面计划与能力评估），不制作
+.\.venv\Scripts\python.exe -m movelyth daily --preview       # 选一个可支持的候选，走同一 create 流水线
 .\.venv\Scripts\python.exe -m movelyth assets
 .\.venv\Scripts\python.exe -m movelyth schema            # 输出 Scene DSL 的 JSON Schema
 .\.venv\Scripts\python.exe -m movelyth components        # 组件元数据：用途/必需字段/限制/横竖适配
@@ -76,6 +78,11 @@ cd Movelyth-From-Idea-to-Final-Cut
 登记后的素材在脚本里用 `image` 图层引用：`"type": "image", "data_ref": "my_photo"`。
 素材会被校验 hash、复制进任务受控目录，并在发布文案里自动附上授权行；未登记或授权信息不全
 的素材在渲染前就会失败，不会静默换成别的图。
+
+`suggest` 只读历史与当前能力，输出 3 个候选（问题、为什么现在做、画面计划、能力评估、风险），
+不占用编号、不渲染。`daily` 取第一个标为 `supported` 的候选，调用与 `create` **完全相同**的
+流水线；如果候选都需要新增能力，它会拒绝生成并指向 `workspace/topic-plan/plan.json`。
+两者都只在你调用时运行一次，**不会后台定时启动**，也不会承诺播放量。
 
 `revise` 的 notes 里写清"镜头 3"或具体的 `scene_id`；只有被点名的镜头会交给编导重写，
 其余镜头原样保留，并生成新的 revision，不覆盖已交付版本。

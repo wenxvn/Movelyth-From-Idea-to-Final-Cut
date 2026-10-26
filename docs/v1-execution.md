@@ -294,7 +294,30 @@
   `docs/v1-evaluation.md` 保存逐题状态表（当前只有 T03 有离线演示成片）。
 - 验证类型：文档 + 输入固化。
 
-## Task ID：P2（未实施）
+## Task ID：P2-01 “生成今日份视频”选题模式
 
-- `suggest` / `daily`、可视化工作台、任务队列、反馈闭环策略：**未实现**，不在 V1 完成条件内。
-  `README` 与 `SKILL.md` 明确说明"生成今日份视频"仍需先读取历史再由助手选题，CLI 不会自动定时启动。
+- 目标与实际改变：
+  - 新增 `TopicCandidate`/`TopicPlan` 契约与 `prompts/planner.md`：每个候选含 title、question、
+    why_now、visual_plan（必须对应渲染器真实图层）、capability（supported / needs_extension /
+    unsupported）、risks，并强制"不与已完成内容语义重复、不承诺播放量"。
+  - `movelyth suggest --count N`：只读历史与能力，写入 `workspace/topic-plan/plan.json`，
+    **不占用编号、不渲染**；返回里额外给出 `supported` 列表。
+  - `movelyth daily [--preview]`：取第一个 supported 候选，调用与 `create` 完全相同的流水线；
+    若全部需要新增能力，直接拒绝并指向 plan.json，不硬套现有动画。
+  - 两者都是一次性命令，**没有定时器**；不会在后台自动选题。
+- 修改文件：`models.py`、`pipeline.py`、`cli.py`、`prompts/planner.md`、`tests/fixtures/demo/planner.json`。
+- 新增/调整测试：`tests/test_suggest.py`（6 项：候选结构与不占编号、全部不支持时拒绝、
+  daily 走同一流水线、契约上限、count 范围、选题 prompt 含历史）。
+- 执行命令与结果：`pytest tests/test_suggest.py -q` → 6 passed；
+  真实运行（mock provider）：`movelyth suggest --count 3` 输出 3 个候选，
+  `movelyth daily --preview` 生成 VID-000011 并停在 `previewed`。
+- 验证类型：mock + 单元。
+- 已知未验证/风险：没有真实模型跑过 `suggest`（额度限制）；"语义重复"仍依赖模型判断，
+  没有向量相似度兜底，属于文档已声明的限制。
+
+## Task ID：P2-02～P2-04（未实施）
+
+- 本地可视化工作台、任务队列/多机、反馈闭环策略：**未实现**。
+  原因：提纲明确要求"P0/P1 未稳不应抢先做"，且这些需要长期运行的服务与界面，
+  与"一次 CLI 制作"的当前形态差别较大；`status`/`assets`/`交付清单.csv` 已覆盖最小可查需求。
+  本轮不声称存在这些能力。
