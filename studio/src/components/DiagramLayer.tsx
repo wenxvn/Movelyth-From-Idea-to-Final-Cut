@@ -53,12 +53,18 @@ export const DiagramLayer: React.FC<{layer: Layer; theme: Theme; time: number; r
         if (!from || !to) return null;
         const appear = Math.min(1, Math.max(0, reveal * 1.6 - index * 0.12));
         const packet = (time * 0.35 + index * 0.27) % 1;
+        const midX = (from.x + to.x) / 2;
+        // Edge labels sit above the nodes so a short gap between boxes cannot cover them.
+        const labelY = Math.min(from.y, to.y) - 76;
         return <g key={`${edge.source}-${edge.target}-${index}`} opacity={appear}>
           <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={color} strokeOpacity={0.45} strokeWidth={3}
             markerEnd={`url(#flow-${layer.id})`}/>
           <circle cx={from.x + (to.x - from.x) * packet} cy={from.y + (to.y - from.y) * packet} r={6} fill={color}/>
-          {edge.label && <text x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 12} textAnchor="middle"
-            fill={theme.muted} fontSize={26}>{edge.label}</text>}
+          {edge.label && <>
+            <rect x={midX - edge.label.length * 15 - 10} y={labelY - 26} width={edge.label.length * 30 + 20}
+              height={36} rx={6} fill={theme.background} fillOpacity={0.9}/>
+            <text x={midX} y={labelY} textAnchor="middle" fill={theme.muted} fontSize={26}>{edge.label}</text>
+          </>}
         </g>;
       })}
       {nodes.map((node, index) => {

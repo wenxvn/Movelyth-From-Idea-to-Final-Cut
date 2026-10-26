@@ -58,15 +58,17 @@ docs/baseline/v0/short-8.jpg   docs/baseline/v0/short-30.jpg  docs/baseline/v0/s
 
 ## 4. 已知限制与阻塞（不隐藏）
 
-- **Codex 不可用**：`shutil.which("codex")` 返回 `None`；`%APPDATA%\npm` 下 `codex.cmd` 的
-  `@openai/codex@0.163.0` 缺少 `@openai/codex-win32-x64` 可选依赖，直接运行报
+- **Codex 最初不可用，后已修复**：`shutil.which("codex")` 返回 `None`；`%APPDATA%\npm` 下
+  `codex.cmd` 的 `@openai/codex@0.163.0` 缺少 `@openai/codex-win32-x64` 可选依赖，直接运行报
   `Missing optional dependency`；`C:\Users\10556\AppData\Local\[OI]\Codex\bin\codex.exe`
-  （0.130.0-alpha.5）可启动，但访问 `chatgpt.com/backend-api/codex/responses` 时
-  `tls handshake eof`，重试 5 次后失败。经代理 `127.0.0.1:7897` 测试 `api.openai.com` 返回 401、
-  `chatgpt.com` 返回 000，说明本机到 Codex 后端的链路当前不可用。
-  **结论：本机无法执行真实 Codex 角色调用；V1 的真实跨题材验收被阻塞，只能标为待验收。**
-- 因此本轮所有"真实成片"证据都明确标注为 **mock provider + 真实 Edge TTS + 真实 Remotion 渲染**，
-  绝不写成"真实模型创作"。
+  （0.130.0-alpha.5）的默认模型 `gpt-6.1-sol` 不被 ChatGPT 账号支持，且需代理。
+  后续在一个**临时目录**安装 `@openai/codex@0.163.0`（含 win32 二进制），通过
+  `MOVELYTH_CODEX` 指向它、并设置 `HTTPS_PROXY=http://127.0.0.1:7897`，真实角色调用成功。
+  该路径只存在于环境变量中，没有写进仓库配置，也没有索取或提交任何密钥。
+- 因此本轮的真实成片证据来自真实 Codex（研究/编导/审稿）+ 真实 Edge TTS + 真实 Remotion：
+  VID-000002（矩阵）、VID-000003（网络消息）。mock provider 的产物单独标注为
+  `mock-provider`，绝不写成"真实模型创作"。
+- Codex 账号有额度上限，期间两次触发 `You've hit your usage limit`，第 3 个题材因此未完成。
 - 没有付费模型/音乐/生视频服务；没有上传到 B站/抖音；没有播放数据。
 - 本机内存有限（历史记录中曾出现 1.45 GB 渲染进程与内存不足），继续单渲染并发。
 
