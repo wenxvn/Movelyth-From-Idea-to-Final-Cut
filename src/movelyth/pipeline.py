@@ -19,7 +19,7 @@ from .audioqc import audio_qc
 from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
 from .metrics import Metrics
-from .models import SCHEMA_VERSION, Film, Research, Review
+from .models import SCHEMA_VERSION, Cut, Film, Research, Review
 from .publish import audit_summary, credits, publishing_copy
 from .quality import contact_sheet, duration_policy, encoded_stills, srt, validate_script, verify_video
 from .scenedsl import resolve_data_layers, validate_cut_timeline
@@ -297,6 +297,9 @@ class Studio:
             for attempt in range(config["max_retries"] + 1):
                 if import_film:
                     film = Film.model_validate(read_json(import_film))
+                elif config.get("director_split", True):
+                    film = self._director_split(provider, common, research_data, research, issues,
+                                                job, attempt, frozen, target_scenes, notes)
                 else:
                     context = {**common, "research": research_data, "review_issues": issues}
                     if frozen and notes:
@@ -333,14 +336,28 @@ class Studio:
 
         film = self.stage(episode, "script", {"research": research_data, "prompts": prompts,
                           "brief": brief, "targets": [config["long_seconds"], config["short_seconds"]],
+                          # Contract changes must invalidate an approved script: a cached film that
+                          # no longer passes validation has to be regenerated, not silently shipped.
+                          "contracts": {name: file_hash(Path(__file__).with_name(name))
+                                        for name in ("scenedsl.py", "consistency.py", "quality.py")},
                           **({"visual_feedback": visual_feedback} if visual_feedback else {}),
                           "revision": {"scenes": target_scenes, "notes": notes} if target_scenes else None,
                           "provider": self.config["agents"],
+                          "feedback": (file_hash(job / "script-feedback.json")
+                                       if (job / "script-feedback.json").exists() else None),
                           "import": file_hash(import_film) if import_film else None}, script_action,
-                          freeze_approved_plan=not visual_feedback and not import_film and not target_scenes)
+                          freeze_approved_plan=(not visual_feedback and not import_film
+                                                and not target_scenes
+                                                and not (job / "script-feedback.json").exists()))
         film = Film.model_validate(film).model_dump()
-        warnings = validate_script(Film.model_validate(film), research, config["long_seconds"],
-                                   config["short_seconds"])
+        try:
+            warnings = validate_script(Film.model_validate(film), research, config["long_seconds"],
+                                       config["short_seconds"])
+        except ValueError as exc:
+            # A frozen/cached script can become invalid after a contract change; report it as
+            # editorial feedback so the normal repair loop regenerates it.
+            atomic_json(job / "script-feedback.json", {"issues": [str(exc)], "at": now()})
+            raise VisualReviewError(f"已审脚本不再满足当前契约：{exc}") from exc
         library_ids, library_hashes = library_inputs(film, self.workspace)
         if plan_only:
             self.ledger.status(episode["id"], "planned")
@@ -519,6 +536,30 @@ class Studio:
                    "renders": renders, "timelines": timelines, "review_prompt": prompts["reviewer.md"]},
                    check_action)
         return self.deliver(episode, job, film, research_data, timelines, library_ids)
+
+    def _director_split(self, provider, common, research_data, research, issues, job, attempt,
+                        frozen, target_scenes, notes) -> Film:
+        """Generate each cut in its own call.
+
+        A whole Film with 9+ composed scenes easily exceeds the provider's output
+        token limit ("Incomplete response returned: max_output_tokens"), so long and
+        short are produced separately and assembled here.  Both cuts still see the
+        same research, brief and review feedback.
+        """
+        targets = {"long": self.config["studio"]["long_seconds"],
+                   "short": self.config["studio"]["short_seconds"]}
+        cuts = {}
+        for name, seconds in targets.items():
+            context = {**common, "research": research_data, "review_issues": issues,
+                       "cut": name, "target_seconds": seconds,
+                       "cut_instruction": f"只输出 {name} 这一个 cut（schema 为 Cut），不要输出 Film。"}
+            if frozen and notes:
+                context["revise"] = {"scene_ids": target_scenes, "notes": notes,
+                                     "current_cut": getattr(frozen, name).model_dump()}
+            cuts[name] = provider.call("director", context, Cut,
+                                       job / "agents" / f"director-{name}-{attempt}")
+        thesis = research.angle if len(research.angle) >= 8 else f"{research.question} {research.angle}"
+        return Film(title=research.title, thesis=thesis[:300], long=cuts["long"], short=cuts["short"])
 
     def _storyboard_scenes(self, cut: dict) -> list[dict]:
         """Per-scene review sheet: real time range, layout, layers and beats."""

@@ -30,7 +30,8 @@ COMPONENTS: dict[str, dict] = {
     "shape": {
         "purpose": "点、折线、矩形、圆、箭头、多边形、括号",
         "required": ["shape", "points"],
-        "limits": "坐标 0–1000 × 0–640，最多 32 个点；line 按全部顶点连线，connect=true 加起点与箭头",
+        "limits": "坐标 0–1000 × 0–640，最多 32 个点；line 按全部顶点连线，connect=true 加起点与箭头；"
+                  "rect 会把 `text` 画在框内（用于分层/容器示意）",
         "regions": ["main", "top", "side", "bottom", "annotation"],
         "portrait": "同一坐标系内缩放，注意竖版可显示宽度更小",
         "sample": {"id": "arrow", "type": "shape", "region": "main", "shape": "arrow",
@@ -77,7 +78,9 @@ COMPONENTS: dict[str, dict] = {
     "procedural": {
         "purpose": "原有七类程序动画，作为可组合图层之一",
         "required": ["procedural"],
-        "limits": "matrix 系数绝对值 ≤4；network/wave/orbit 是原理示意，不能称为实测",
+        "limits": "matrix 只做单位矩阵→目标矩阵的单向 4 秒过渡，不会回退或续接第二个矩阵；"
+                  "vectors/projection 可用 series 固定系数，使画面与口播数值一致；"
+                  "系数绝对值 ≤4；network/wave/orbit 是原理示意，不能称为实测",
         "regions": ["main", "full"],
         "portrait": "按区域等比缩放，point 云与网络会自动收拢",
         "sample": {"id": "visual", "type": "procedural", "region": "main", "procedural": "matrix"},

@@ -311,10 +311,13 @@ def layout_errors(scene: Scene, *, vertical: bool) -> list[str]:
         used.append((layer.id, box))
         if layer.text:
             _base, minimum = layer_font(layer)
-            if len(layer.text) > text_capacity(box, minimum):
+            capacity = text_capacity(box, minimum)
+            if len(layer.text) > capacity:
+                hint = ("；公式太长时请移到 main，或拆成两行并压缩字数"
+                        if layer.type == "math" else "")
                 errors.append(
                     f"镜头 {scene.id} 的 {layer.id} 文本 {len(layer.text)} 字超出"
-                    f"{layer.region} 区域的最小字号容量 {text_capacity(box, minimum)} 字")
+                    f"{layer.region} 区域的最小字号容量 {capacity} 字{hint}")
     return errors
 
 
@@ -409,8 +412,14 @@ def validate_cut_dsl(cut: Cut, *, vertical: bool) -> list[str]:
     for scene in cut.scenes:
         problems.extend(layout_errors(scene, vertical=vertical))
         # Resolve against an estimated duration so bad references fail early.
+        # Beats must be resolved too: a narration: fragment that is not in the
+        # narration would otherwise only fail after TTS has been paid for.
         try:
             resolve_actions(scene, duration=10.0, boundaries=[])
+        except ValueError as exc:
+            problems.append(str(exc))
+        try:
+            resolve_beats(scene, duration=10.0, boundaries=[])
         except ValueError as exc:
             problems.append(str(exc))
     return problems

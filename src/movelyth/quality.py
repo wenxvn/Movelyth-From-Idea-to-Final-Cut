@@ -83,12 +83,17 @@ def contact_sheet(stills: list[str], output: Path, *, portrait: bool):
     sheet.save(output)
 
 
+def review_frame_fraction(scene: dict) -> float:
+    """Where to sample a review still: after all actions finish, before the fade-out."""
+    last = max((float(item.get("to") or 0) for item in scene.get("actions_resolved", [])), default=0.0)
+    return min(0.96, max(0.55, last + 0.04))
+
+
 def encoded_stills(video: Path, cut: dict, fps: int, directory: Path, *, portrait: bool) -> list[str]:
     directory.mkdir(parents=True, exist_ok=True)
     offset, images = 0, []
     for index, scene in enumerate(cut["scenes"]):
-        # 82% of the scene: after appear/draw actions finish, before the fade-out.
-        seconds = (offset + int(scene["frames"] * 0.82)) / fps
+        seconds = (offset + int(scene["frames"] * review_frame_fraction(scene))) / fps
         output = directory / f"scene-{index + 1:02d}.jpg"
         run([ffmpeg(), "-y", "-v", "error", "-ss", f"{seconds:.6f}", "-threads", "2", "-i", str(video),
              "-frames:v", "1", "-vf", "scale=540:-2" if portrait else "scale=960:-2",

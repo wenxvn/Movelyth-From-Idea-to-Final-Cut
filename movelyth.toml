@@ -13,6 +13,8 @@ render_concurrency = 1
 voice = "zh-CN-YunxiNeural"
 voice_rate = "+0%"
 max_retries = 2
+# 长版与短版分两次生成：一次输出整部 Film 容易触发 max_output_tokens。
+director_split = true
 # 可选：把公式符号映射成更适合 TTS 的读法。会同时用于配音与字幕，默认不替换。
 speech_replace = {}
 # 可选本地 ASR 质检（需自行安装 faster-whisper）。未安装时报告为未检查，不影响制作。
@@ -21,7 +23,8 @@ asr_model = "small"
 
 [agents]
 provider = "codex"
-timeout_seconds = 600
+# V1 的一镜多图层脚本比旧版大得多，600 秒不够；超时会留下可恢复状态，不会产生半成品。
+timeout_seconds = 1500
 # 留空时沿用 Codex 配置；不写入 API Key。
 model = ""
 # provider = "mock" 时用于离线测试的预设响应目录（不用于真实创作）。

@@ -142,6 +142,9 @@ class MockProvider:
         payload = self.responses.get(role)
         if payload is None:
             raise RuntimeError(f"mock provider 缺少 {role} 的预设响应")
+        cut = context.get("cut")
+        if isinstance(payload, dict) and cut in {"long", "short"} and cut in payload:
+            payload = payload[cut]
         output = directory / "response.json"
         atomic_json(output, payload)
         return contract.model_validate(payload)

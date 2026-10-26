@@ -13,7 +13,7 @@ export const ProceduralLayer: React.FC<{
   const kind = layer.procedural || scene.visual;
   const color = accent[layer.color] || '#68e5ed';
   const p = ease(progress);
-  const textStyle = {fill: '#e9eedf', fontFamily: 'inherit', fontSize: 24};
+  const textStyle = {fill: '#e9eedf', fontFamily: 'inherit', fontSize: 34};
   if (kind === 'image_layers' && layers.length) {
     const phase = clamp(progress) * (layers.length - 1);
     const current = Math.min(layers.length - 1, Math.floor(phase));
@@ -46,7 +46,7 @@ export const ProceduralLayer: React.FC<{
       <polyline points={`${point(0, 0)} ${point(1, 0)}`} stroke="#ffc976" strokeWidth="5"/>
       <polyline points={`${point(0, 0)} ${point(0, 1)}`} stroke="#ff8e80" strokeWidth="5"/>
       {Array.from({length: 12}, (_, i) => {const [a, b] = transform(Math.sin(time * 0.3 + i) * 2.8, Math.cos(time * 0.25 + i * 1.7) * 2); return <circle key={i} cx={px(a)} cy={py(b)} r={3} fill="#fff2d7" opacity="0.7"/>;})}
-      <g transform="translate(45, 28)" fill="#e9eedf" fontSize="30">
+      <g transform="translate(45, 28)" fill="#e9eedf" fontSize="40">
         <text x="0" y="47">A =</text>
         <path d="M95 3 H84 V80 H95 M282 3 H293 V80 H282" fill="none" stroke={color} strokeWidth="2.5"/>
         <text x="104" y="31">{m[0].toFixed(2)}</text><text x="205" y="31">{m[1].toFixed(2)}</text>
@@ -55,31 +55,41 @@ export const ProceduralLayer: React.FC<{
       <text x="48" y="610" style={{...textStyle, fill: color}}>det A = {det.toFixed(2)} · 面积倍数 = {Math.abs(det).toFixed(2)}</text>
     </>;
   } else if (kind === 'vectors') {
-    const a = 0.8 + p * 1.4, b = 1.3 - p * 0.7;
+    // Pin the drawn vector to real coefficients when the DSL supplies them; the
+    // narration usually quotes exact values, so a generic animated vector would
+    // contradict it.
+    const fixed = layer.series[0]?.values;
+    const a = fixed && fixed.length >= 2 ? fixed[0] : 0.8 + p * 1.4;
+    const b = fixed && fixed.length >= 2 ? fixed[1] : 1.3 - p * 0.7;
     content = <>
       {Array.from({length: 9}, (_, i) => i - 4).map(k => <g key={k} stroke="#ffffff" strokeOpacity="0.08"><line x1={px(k)} y1="0" x2={px(k)} y2="640"/><line x1="0" y1={py(k)} x2="1000" y2={py(k)}/></g>)}
-      <line x1="500" y1="320" x2={px(a)} y2="320" stroke="#ffc976" strokeWidth="7"/>
-      <line x1={px(a)} y1="320" x2={px(a)} y2={py(b)} stroke="#ff8e80" strokeWidth="7"/>
-      <line x1="500" y1="320" x2={px(a)} y2={py(b)} stroke={color} strokeWidth="6" markerEnd="url(#arrow)"/>
-      <circle cx={px(a)} cy={py(b)} r="12" fill={color}/>
+      <line x1="500" y1="320" x2={px(a)} y2="320" stroke="#ffc976" strokeWidth="8"/>
+      <line x1={px(a)} y1="320" x2={px(a)} y2={py(b)} stroke="#ff8e80" strokeWidth="8"/>
+      <line x1="500" y1="320" x2={px(a)} y2={py(b)} stroke={color} strokeWidth="7" markerEnd="url(#arrow)"/>
+      <circle cx={px(a)} cy={py(b)} r="13" fill={color}/>
       <text x="50" y="70" style={textStyle}>v = {a.toFixed(2)} e₁ + {b.toFixed(2)} e₂</text>
-      <text x={px(a / 2) - 30} y="355" style={{...textStyle, fill: '#ffc976'}}>a e₁</text>
-      <text x={px(a) + 24} y={py(b / 2)} style={{...textStyle, fill: '#ff8e80'}}>b e₂</text>
+      <text x={px(a / 2) - 30} y="360" style={{...textStyle, fill: '#ffc976'}}>{a.toFixed(1)} e₁</text>
+      <text x={px(a) + 24} y={py(b / 2)} style={{...textStyle, fill: '#ff8e80'}}>{b.toFixed(1)} e₂</text>
     </>;
   } else if (kind === 'projection') {
-    const x = 1.8 + Math.sin(time * 0.4) * 0.5, y = 2 - p * 0.5;
-    const factor = (x + y * 0.5) / 1.25;
-    const qx = factor, qy = factor * 0.5;
+    const fixed = layer.series[0]?.values;
+    const direction = layer.series[1]?.values;
+    const x = fixed && fixed.length >= 2 ? fixed[0] : 1.8 + Math.sin(time * 0.4) * 0.5;
+    const y = fixed && fixed.length >= 2 ? fixed[1] : 2 - p * 0.5;
+    const ux = direction && direction.length >= 2 ? direction[0] : 1;
+    const uy = direction && direction.length >= 2 ? direction[1] : 0.5;
+    const factor = (x * ux + y * uy) / (ux * ux + uy * uy);
+    const qx = factor * ux, qy = factor * uy;
     content = <>
-      <line x1={px(-4)} y1={py(-2)} x2={px(4)} y2={py(2)} stroke={color} strokeWidth="4"/>
-      <line x1="500" y1="320" x2={px(x)} y2={py(y)} stroke="#ffc976" strokeWidth="4" markerEnd="url(#arrow)"/>
-      <line x1={px(x)} y1={py(y)} x2={px(qx)} y2={py(qy)} stroke="#ff8e80" strokeWidth="3" strokeDasharray="9 8"/>
-      <line x1="500" y1="320" x2={px(qx)} y2={py(qy)} stroke={color} strokeWidth="8"/>
-      <circle cx={px(qx)} cy={py(qy)} r="10" fill={color}/>
-      <circle cx={px(x)} cy={py(y)} r="10" fill="#ffc976"/>
+      <line x1={px(-4 * ux)} y1={py(-4 * uy)} x2={px(4 * ux)} y2={py(4 * uy)} stroke={color} strokeWidth="5"/>
+      <line x1="500" y1="320" x2={px(x)} y2={py(y)} stroke="#ffc976" strokeWidth="5" markerEnd="url(#arrow)"/>
+      <line x1={px(x)} y1={py(y)} x2={px(qx)} y2={py(qy)} stroke="#ff8e80" strokeWidth="4" strokeDasharray="9 8"/>
+      <line x1="500" y1="320" x2={px(qx)} y2={py(qy)} stroke={color} strokeWidth="9"/>
+      <circle cx={px(qx)} cy={py(qy)} r="11" fill={color}/>
+      <circle cx={px(x)} cy={py(y)} r="11" fill="#ffc976"/>
       <text x="45" y="80" style={textStyle}>projᵤ(v) = (v·u / u·u) u</text>
-      <text x={px(x) + 20} y={py(y) - 15} style={{...textStyle, fill: '#ffc976'}}>原向量</text>
-      <text x={px(qx) + 16} y={py(qy) + 38} style={{...textStyle, fill: color}}>投影</text>
+      <text x={px(x) + 20} y={py(y) - 18} style={{...textStyle, fill: '#ffc976'}}>原向量</text>
+      <text x={px(qx) + 16} y={py(qy) + 44} style={{...textStyle, fill: color}}>投影</text>
     </>;
   } else if (kind === 'wave') {
     const line = (harmonics: number, offset: number, amp: number) => Array.from({length: 260}, (_, i) => {
@@ -130,4 +140,5 @@ export const ProceduralLayer: React.FC<{
     <g opacity={reveal}>{content}</g>
   </svg>;
 };
+
 

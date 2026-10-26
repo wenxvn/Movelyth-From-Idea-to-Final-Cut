@@ -57,6 +57,14 @@ def test_missing_narration_fragment_and_bad_spans_are_rejected():
                               "end": "end", "dx": 0, "dy": 0, "scale": 1, "degrees": 0}])
     with pytest.raises(ValueError):
         normalize_scene(Scene.model_validate(payload), duration=3.0)
+    # A beat pointing at text that is not in the narration must fail before TTS runs.
+    bad_beat = Scene.model_validate(scene("beat", "这是一段足够长的旁白内容用于测试。", [layer()],
+                                          beats=[{"at": "narration:一层", "purpose": "分层"}]))
+    problems = validate_cut_dsl(_cut_with(bad_beat), vertical=False)
+    assert any("不在旁白中" in problem for problem in problems)
+    good_beat = Scene.model_validate(scene("beat2", "这是一段足够长的旁白内容用于测试。", [layer()],
+                                           beats=[{"at": "narration:足够长", "purpose": "分层"}]))
+    assert not [p for p in validate_cut_dsl(_cut_with(good_beat), vertical=False) if "不在旁白中" in p]
     reversed_span = scene("rev", "这是一段足够长的旁白内容用于测试。", [layer()],
                           actions=[{"target": "visual", "kind": "move", "start": "0.8", "end": "0.2",
                                     "dx": 0.1, "dy": 0, "scale": 1, "degrees": 0}])
@@ -116,6 +124,14 @@ def test_chart_trend_must_match_narration():
     honest = Scene.model_validate(scene("trend2", "误差不断下降，最后收敛到一个很小的数值。",
                                        [chart_layer("loss", [0.9, 0.7, 0.5, 0.3])]))
     assert check_scene(honest)[0] == []
+
+
+def test_goal_language_is_not_treated_as_a_chart_trend():
+    """「减少错误」是训练目标，不是断言曲线下降。"""
+    payload = scene("goal", "所以，减少错误还需要合适的步幅；学习率太大会让损失连续上升。",
+                    [chart_layer("large", [5, 11.25, 25.3], source_note="教学示例")])
+    errors, _ = check_scene(Scene.model_validate(payload))
+    assert errors == []
 
 
 def test_measured_claim_on_illustrative_chart_is_rejected():
@@ -184,6 +200,14 @@ def _cut_with(*scenes):
         padded.append(clone)
     return Cut.model_validate({"title": "布局测试", "description": "这是一个用于布局检查的描述文本，长度足够。",
                                "tags": ["测试", "布局"], "scenes": padded, "schema_version": 1})
+
+
+def test_text_layers_keep_explicit_line_breaks():
+    """A multi-line card must stay multi-line in the renderer, not collapse to one line."""
+    source = (Path(__file__).parents[1] / "studio" / "src" / "components" / "TextLayer.tsx").read_text(
+        encoding="utf-8")
+    assert "pre-wrap" in source
+    assert "{withBreaks(layer.text)}" in source
 
 
 def test_cover_layout_exists_for_both_orientations():

@@ -63,10 +63,24 @@ export const ShapeLayer: React.FC<{layer: Layer; theme: Theme; reveal: number}> 
       shape = <path d={`M ${x1 + 50} ${y1} H ${x1} V ${y2} H ${x1 + 50}`} {...common} strokeWidth={6} />;
       break;
     case 'rect':
-    default:
-      shape = <rect x={x1} y={y1} width={Math.max(20, x2 - x1)} height={Math.max(20, y2 - y1)}
-        rx={theme.radius} {...common} fill={`${color}18`} />;
+    default: {
+      const rectWidth = Math.max(20, x2 - x1);
+      const rectHeight = Math.max(20, y2 - y1);
+      // Fill the box with its label: a container's text should read as large as a heading.
+      const labelChars = Math.max(4, layer.text.length);
+      const labelSize = Math.max(24, Math.min(rectHeight * 0.46, (rectWidth * 0.86) / (labelChars * 0.62), 96));
+      shape = <>
+        <rect x={x1} y={y1} width={rectWidth} height={rectHeight}
+          rx={theme.radius} {...common} fill={`${color}18`} />
+        {layer.text && <foreignObject x={x1 + 10} y={y1 + 8} width={rectWidth - 20} height={rectHeight - 16}>
+          <div style={{width: '100%', height: '100%', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', textAlign: 'center', color: theme.text,
+            fontFamily: theme.fontFamily, fontSize: labelSize, fontWeight: 600,
+            lineHeight: 1.3, overflowWrap: 'anywhere'}}>{layer.text}</div>
+        </foreignObject>}
+      </>;
       break;
+    }
   }
   return <svg viewBox="0 0 1000 640" width="100%" height="100%" style={{overflow: 'visible'}}>{shape}</svg>;
 };

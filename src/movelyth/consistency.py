@@ -11,14 +11,29 @@ import re
 
 from .models import Scene
 
-DOWN = ("下降", "减少", "降低", "变小", "缩小", "下跌", "回落", "衰减", "减小")
-UP = ("上升", "增加", "增大", "增长", "升高", "上涨", "提升", "变大")
+DOWN = ("下降", "减少", "降低", "变小", "缩小", "下跌", "回落", "衰减", "减小", "降到", "跌到", "变低")
+UP = ("上升", "增加", "增大", "增长", "升高", "上涨", "提升", "变大", "升到", "涨到", "变高")
 MEASURED = ("实测", "实验数据", "真实数据", "测量值", "采样数据", "统计结果")
-ILLUSTRATIVE = ("示意", "原理示意", "合成数据", "演示数据", "本地生成")
+ILLUSTRATIVE = ("示意", "原理示意", "合成数据", "演示数据", "本地生成", "教学示例", "示例", "演示")
 ROTATION = ("旋转", "转动", "转一圈", "旋转矩阵")
 AREA_PRESERVED = ("面积不变", "面积保持不变", "面积保持", "保持面积", "面积相等")
 DISTANCE_PRESERVED = ("保持距离", "长度不变", "不改变长度", "保距")
 COLLAPSE = ("塌缩", "不可逆", "降维", "压成一条线", "行列式为零", "行列式为 0")
+# A trend word only counts as a claim about the chart when the sentence also names it.
+CHART_NOUNS = ("误差", "损失", "曲线", "数值", "指标", "数据", "比例", "准确率")
+WINDOW = 16
+
+
+def _near(text: str, word: str, nouns: tuple[str, ...]) -> bool:
+    start = 0
+    while True:
+        index = text.find(word, start)
+        if index < 0:
+            return False
+        window = text[max(0, index - WINDOW):index + len(word) + WINDOW]
+        if any(noun in window for noun in nouns):
+            return True
+        start = index + len(word)
 
 
 def _mentions(text: str, words: tuple[str, ...]) -> list[str]:
@@ -60,12 +75,14 @@ def check_scene(scene: Scene) -> tuple[list[str], list[str]]:
             continue
         values = layer.series[0].values if layer.series else []
         trend = _trend(values)
-        down, up = _mentions(narration, DOWN), _mentions(narration, UP)
+        down = [word for word in _mentions(narration, DOWN) if _near(narration, word, CHART_NOUNS)]
+        up = [word for word in _mentions(narration, UP) if _near(narration, word, CHART_NOUNS)]
         if trend == "down" and up and not down:
             errors.append(f"镜头 {scene.id}：旁白说“{up[0]}”，但 {layer.id} 的数据实际下降")
         if trend == "up" and down and not up:
             errors.append(f"镜头 {scene.id}：旁白说“{down[0]}”，但 {layer.id} 的数据实际上升")
-        measured = _mentions(narration + " " + layer.source_note, MEASURED)
+        measured = [word for word in _mentions(narration + " " + layer.source_note, MEASURED)
+                    if _near(narration + " " + layer.source_note, word, CHART_NOUNS)]
         illustrative = layer.source_note or ""
         if measured and (not layer.data_ref or any(word in illustrative for word in ILLUSTRATIVE)):
             errors.append(f"镜头 {scene.id}：{layer.id} 是示意数据，旁白却写成“{measured[0]}”")

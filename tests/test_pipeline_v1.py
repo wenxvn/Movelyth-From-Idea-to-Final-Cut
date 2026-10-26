@@ -318,6 +318,33 @@ def test_script_rejection_is_kept_for_the_next_resume(offline_pipeline, monkeypa
         studio.close()
 
 
+def test_invalid_cached_script_is_regenerated_not_shipped(offline_pipeline):
+    """A frozen script that no longer satisfies the contract must be rebuilt."""
+    provider = MockProvider({"research": research_payload(), "director": film(),
+                             "reviewer": review_payload()})
+    studio = make_studio(offline_pipeline, provider)
+    try:
+        episode = studio.create("契约变化后的缓存")
+        assert studio.produce(episode["id"])["status"] == "ready"
+        job = studio.workspace / f"VID-{episode['id']:06d}"
+        # Simulate a contract change: the approved script now violates the DSL.
+        broken = json.loads((job / "film.json").read_text(encoding="utf-8"))
+        broken["long"]["scenes"][0]["beats"] = [{"at": "narration:不存在的片段", "purpose": "分层"}]
+        (job / "film.json").write_text(json.dumps(broken, ensure_ascii=False), encoding="utf-8")
+        (job / "stages" / "script.json").unlink(missing_ok=True)
+        (job / "stages" / "sound.json").unlink(missing_ok=True)
+        (job / "stages" / "render.json").unlink(missing_ok=True)
+        (job / "stages" / "check.json").unlink(missing_ok=True)
+        studio.ledger.status(episode["id"], "failed")
+        result = studio.produce(episode["id"])
+        assert result["status"] == "ready"
+        fixed = json.loads((job / "film.json").read_text(encoding="utf-8"))
+        assert fixed["long"]["scenes"][0]["beats"] == []
+        assert not (job / "script-feedback.json").exists()
+    finally:
+        studio.close()
+
+
 def test_local_revision_only_rewrites_targeted_scenes():
     frozen = Film.model_validate(film())
     revised = frozen.model_copy(deep=True)

@@ -46,8 +46,11 @@ def test_review_frames_are_extracted_from_encoded_video(tmp_path):
 
 
 def test_review_frames_are_sampled_after_scene_actions_finish():
-    """A still at 55% could show a scene whose key layer has not appeared yet."""
-    import inspect
+    """A still taken mid-animation can show a deliberately half-built scene."""
+    from movelyth.quality import review_frame_fraction
 
-    source = inspect.getsource(encoded_stills)
-    assert "0.82" in source
+    assert review_frame_fraction({}) == 0.55
+    assert review_frame_fraction({"actions_resolved": [{"from": 0.1, "to": 0.4}]}) == 0.55
+    assert review_frame_fraction({"actions_resolved": [{"from": 0.76, "to": 1.0}]}) == 0.96
+    late = review_frame_fraction({"actions_resolved": [{"from": 0.2, "to": 0.8}]})
+    assert 0.8 < late <= 0.96

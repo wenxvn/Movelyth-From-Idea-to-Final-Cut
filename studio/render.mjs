@@ -40,7 +40,12 @@ try {
       const scene = cut.props.scenes[i];
       // Sample late enough that appear/draw actions have finished: a review still
       // taken at 55% could show an intentionally half-built scene.
-      const frame = Math.min(composition.durationInFrames - 1, offset + Math.floor(scene.frames * 0.82));
+      // Sample after every appear/draw action has finished (plus a small margin) so a
+      // review still never shows a deliberately half-built scene, but before the fade-out.
+      const actions = scene.actions_resolved || [];
+      const lastAction = actions.reduce((max, action) => Math.max(max, action.to || 0), 0);
+      const sampleAt = Math.min(0.96, Math.max(0.55, lastAction + 0.04));
+      const frame = Math.min(composition.durationInFrames - 1, offset + Math.floor(scene.frames * sampleAt));
       const output = path.join(cut.output, `scene-${String(i + 1).padStart(2, '0')}.jpg`);
       await renderStill({...common, composition, output, frame, imageFormat: 'jpeg', scale: 0.5});
       stills.push(output);

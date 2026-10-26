@@ -47,7 +47,7 @@ export const TextLayer: React.FC<{
         letterSpacing: math ? 0.5 : theme.letterSpacing * 0.4,
         overflowWrap: 'anywhere',
         wordBreak: 'break-word',
-        whiteSpace: math ? 'pre-wrap' : 'normal',
+        whiteSpace: 'pre-wrap',
         maxWidth: '100%',
         maxHeight: '100%',
         overflow: 'hidden',
@@ -58,7 +58,7 @@ export const TextLayer: React.FC<{
         padding: math ? '14px 20px' : '0 0 0 18px',
         boxShadow: math ? '0 12px 40px #0006' : 'none',
       }}>
-        {math ? withBreaks(layer.text) : layer.text}
+        {withBreaks(layer.text)}
       </div>
     </div>
   );

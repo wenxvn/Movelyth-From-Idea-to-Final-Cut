@@ -34,7 +34,8 @@ const renderers: Record<Layer['type'], (props: RenderProps) => React.ReactNode> 
     <TextLayer layer={layer} theme={theme} vertical={vertical} reveal={reveal} box={box} math/>,
   shape: ({layer, theme, reveal}) => <ShapeLayer layer={layer} theme={theme} reveal={reveal}/>,
   chart: ({layer, theme, vertical, reveal}) => <ChartLayer layer={layer} theme={theme} vertical={vertical} reveal={reveal}/>,
-  diagram: ({layer, theme, time, reveal}) => <DiagramLayer layer={layer} theme={theme} time={time} reveal={reveal}/>,
+  diagram: ({layer, theme, time, reveal, box}) =>
+    <DiagramLayer layer={layer} theme={theme} time={time} reveal={reveal} box={box}/>,
   timeline: ({layer, theme, vertical, reveal}) => <TimelineLayer layer={layer} theme={theme} reveal={reveal} vertical={vertical}/>,
   image: ({layer, theme, layers, reveal}) => <ImageLayer layer={layer} theme={theme} layers={layers} reveal={reveal}/>,
   procedural: ({layer, scene, time, progress, reveal, layers}) =>

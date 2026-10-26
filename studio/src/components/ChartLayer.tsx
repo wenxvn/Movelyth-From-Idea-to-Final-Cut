@@ -53,14 +53,17 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
   const xTicks = ticks(xMin, xMax, 4).map((value) => ({value, x: xAt(value)}));
   const count = Math.max(...series.map((s) => s.values.length));
   const barWidth = Math.max(6, (width / count) * 0.55);
+  // Bars grow from zero (or the axis floor when all values are negative), so a 0 value
+  // renders as no bar at all instead of a floating stub.
+  const baseline = yAt(Math.max(0, min));
   return (
     <svg viewBox="0 0 1000 640" width="100%" height="100%" style={{overflow: 'hidden'}}>
       {grid.map((tick) => <g key={`y${tick.value}`}>
         <line x1={left} y1={tick.y} x2={left + width} y2={tick.y} stroke={theme.grid} strokeOpacity={0.18}/>
-        <text x={left - 14} y={tick.y + 7} textAnchor="end" fill={theme.muted} fontSize={22}>{format(tick.value)}</text>
+        <text x={left - 14} y={tick.y + 7} textAnchor="end" fill={theme.muted} fontSize={26}>{format(tick.value)}</text>
       </g>)}
       {xTicks.map((tick) => <text key={`x${tick.value}`} x={tick.x} y={top + height + 32} textAnchor="middle"
-        fill={theme.muted} fontSize={21}>{format(tick.value)}</text>)}
+        fill={theme.muted} fontSize={25}>{format(tick.value)}</text>)}
       <line x1={left} y1={top + height} x2={left + width} y2={top + height} stroke={theme.grid} strokeOpacity={0.5}/>
       <line x1={left} y1={top} x2={left} y2={top + height} stroke={theme.grid} strokeOpacity={0.5}/>
       {series.map((s, sIndex) => {
@@ -71,8 +74,14 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
           return <g key={s.label}>{s.values.map((value, index) => {
             const x = xAt(xValues[index]) - barWidth / 2;
             const y = yAt(value);
-            const h = (top + height - y) * reveal;
-            return <rect key={index} x={x} y={top + height - h} width={barWidth} height={h} fill={color} opacity={0.82} rx={3}/>;
+            const full = Math.abs(baseline - y);
+            const h = full * reveal;
+            const topY = value >= 0 ? baseline - h : baseline;
+            return <g key={index}>
+              <rect x={x} y={topY} width={barWidth} height={h} fill={color} opacity={0.82} rx={3}/>
+              {value === 0 && <text x={x + barWidth / 2} y={baseline - 10} textAnchor="middle"
+                fill={theme.muted} fontSize={24}>0</text>}
+            </g>;
           })}</g>;
         }
         if (layer.chart === 'scatter') {
@@ -93,7 +102,7 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
           const labelTop = Math.min(top + height - 26, Math.max(top + 4, y - 36));
           return <g>
             <rect x={leftEdge} y={labelTop} width={labelWidth} height={26} rx={5} fill={theme.surface} fillOpacity={0.92}/>
-            <text x={leftEdge + 8} y={labelTop + 19} fill={color} fontSize={20}>{text}</text>
+            <text x={leftEdge + 8} y={labelTop + 19} fill={color} fontSize={24}>{text}</text>
           </g>;
         };
         return <g key={s.label}>
@@ -104,17 +113,18 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
           {label(last[0], last[1], format(s.values[s.values.length - 1]), 'end')}
         </g>;
       })}
-      <text x={left} y={640 - 18} fill={theme.muted} fontSize={22}>{layer.axis || (explicitX ? 'x' : '步骤')}</text>
-      <text x={left + width} y={640 - 18} textAnchor="end" fill={theme.muted} fontSize={22}>{layer.unit || series[0].unit}</text>
+      <text x={left} y={640 - 18} fill={theme.muted} fontSize={26}>{layer.axis || (explicitX ? 'x' : '步骤')}</text>
+      <text x={left + width} y={640 - 18} textAnchor="end" fill={theme.muted} fontSize={26}>{layer.unit || series[0].unit}</text>
       {layer.source_note && <text x={left + width} y={top - 16} textAnchor="end" fill={theme.muted} fontSize={20}>
         {layer.source_note}
       </text>}
       {series.length > 1 && <g transform={`translate(${left + 14}, ${top + 8})`}>
         {series.map((s, index) => <g key={s.label} transform={`translate(0, ${index * 30})`}>
           <rect width={16} height={16} y={3} fill={colors[index % colors.length]} rx={3}/>
-          <text x={26} y={18} fill={theme.text} fontSize={20}>{s.label}</text>
+          <text x={26} y={18} fill={theme.text} fontSize={24}>{s.label}</text>
         </g>)}
       </g>}
     </svg>
   );
 };
+
