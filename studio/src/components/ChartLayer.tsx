@@ -49,7 +49,10 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
   const max = rawMax + span * 0.12;
   const left = vertical ? 96 : 88;
   const right = 44;
-  const top = 48;
+  // Multiple series need their own legend band above the plot, otherwise the legend
+  // overlaps the first-value labels.
+  const hasLegend = series.length > 1;
+  const top = hasLegend ? 92 : 48;
   const bottom = 96;
   const width = canvasWidth - left - right;
   const height = 640 - top - bottom;
@@ -81,18 +84,21 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
         const xValues = explicitX ? s.x_values : s.values.map((_v, i) => i);
         const points = s.values.map((value, index) => [xAt(xValues[index]), yAt(value)] as const);
         if (layer.chart === 'bar') {
-          return <g key={s.label}>{s.values.map((value, index) => {
-            const x = xAt(xValues[index]) - barWidth / 2;
-            const y = yAt(value);
-            const full = Math.abs(baseline - y);
-            const h = full * reveal;
-            const topY = value >= 0 ? baseline - h : baseline;
-            return <g key={index}>
-              <rect x={x} y={topY} width={barWidth} height={h} fill={color} opacity={0.82} rx={3}/>
-              {value === 0 && <text x={x + barWidth / 2} y={baseline - 10} textAnchor="middle"
-                fill={theme.muted} fontSize={font(24)}>0</text>}
-            </g>;
-          })}</g>;
+          return <g key={s.label}>
+            <text x={left} y={top - 10} fill={color} fontSize={font(28)} fontWeight={700}>{s.label}</text>
+            {s.values.map((value, index) => {
+              const x = xAt(xValues[index]) - barWidth / 2;
+              const y = yAt(value);
+              const full = Math.abs(baseline - y);
+              const h = full * reveal;
+              const topY = value >= 0 ? baseline - h : baseline;
+              return <g key={index}>
+                <rect x={x} y={topY} width={barWidth} height={h} fill={color} opacity={0.82} rx={3}/>
+                <text x={x + barWidth / 2} y={value >= 0 ? topY - 10 : topY + h + font(26)}
+                  textAnchor="middle" fill={theme.text} fontSize={font(24)}>{format(value)}</text>
+              </g>;
+            })}
+          </g>;
         }
         if (layer.chart === 'scatter') {
           const path = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
@@ -129,11 +135,15 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
       {layer.source_note && <text x={left + width} y={top - 16} textAnchor="end" fill={theme.muted} fontSize={font(20)}>
         {layer.source_note}
       </text>}
-      {series.length > 1 && <g transform={`translate(${left + 14}, ${top + 8})`}>
-        {series.map((s, index) => <g key={s.label} transform={`translate(0, ${index * 30})`}>
-          <rect width={16} height={16} y={3} fill={colors[index % colors.length]} rx={3}/>
-          <text x={26} y={18} fill={theme.text} fontSize={font(24)}>{s.label}</text>
-        </g>)}
+      {hasLegend && <g transform={`translate(${left}, 14)`}>
+        {series.map((s, index) => {
+          const rowHeight = font(30) + 8;
+          const label = s.label.length > 12 ? `${s.label.slice(0, 12)}…` : s.label;
+          return <g key={s.label} transform={`translate(0, ${index * rowHeight})`}>
+            <rect width={font(22)} height={font(22)} y={0} fill={colors[index % colors.length]} rx={4}/>
+            <text x={font(32)} y={font(20)} fill={theme.text} fontSize={font(26)}>{label}</text>
+          </g>;
+        })}
       </g>}
     </svg>
   );

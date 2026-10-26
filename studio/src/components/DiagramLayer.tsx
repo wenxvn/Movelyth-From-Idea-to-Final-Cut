@@ -14,7 +14,9 @@ export const DiagramLayer: React.FC<{layer: Layer; theme: Theme; time: number; r
   const color = accent[layer.color] || theme.text;
   const nodes = layer.nodes;
   const positions = new Map(nodes.map((node) => [node.id, node]));
-  const steps = layer.steps;
+  // Drop steps that just repeat the node labels: the same words twice at two sizes is
+  // noise, and the tiny copy is unreadable on a phone.
+  const steps = layer.steps.filter((step) => !nodes.some((node) => node.label.includes(step) || step.includes(node.label)));
   const active = steps.length ? Math.min(steps.length - 1, Math.floor(reveal * steps.length)) : -1;
   const widths = new Map(nodes.map((node) => [node.id, Math.max(210, node.label.length * 46 + 70)]));
   const pad = 48;
