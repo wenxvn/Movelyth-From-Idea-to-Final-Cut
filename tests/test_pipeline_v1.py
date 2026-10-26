@@ -345,6 +345,30 @@ def test_invalid_cached_script_is_regenerated_not_shipped(offline_pipeline):
         studio.close()
 
 
+def test_reuse_script_keeps_approved_film_without_calling_director(offline_pipeline):
+    provider = MockProvider({"research": research_payload(), "director": film(),
+                             "reviewer": review_payload()})
+    studio = make_studio(offline_pipeline, provider)
+    try:
+        episode = studio.create("复用已审脚本")
+        assert studio.produce(episode["id"])["status"] == "ready"
+        job = studio.workspace / f"VID-{episode['id']:06d}"
+        original = json.loads((job / "film.json").read_text(encoding="utf-8"))
+        for name in ("script", "sound", "render", "check"):
+            (job / "stages" / f"{name}.json").unlink(missing_ok=True)
+        studio.ledger.status(episode["id"], "failed")
+        provider.calls.clear()
+        provider.responses["director"] = {"title": "不该被使用"}
+        result = studio.produce(episode["id"], reuse_script=True)
+        assert result["status"] == "ready"
+        assert "director" not in provider.calls, "复用脚本时不得重新调用编导"
+        assert json.loads((job / "film.json").read_text(encoding="utf-8")) == original
+        events = [row["state"] for row in studio.ledger.history(episode["id"])]
+        assert "approved-script-reused" in events
+    finally:
+        studio.close()
+
+
 def test_local_revision_only_rewrites_targeted_scenes():
     frozen = Film.model_validate(film())
     revised = frozen.model_copy(deep=True)

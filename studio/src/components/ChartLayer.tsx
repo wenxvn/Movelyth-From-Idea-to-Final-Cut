@@ -2,6 +2,7 @@
 import type {Layer} from '../types';
 import type {Theme} from '../theme';
 import {accent} from '../theme';
+import type {Box} from '../Stage';
 
 const palette = (layer: Layer): string[] => {
   const first = accent[layer.color] || '#68e5ed';
@@ -20,12 +21,18 @@ const format = (value: number): string => {
   return value.toFixed(2).replace(/0$/, '').replace(/\.$/, '');
 };
 
-export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; vertical: boolean}> =
-({layer, theme, reveal, vertical}) => {
+export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; vertical: boolean; box?: Box}> =
+({layer, theme, reveal, vertical, box}) => {
   const series = layer.series.filter((s) => s.values.length >= 2);
   if (!series.length) {
     return <div style={{color: theme.muted, fontSize: 26}}>缺少数据，不能凭空绘制曲线</div>;
   }
+  // Draw on a canvas whose aspect ratio matches the region, so a wide short box is not
+  // letterboxed into a small chart with large empty margins.
+  const regionAspect = box ? Math.max(0.8, Math.min(3.2, box.w / Math.max(1, box.h))) : 1000 / 640;
+  const canvasWidth = Math.round(640 * regionAspect);
+  // Keep text visually the same size when the canvas gets wider than the base 1000.
+  const font = (size: number): number => Math.round(size * Math.max(1, canvasWidth / 1000));
   // Explicit x coordinates (polygon vertices, uneven sampling) take precedence over index.
   const explicitX = series.every((s) => s.x_values && s.x_values.length === s.values.length);
   const xs = series.flatMap((s) => (explicitX ? s.x_values : s.values.map((_v, i) => i)));
@@ -43,8 +50,8 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
   const left = vertical ? 96 : 88;
   const right = 44;
   const top = 48;
-  const bottom = 80;
-  const width = 1000 - left - right;
+  const bottom = 96;
+  const width = canvasWidth - left - right;
   const height = 640 - top - bottom;
   const xAt = (value: number): number => left + ((value - xMin) / (xMax - xMin)) * width;
   const yAt = (value: number): number => top + height - ((value - min) / (max - min)) * height;
@@ -57,13 +64,16 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
   // renders as no bar at all instead of a floating stub.
   const baseline = yAt(Math.max(0, min));
   return (
-    <svg viewBox="0 0 1000 640" width="100%" height="100%" style={{overflow: 'hidden'}}>
-      {grid.map((tick) => <g key={`y${tick.value}`}>
+    <svg viewBox={`0 0 ${canvasWidth} 640`} width="100%" height="100%" style={{overflow: 'hidden'}}>
+      {grid.map((tick, index) => <g key={`y${tick.value}`}>
         <line x1={left} y1={tick.y} x2={left + width} y2={tick.y} stroke={theme.grid} strokeOpacity={0.18}/>
-        <text x={left - 14} y={tick.y + 7} textAnchor="end" fill={theme.muted} fontSize={26}>{format(tick.value)}</text>
+        {index > 0 && index < grid.length - 1 && <text x={left - 14} y={tick.y + 7} textAnchor="end"
+          fill={theme.muted} fontSize={font(26)}>{format(tick.value)}</text>}
       </g>)}
-      {xTicks.map((tick) => <text key={`x${tick.value}`} x={tick.x} y={top + height + 32} textAnchor="middle"
-        fill={theme.muted} fontSize={25}>{format(tick.value)}</text>)}
+      {xTicks.map((tick) => tick.x > left + 60 && tick.x < left + width - 40
+        ? <text key={`x${tick.value}`} x={tick.x} y={top + height + 34} textAnchor="middle"
+          fill={theme.muted} fontSize={font(25)}>{format(tick.value)}</text>
+        : null)}
       <line x1={left} y1={top + height} x2={left + width} y2={top + height} stroke={theme.grid} strokeOpacity={0.5}/>
       <line x1={left} y1={top} x2={left} y2={top + height} stroke={theme.grid} strokeOpacity={0.5}/>
       {series.map((s, sIndex) => {
@@ -80,7 +90,7 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
             return <g key={index}>
               <rect x={x} y={topY} width={barWidth} height={h} fill={color} opacity={0.82} rx={3}/>
               {value === 0 && <text x={x + barWidth / 2} y={baseline - 10} textAnchor="middle"
-                fill={theme.muted} fontSize={24}>0</text>}
+                fill={theme.muted} fontSize={font(24)}>0</text>}
             </g>;
           })}</g>;
         }
@@ -102,7 +112,7 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
           const labelTop = Math.min(top + height - 26, Math.max(top + 4, y - 36));
           return <g>
             <rect x={leftEdge} y={labelTop} width={labelWidth} height={26} rx={5} fill={theme.surface} fillOpacity={0.92}/>
-            <text x={leftEdge + 8} y={labelTop + 19} fill={color} fontSize={24}>{text}</text>
+            <text x={leftEdge + 8} y={labelTop + 19} fill={color} fontSize={font(24)}>{text}</text>
           </g>;
         };
         return <g key={s.label}>
@@ -113,18 +123,22 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
           {label(last[0], last[1], format(s.values[s.values.length - 1]), 'end')}
         </g>;
       })}
-      <text x={left} y={640 - 18} fill={theme.muted} fontSize={26}>{layer.axis || (explicitX ? 'x' : '步骤')}</text>
-      <text x={left + width} y={640 - 18} textAnchor="end" fill={theme.muted} fontSize={26}>{layer.unit || series[0].unit}</text>
-      {layer.source_note && <text x={left + width} y={top - 16} textAnchor="end" fill={theme.muted} fontSize={20}>
+      <text x={left} y={640 - 6} fill={theme.muted} fontSize={font(22)}>
+        {[layer.axis || (explicitX ? 'x' : '步骤'), layer.unit || series[0].unit].filter(Boolean).join(' · ')}
+      </text>
+      {layer.source_note && <text x={left + width} y={top - 16} textAnchor="end" fill={theme.muted} fontSize={font(20)}>
         {layer.source_note}
       </text>}
       {series.length > 1 && <g transform={`translate(${left + 14}, ${top + 8})`}>
         {series.map((s, index) => <g key={s.label} transform={`translate(0, ${index * 30})`}>
           <rect width={16} height={16} y={3} fill={colors[index % colors.length]} rx={3}/>
-          <text x={26} y={18} fill={theme.text} fontSize={24}>{s.label}</text>
+          <text x={26} y={18} fill={theme.text} fontSize={font(24)}>{s.label}</text>
         </g>)}
       </g>}
     </svg>
   );
 };
+
+
+
 

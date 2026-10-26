@@ -202,7 +202,8 @@ class Studio:
 
     def produce(self, episode_id: int, *, plan_only: bool = False, preview_only: bool = False,
                 import_film: Path | None = None, import_research: Path | None = None,
-                target_scenes: list[str] | None = None, notes: str | None = None) -> dict:
+                target_scenes: list[str] | None = None, notes: str | None = None,
+                reuse_script: bool = False) -> dict:
         episode = self.ledger.get(episode_id)
         if episode["status"] == "ready" and not preview_only and not target_scenes:
             if episode["delivery"] and manifest_valid(Path(episode["delivery"])):
@@ -218,7 +219,7 @@ class Studio:
                 for repair in range(self.config["studio"]["max_retries"] + 1):
                     try:
                         return self._produce(episode, job, plan_only, preview_only, import_film,
-                                             import_research, target_scenes, notes)
+                                             import_research, target_scenes, notes, reuse_script)
                     except VisualReviewError:
                         if import_film or repair == self.config["studio"]["max_retries"]:
                             raise
@@ -259,7 +260,7 @@ class Studio:
         return self.produce(episode["id"], target_scenes=sorted(set(targeted)), notes=notes.strip())
 
     def _produce(self, episode, job, plan_only, preview_only, import_film, import_research,
-                 target_scenes=None, notes=None):
+                 target_scenes=None, notes=None, reuse_script=False):
         config = self.config["studio"]
         provider = self.provider_override or create_provider(self.root, self.config["agents"])
         brief = episode.get("brief")
@@ -294,6 +295,20 @@ class Studio:
             frozen = None
             if target_scenes:
                 frozen = Film.model_validate(read_json(job / "revise-base.json"))
+            if reuse_script:
+                # Renderer-only repairs must not rewrite an approved story: reuse the film
+                # that already passed review, provided it still satisfies the current contract.
+                path = job / "film.json"
+                if not path.is_file():
+                    raise ValueError("--reuse-script 需要已存在的 film.json")
+                approved = Film.model_validate(read_json(path))
+                approved.title = episode["title"]
+                warnings = validate_script(approved, research, config["long_seconds"],
+                                           config["short_seconds"])
+                self.ledger.event(episode["id"], "script", "approved-script-reused",
+                                  {"film_hash": file_hash(path)})
+                print("[复用] 已审脚本（渲染器修复不改写故事）", flush=True)
+                return approved.model_dump(), [path, job / "script-review.json"]
             for attempt in range(config["max_retries"] + 1):
                 if import_film:
                     film = Film.model_validate(read_json(import_film))

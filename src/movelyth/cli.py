@@ -90,6 +90,8 @@ def main(argv=None) -> int:
     resume.add_argument("id", type=number)
     resume.add_argument("--plan-only", action="store_true")
     resume.add_argument("--preview", action="store_true")
+    resume.add_argument("--reuse-script", action="store_true",
+                        help="复用已审 film.json（仅渲染器修复时用），不重新调用编导")
     preview = sub.add_parser("preview", help="生成故事板与短预览（低成本预检）")
     preview.add_argument("id", type=number)
     revise = sub.add_parser("revise", help="按审阅意见局部修改镜头，生成新 revision")
@@ -162,7 +164,8 @@ def main(argv=None) -> int:
                                 import_film=args.import_film.resolve() if args.import_film else None,
                                 import_research=args.import_research.resolve() if args.import_research else None))
         elif args.command == "resume":
-            emit(studio.produce(args.id, plan_only=args.plan_only, preview_only=args.preview))
+            emit(studio.produce(args.id, plan_only=args.plan_only, preview_only=args.preview,
+                                reuse_script=args.reuse_script))
         elif args.command == "preview":
             emit(studio.preview(args.id))
         elif args.command == "revise":
