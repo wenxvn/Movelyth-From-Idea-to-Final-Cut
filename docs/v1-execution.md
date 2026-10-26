@@ -237,6 +237,19 @@
 - 已知未验证/风险：**没有接入外部素材搜索**（提纲要求设置显式开关与许可核查，本轮未做）；
   图片只做"放进区域、contain 缩放"，没有做内容审核或人脸/隐私识别。
 
+## Task ID：P1-06 低成本稳定性与性能优化
+
+- 目标与实际改变：
+  - `resume --reuse-script`：只修渲染器/排版时复用已审 `film.json`，不重新调用编导，
+    仍按当前契约重新校验并记录 `approved-script-reused`。
+  - 图表画布按区域宽高比生成（不再把宽扁区域塞进 1000×640 后留大片空白），刻度字号随画布缩放，
+    边缘刻度会互相遮挡时自动省略，轴与单位合并到左下角一行。
+  - 审片抽帧位置改为"该镜最后一个动作结束后"，避免抽到半成品画面造成误判。
+  - 阶段耗时、缓存命中、产物大小写入 `workspace/metrics.csv`；按 cut 复用的实测见 P0-07。
+- 新增/调整测试：`test_reuse_script_keeps_approved_film_without_calling_director`、
+  `test_review_frames_are_sampled_after_scene_actions_finish`。
+- 验证类型：单元 + 真实渲染静帧。
+
 ## Task ID：P1-07 发布包改进（标题候选、封面文案、交付审计）
 
 - 目标与实际改变：

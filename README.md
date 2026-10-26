@@ -62,6 +62,7 @@ cd Movelyth-From-Idea-to-Final-Cut
 .\.venv\Scripts\python.exe -m movelyth preview VID-000002            # 对已有任务做预览
 .\.venv\Scripts\python.exe -m movelyth revise VID-000002 --notes .\notes.txt  # 按镜头局部修改
 .\.venv\Scripts\python.exe -m movelyth resume VID-000002
+.\.venv\Scripts\python.exe -m movelyth resume VID-000002 --reuse-script   # 只修渲染器，不改写已审脚本
 .\.venv\Scripts\python.exe -m movelyth status [VID-000002]
 .\.venv\Scripts\python.exe -m movelyth ideas
 .\.venv\Scripts\python.exe -m movelyth assets
@@ -80,7 +81,9 @@ cd Movelyth-From-Idea-to-Final-Cut
 其余镜头原样保留，并生成新的 revision，不覆盖已交付版本。
 
 同题默认复用原任务和已验证交付；`--new` 明确要求另建任务。失败不回收编号，修复后用 `resume`，
-有效的阶段和语音请求按 hash 缓存。每个阶段的耗时与缓存命中写入 `workspace/metrics.csv`。
+有效的阶段和语音请求按 hash 缓存。如果只是渲染器/排版修复、不想让编导重写故事，用
+`resume <id> --reuse-script`：它会复用已通过审片的 `film.json`（仍按当前契约重新校验），
+并在事件记录里写 `approved-script-reused`。每个阶段的耗时与缓存命中写入 `workspace/metrics.csv`。
 
 ## 画面能力（Scene DSL v1）
 
