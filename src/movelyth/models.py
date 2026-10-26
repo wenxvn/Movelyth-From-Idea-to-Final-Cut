@@ -322,8 +322,8 @@ class TopicCandidate(Contract):
     @field_validator("visual_plan")
     @classmethod
     def bounded_plan(cls, values: list[str]) -> list[str]:
-        if any(not v.strip() or len(v) > 80 for v in values):
-            raise ValueError("visual_plan 每条需为 1–80 字")
+        if any(not v.strip() or len(v) > 160 for v in values):
+            raise ValueError("visual_plan 每条需为 1–160 字")
         return values
 
 

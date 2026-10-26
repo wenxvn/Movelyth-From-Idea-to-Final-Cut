@@ -311,9 +311,15 @@
 - 执行命令与结果：`pytest tests/test_suggest.py -q` → 6 passed；
   真实运行（mock provider）：`movelyth suggest --count 3` 输出 3 个候选，
   `movelyth daily --preview` 生成 VID-000011 并停在 `previewed`。
-- 验证类型：mock + 单元。
-- 已知未验证/风险：没有真实模型跑过 `suggest`（额度限制）；"语义重复"仍依赖模型判断，
-  没有向量相似度兜底，属于文档已声明的限制。
+- **真实 Codex 实测**（`movelyth suggest --count 3`，无 mock）：返回 3 个候选，均标
+  `supported`，分别聚焦时延组成、家用 NAT 端口映射与训练/泛化差异；notes 明确写出
+  "与已有矩阵、旋转、网络路径及梯度下降内容区分"、"尚无发布记录和用户反馈，本次排序不依据
+  受众表现"、"所有数值例子须明确标注假设"。产物在 `workspace/topic-plan/plan.json`。
+  首次真实调用因 `visual_plan` 每条 80 字上限过紧而校验失败，已放宽到 160 字并在 prompt 中
+  写明长度要求。
+- 验证类型：mock + 单元 + **真实模型**。
+- 已知未验证/风险：`daily` 只用 mock 跑过（真实运行会消耗完整制作额度）；"语义重复"仍依赖
+  模型判断，没有向量相似度兜底，属于文档已声明的限制。
 
 ## Task ID：P2-02～P2-04（未实施）
 

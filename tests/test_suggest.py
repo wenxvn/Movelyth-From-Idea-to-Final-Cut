@@ -68,7 +68,7 @@ def test_planner_contract_bounds_the_candidates():
             {"title": "题", "question": "这是一个问题吗？", "why_now": "值得做",
              "visual_plan": ["x"], "capability": "maybe"}]})
     payload = plan(["supported"])
-    payload["candidates"][0]["visual_plan"] = ["好" * 81]
+    payload["candidates"][0]["visual_plan"] = ["好" * 161]
     with pytest.raises(Exception):
         TopicPlan.model_validate(payload)
 

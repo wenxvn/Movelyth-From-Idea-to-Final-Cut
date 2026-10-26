@@ -7,7 +7,7 @@
 - 给出 3 个候选（最多 5 个），每个都是**具体问题**，不是"聊聊某某"或标题改写。
 - 必须避免与已完成内容语义重复：换一个知识点、换一个提问角度，而不是只换措辞。
 - 每个候选都要写清楚：question（一句话问题）、why_now（为什么值得现在做，≤240 字）、
-  visual_plan（1–6 条具体画面计划，必须对应渲染器真正能画的东西：text/math/shape/chart/
+  visual_plan（1–6 条具体画面计划，每条 ≤140 字，必须对应渲染器真正能画的东西：text/math/shape/chart/
   diagram/timeline/image/procedural，布局 immersive/diagram/compare）。
 - capability 只能填：
   - supported：现有图层足以讲清；
