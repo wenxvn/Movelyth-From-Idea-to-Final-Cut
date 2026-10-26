@@ -113,6 +113,7 @@ def main(argv=None) -> int:
     asset_add.add_argument("--author", required=True)
     asset_add.add_argument("--license", required=True, help="授权依据，例如 自有素材 / CC BY 4.0")
     asset_add.add_argument("--scope", default="本片使用")
+    sub.add_parser("asset-check", help="重新校验素材库（hash/授权/有效性）并标记失效项")
     sub.add_parser("schema", help="输出 Scene DSL v1 的 JSON Schema")
     sub.add_parser("components", help="输出可视化组件元数据（用途/必需字段/限制/横竖适配）")
     check = sub.add_parser("check", help="离线校验脚本 JSON（不调用模型、不渲染）")
@@ -196,6 +197,13 @@ def main(argv=None) -> int:
                              author=args.author, license=args.license, scope=args.scope)
             emit({"registered": args.id, **entry,
                   "note": "已复制到 workspace/assets/files；脚本中用 image 图层 data_ref 引用该 id"})
+        elif args.command == "asset-check":
+            from .assets import check_library
+
+            report = check_library(studio.workspace)
+            emit({"assets": report,
+                  "invalid": [item["id"] for item in report if item["status"] != "valid"],
+                  "note": "失效素材会在渲染前被拒绝，不会静默替换"})
         elif args.command == "feedback":
             metrics = {k: v for k, v in {"views": args.views, "likes": args.likes,
                        "completion_rate": args.completion_rate}.items() if v is not None}

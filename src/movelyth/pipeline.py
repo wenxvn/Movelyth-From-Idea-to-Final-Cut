@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import __version__
 from .agents import create_provider
-from .assets import credit_lines, stage_for_render
+from .assets import credit_lines, mark_used, stage_for_render
 from .assets import resolve as resolve_library
 from .audioqc import audio_qc
 from .ledger import Ledger
@@ -668,6 +668,14 @@ class Studio:
                 shutil.copy2(job / "renders" / cut / "cover.png", staging / f"封面_{platform}.png")
                 (staging / f"字幕_{platform}.srt").write_text(srt(timelines[cut], self.config["studio"]["fps"]),
                                                              encoding="utf-8")
+                # Dry voice and mix kept as small MP3s so the user can audition the audio
+                # without opening a 20MB video.
+                for label, source in (("原声", timelines[cut].get("voice")),
+                                      ("混音", timelines[cut].get("mix"))):
+                    if source and Path(source).is_file():
+                        run([ffmpeg(), "-y", "-v", "error", "-i", str(source), "-c:a", "libmp3lame",
+                             "-b:a", "128k", str(staging / f"{label}_{platform}.mp3")],
+                            timeout=300, log=job / f"audio-{label}-{cut}.log")
             shutil.copy2(job / "quality.json", staging / "质检报告.json")
             shutil.copy2(job / "film.json", staging / "脚本.json")
             shutil.copy2(job / "research.json", staging / "研究记录.json")
@@ -715,6 +723,8 @@ class Studio:
             staging.rename(destination)
         self.ledger.status(episode["id"], "ready", delivery=str(destination))
         self.ledger.event(episode["id"], "delivery", "passed", {"path": str(destination)})
+        if library_ids:
+            mark_used(self.workspace, list(library_ids), episode["id"])
         self.export_index()
         return {"id": episode["id"], "status": "ready", "delivery": str(destination), "reused": False}
 

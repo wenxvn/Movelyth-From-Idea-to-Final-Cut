@@ -24,11 +24,56 @@ def test_register_records_hash_and_provenance(tmp_path):
     entry = register(tmp_path, source, asset_id="my_photo", source="用户拍摄", author="wenxvn",
                      license="自有素材", scope="本片使用")
     assert entry["sha256"] and entry["bytes"] > 0
+    assert entry["valid"] is True and entry["used_by_episodes"] == []
     library = load_library(tmp_path)
     assert "my_photo" in library["assets"]
     resolved = resolve(tmp_path, "my_photo")
     assert resolved.is_file() and resolved.name == "my_photo.png"
     assert "自有素材" in credit_lines(tmp_path, ["my_photo"])[0]
+
+
+def test_mark_used_records_episodes_without_duplicates(tmp_path):
+    from movelyth.assets import mark_used
+
+    source = png(tmp_path)
+    register(tmp_path, source, asset_id="shot", source="用户拍摄", author="a", license="自有素材")
+    assert mark_used(tmp_path, ["shot"], 3) == ["shot"]
+    mark_used(tmp_path, ["shot"], 7)
+    mark_used(tmp_path, ["shot"], 3)
+    assert load_library(tmp_path)["assets"]["shot"]["used_by_episodes"] == [3, 7]
+    assert mark_used(tmp_path, ["unknown"], 9) == []
+
+
+def test_legacy_library_entries_gain_the_new_fields(tmp_path):
+    import json
+
+    source = png(tmp_path)
+    register(tmp_path, source, asset_id="old", source="用户拍摄", author="a", license="自有素材")
+    path = tmp_path / "assets" / "library.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["assets"]["old"].pop("valid")
+    data["assets"]["old"].pop("used_by_episodes")
+    path.write_text(json.dumps(data), encoding="utf-8")
+    entry = load_library(tmp_path)["assets"]["old"]
+    assert entry["valid"] is True and entry["used_by_episodes"] == []
+    assert resolve(tmp_path, "old").is_file()
+
+
+def test_check_library_marks_tampered_assets_invalid_and_blocks_use(tmp_path):
+    from movelyth.assets import check_library
+
+    source = png(tmp_path)
+    register(tmp_path, source, asset_id="good", source="用户拍摄", author="a", license="自有素材")
+    register(tmp_path, png(tmp_path, "second.png"), asset_id="broken", source="用户拍摄",
+             author="a", license="自有素材")
+    assert all(item["status"] == "valid" for item in check_library(tmp_path))
+    (tmp_path / "assets" / "files" / "broken.png").write_bytes(b"changed")
+    report = {item["id"]: item for item in check_library(tmp_path)}
+    assert report["good"]["status"] == "valid"
+    assert report["broken"]["status"] == "invalid" and "hash" in report["broken"]["reason"]
+    assert load_library(tmp_path)["assets"]["broken"]["valid"] is False
+    with pytest.raises(AssetError, match="失效"):
+        resolve(tmp_path, "broken")
 
 
 def test_register_refuses_overwrite_and_missing_license(tmp_path):

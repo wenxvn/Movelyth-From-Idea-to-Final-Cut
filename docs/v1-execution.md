@@ -1,329 +1,75 @@
 # V1 执行记录
 
-按《Movelyth V1 规划与执行提纲》执行。每项任务记录目标、实际改变、测试、命令与结果、
-验证类型、已知风险与提交。**验证类型严格区分**：`mock` / `单元` / `静帧` / `片段` / `真实长短版` / `人工完整观看`。
+按《Movelyth V1 规划与执行提纲》执行。**验证类型严格区分**：mock / 单元 / 静帧 / 片段 /
+真实长短版 / 人工完整观看。命令与结果的完整证据在 [验证记录](verification.md)，
+跨题材结论在 [V1 验收](v1-evaluation.md)，最终状态在 [V1 报告](v1-report.md)。
 
-## Task ID：P0-01 基线、回归保护与成本记录
+## 任务状态
 
-- 目标与实际改变：建立 `docs/v1-baseline.md`（环境、基线测试、VID-000001 实际文件参数、
-  V1 前抽帧截图）；新增 `src/movelyth/metrics.py`，每个阶段写一行 CSV
-  （`workspace/metrics.csv`：时间、任务、阶段、状态、秒数、缓存命中、产物字节数）。
-- 修改文件：`docs/v1-baseline.md`、`docs/baseline/v0/*.jpg`、`src/movelyth/metrics.py`、`src/movelyth/pipeline.py`。
-- 新增/调整测试：`tests/test_pipeline_v1.py::test_stage_records_lightweight_metrics`。
-- 执行命令与结果：`pytest -q` → 65 passed（V1 批次一结束时的数量）；`ruff check src tests` → 通过；
-  `npm --prefix studio run typecheck` → 通过。
-- 有无调用模型/TTS/渲染：无。
-- 验证类型：单元。
-- 已知未验证/风险：VID-000001 只做抽帧，未完整观看/实听；Codex 链路不可用（见 baseline §4）。
+| Task | 内容 | 状态 | 主要证据 |
+|---|---|---|---|
+| P0-01 | 基线、回归保护、阶段成本 | 完成 | `docs/v1-baseline.md`、`workspace/metrics.csv` |
+| P0-02 | 标题 → 可选 brief，意图隔离 | 完成 | `test_title_only_and_brief_have_separate_intents` 等 3 项 |
+| P0-03 | 版本化 Scene DSL v1 | 完成 | `tests/test_scenedsl.py`、`docs/scene-dsl.md` |
+| P0-04 | 可组合画面、3 布局、3 风格 | 完成 | `tests/test_render_smoke.py`（横竖 10 张真实静帧） |
+| P0-05 | 以实际配音为准的节拍 | 完成 | 真实 TTS 词语边界 + 时间轴校验测试 |
+| P0-06 | 审稿与事实/视觉一致性 | 完成 | `consistency.py` + 3 项反例测试 |
+| P0-07 | 故事板预览、局部修订、按 cut 复用 | 完成 | `preview`/`revise` 测试 + 真实 `cut_cached` 实测 |
+| P0-08 | 音频质检（可选 ASR、静音、混音比） | 完成 | `tests/test_audioqc.py` + VID-000008 真实 ASR |
+| P0-09 | 来源抓取安全边界 | 完成 | `tests/test_sources.py` 15 项 |
+| P0-10 | 三题材真实验收 | 完成 | VID-000002 / 000003 / 000004 |
+| P1-01 | 组件元数据、CSV 数据、折线/时间线 | 完成 | `tests/test_components.py`、`movelyth components` |
+| P1-02 | 三套风格 | 完成 | `theme.ts` + 静帧 |
+| P1-03 | 本地素材库与授权 | 完成 | `tests/test_assets.py` 9 项 |
+| P1-04 | 按镜头局部修改 | 部分 | `revise` 完成；**无前后对比预览与变更记录** |
+| P1-05 | 模型后端抽象 | 部分 | provider 协议 + mock；**未接第二家真实后端** |
+| P1-06 | 低成本稳定性与性能 | 部分 | `--reuse-script`、画布自适应、metrics；**未测内存/CPU** |
+| P1-07 | 发布包改进 | 完成 | `publish.py`、`交付审计.md`、封面专用构图 |
+| P1-08 | CI 与测试分层 | 部分 | 工作流已提交；**未在 GitHub 实际运行** |
+| P1-09 | 六主题回归集 | 部分 | 六题输入已固化；**T04–T06 未执行** |
+| P2-01 | `suggest` / `daily` 选题模式 | 完成 | `tests/test_suggest.py` + 真实 `suggest` |
+| P2-02～04 | 工作台 / 队列 / 反馈策略 | 未实施 | 提纲要求 P0/P1 稳定后再做 |
 
-## Task ID：P0-02 标题 → 可选 brief
+## 关键实现要点
 
-- 目标与实际改变：`create` 新增 `--brief-file`；`normalize_brief()` 限制 4000 字、去控制字符；
-  `intent_key(title, brief)` 把 brief 的 hash 并入意图判定——同题不同 brief 得到不同任务，
-  只有标题时沿用历史 intent（旧任务继续复用）。`episodes` 表新增 `brief`/`brief_hash`
-  并对旧库自动 `ALTER TABLE` 迁移。brief 作为数据进入 prompt（明确标注"不是指令"）。
-- 修改文件：`cli.py`、`pipeline.py`、`ledger.py`、`prompts/research.md`、`prompts/director.md`、`README.md`。
-- 新增/调整测试：`test_title_only_and_brief_have_separate_intents`、
-  `test_brief_is_bounded_and_control_characters_are_removed`、
-  `test_old_database_is_migrated_without_losing_episodes`。
-- 执行命令与结果：`pytest tests/test_pipeline_v1.py -q` → 8 passed。
-- 有无调用模型/TTS/渲染：无（mock）。
-- 验证类型：单元。
-- 已知未验证/风险：brief 只影响创作输入，不会让模型"核实"用户提供的事实；预检说明写在 README。
+- **brief 与标题都是数据**：`normalize_brief()` 限 4000 字、去控制字符；brief hash 并入意图判定，
+  同题不同 brief 不复用旧成片；只有标题时沿用历史 intent（旧任务继续复用）。
+- **DSL 单一来源**：`scenedsl.py` 定义布局矩形、保留区、容量估算与节拍解析，并生成
+  `studio/src/generated/{layout,scene-schema}.json`；测试比对 Python 契约、已提交生成文件、
+  TypeScript 枚举与渲染器注册表，任一侧漂移即失败。
+- **每镜必须有真实画面**：只有 text + math 的镜头视为"动态字幕"并拒绝脚本。
+- **区域互不重叠**：图表/图示/时间线/程序动画只能放 `main`（compare 可 `main` + `side`）。
+- **节拍绑定真实配音**：`narration:片段` 按 TTS 词语边界换算成秒；片段不在旁白中时
+  在脚本审批阶段就失败，不会等到付费配音之后。
+- **契约变更使缓存脚本失效**：`scenedsl/consistency/quality` 的 hash 计入 script 阶段输入；
+  校验失败转成可修复的编辑反馈重新生成，不会把失效脚本直接送去渲染。
+- **分 cut 生成**：整部 Film 会触发 `max_output_tokens`，long/short 各调用一次再组装。
+- **审片抽帧时机**：取该镜最后一个动作结束之后，避免抽到半成品画面造成误判。
+- **来源安全**：仅 HTTPS/443，DNS 解析后固定到已校验公网 IP，逐跳校验重定向，
+  成功缓存 30 天、失败 6 小时；网页正文始终是数据。
+- **素材可追溯**：`asset-add` 记录 hash/来源/作者/许可/范围/引用任务/有效性；
+  渲染前校验 hash 与 `valid`，失效即拒绝，不会静默替换。
 
-## Task ID：P0-03 版本化 Scene DSL v1
+## 真实成片暴露并已修复的缺陷
 
-- 目标与实际改变：
-  - `models.py` 新增 `Layer`（text/math/shape/chart/diagram/image/procedural）、`Action`（8 种原语）、
-    `Beat`、`Claim`、`Finding`，`Scene` 增加 `layout`/`beats`/`layers`/`actions`/`visual_intent`，
-    `Cut` 增加 `schema_version`/`style`。所有字段都有长度/数量/数值范围约束，`extra="forbid"`。
-  - 新增 `scenedsl.py`：布局常量与区域、保留区（标题/标签/字幕/页脚）、节拍与动作按**真实 TTS
-    词语边界**解析、文本容量估算、时间轴一致性校验、本地数据绑定、渲染端契约生成。
-  - `studio/src/types.ts` 同步类型；`studio/src/generated/layout.json` 与 `scene-schema.json`
-    由 Python 生成并提交，`test_generated_renderer_contract_matches_committed_files` 防止漂移。
-  - 旧任务（只有 `visual`）自动退化为单个 procedural 图层，仍可渲染。
-- 修改文件：`src/movelyth/models.py`、`src/movelyth/scenedsl.py`、`src/movelyth/pipeline.py`、
-  `src/movelyth/quality.py`、`studio/src/types.ts`、`studio/src/generated/*`、`docs/scene-dsl.md`。
-- 新增/调整测试：`tests/test_scenedsl.py`（15 项：旧任务兼容、节拍解析、非法参数拒绝、
-  枚举不漂移、契约文件一致、区域不越界等）。
-- 执行命令与结果：`pytest tests/test_scenedsl.py -q` → 15 passed。
-- 有无调用模型/TTS/渲染：无。
-- 验证类型：单元 + 契约。
+1. 视觉审稿拒绝时 `Finding` 不可 JSON 序列化。
+2. 脚本被拒后 `resume` 静默重生成同样脚本 → 现写入 `script-feedback.json` 并在下次继续反馈。
+3. 缓存中的"已审脚本"在契约变更后仍被复用 → 现纳入契约 hash 并转成编辑反馈。
+4. 公式/矩阵被压成一行、字号过小 → 数学图层放大并保留换行。
+5. `shape.line` 只画第一段 → 按全部顶点画折线，`connect` 加起点与箭头。
+6. 不同图层占同一区域互相遮挡 → 区域改为互不重叠并在审批阶段拒绝。
+7. 图表末值 0 仍显示柱高 → 从 0 基线绘制。
+8. 封装框内无文字 → `rect` 支持框内自动放大文字。
+9. 图例压住首值标签 → 图例独占顶部带；柱状图标系列名与数值。
+10. 竖版图表被留白压小 → 画布按区域宽高比生成。
+11. 流程图的重复小字 → 与节点标签重复的 `steps` 不再绘制。
 
-## Task ID：P0-04 可组合画面与多布局
+## 已知未验证 / 风险
 
-- 目标与实际改变：
-  - `Visual.tsx` 巨型条件分支拆为 `components/` 下的 `TextLayer`、`ShapeLayer`、`ChartLayer`、
-    `DiagramLayer`、`ImageLayer`、`ProceduralLayer`，由 `Stage.tsx` 的注册表按 `layer.type` 分派。
-  - 新增真实可配置的坐标轴折线/柱状/散点图（带单位、轴标签、来源标注、首末值标签），
-    有向节点图（任意节点/连线/步骤），文本与公式（Unicode 上下标），图形原语。
-  - 三种叙事布局 `immersive` / `diagram` / `compare`，横竖版各自一套区域；标题与标签改用
-    `fitFont` 自动缩字，区域不侵入字幕/页脚。
-  - 新增 `theme.ts` 三套风格（minimal/tech/documentary），只改配色、字体层级、节奏。
-  - `motion.ts`：动画只依赖 props 与 progress，确定性可复现。
-- 修改文件：`studio/src/{Movie,Stage,motion,theme,layouts,types}.tsx|ts`、`studio/src/components/*`、
-  `studio/src/Root.tsx`、`src/movelyth/scenedsl.py`。
-- 新增/调整测试：`tests/test_render_smoke.py`（真实 Remotion 渲染 4 种构图 × 横竖版，
-  断言静帧互不相同且尺寸正常）、`test_scene_signature_distinguishes_real_composition_changes`、
-  `test_every_region_stays_inside_canvas_and_clear_of_reserved_bands`。
-- 执行命令与结果：`pytest tests/test_render_smoke.py -q --basetemp=workspace/gallery-tmp` → 1 passed
-  （横竖共 8 张真实静帧）；`typecheck` 通过。
-- 有无调用模型/TTS/渲染：**真实 Remotion + Chrome 渲染**（静帧，非成片）。
-- 验证类型：静帧。
-- 已知未验证/风险：静帧不能证明运动观感；字体依赖本机 Microsoft YaHei，未分发第三方字体。
-
-## Task ID：P0-05 以实际配音为准的时间轴
-
-- 目标与实际改变：`prepare_cut` 逐镜合成 TTS 后，用**真实词语边界**把 `beats`/`actions` 解析为
-  0–1 比例（`actions_resolved`、`beat_times`、`beat_timing`）；边界缺失时明确标注
-  `estimated-character-timing`。`validate_cut_timeline` 检查帧数、字幕越界/交叠、动作区间；
-  `sound` 阶段失败即拒绝继续。字幕仍是真实词语边界生成，不抢先不滞后。
-- 修改文件：`media.py`、`scenedsl.py`、`pipeline.py`、`quality.py`。
-- 新增/调整测试：`test_narration_beats_and_actions_resolve_to_real_tts_time`、
-  `test_missing_narration_fragment_and_bad_spans_are_rejected`、
-  `test_timeline_checks_catch_overlap_and_out_of_range_actions`。
-- 执行命令与结果：`pytest tests/test_scenedsl.py -q` → 15 passed。
-- 有无调用模型/TTS/渲染：单元用构造边界；真实 TTS 见 P0-10 演示。
-- 验证类型：单元 + 片段（真实 TTS 见下）。
-
-## Task ID：P0-06 脚本审核与事实/视觉匹配
-
-- 目标与实际改变：`Research` 增加 `claims`（claim_id、来源下标、摘录、`established/illustrative/uncertain`）；
-  `Review` 增加结构化 `findings`（factual / visual_mismatch / visual_defect / audio_defect / warning +
-  scene_id）；新增 `consistency.py`：图表趋势与口播方向、示意数据被说成实测、矩阵旋转/面积/保距/塌缩断言、
-  数值无对应画面等可测规则；`validate_script` 现在返回 warnings 并拒绝明显不一致。
-- 修改文件：`models.py`、`consistency.py`、`quality.py`、`prompts/research.md`、`prompts/reviewer.md`、`prompts/director.md`。
-- 新增/调整测试：`test_chart_trend_must_match_narration`、`test_measured_claim_on_illustrative_chart_is_rejected`、
-  `test_matrix_claims_are_checked_against_real_coefficients`。
-- 执行命令与结果：`pytest tests/test_scenedsl.py -q` → 15 passed。
-- 有无调用模型/TTS/渲染：无。
-- 验证类型：单元（构造"说下降却画上升"等反例）。
-
-## Task ID：P0-07 分镜预览、局部修复、避免昂贵整片重做
-
-- 目标与实际改变：
-  - `movelyth preview VID-xxxxxx` / `create --preview`：只渲染代表帧 + 12 秒低分辨率（0.5 倍）片段，
-    输出 `storyboard.json`（镜头、布局、图层类型、静帧与预览路径）与 `previewed` 状态；
-    **不进入待上传交付**。
-  - `movelyth revise VID-xxxxxx --notes notes.txt`：从审阅意见定位 scene id 或"镜头 N"，
-    新建 revision，只把目标镜头交给编导重写，其余镜头从 `revise-base.json` 原样保留
-    （`_keep_untouched_scenes`）；旧交付不被覆盖。
-  - 缓存：语音按镜头文本 hash 复用；`sound`/`render` 阶段按输入 hash 复用。真实演示中
-    revision 的 `sound` 阶段 0.2 s（全部命中语音缓存），而首次为 23.4 s。
-- 修改文件：`pipeline.py`、`cli.py`、`studio/render.mjs`。
-- 新增/调整测试：`test_preview_stage_produces_storyboard_without_final_render`、
-  `test_local_revision_only_rewrites_targeted_scenes`、`test_revise_requires_locatable_notes`。
-- 执行命令与结果：`pytest tests/test_pipeline_v1.py -q` → 8 passed；
-  真实演示 `movelyth create "…" --preview --new` → VID-000003 `previewed`，
-  `workspace/v1-demo/VID-000003/preview/{long,short}/preview.mp4` 均 12.0 s、960×540；
-  `movelyth revise VID-000002 --notes …` → VID-000004 `ready`。
-- 有无调用模型/TTS/渲染：演示用 mock provider + 真实 TTS + 真实渲染。
-- 验证类型：片段 + 真实长短版（mock 剧本）。
-- 缓存证据（真实执行）：把 VID-000005 的 `render-result.json` 复制成探针结果文件后重跑同一
-  `render-spec.json`，渲染日志只输出
-  `{"event":"cut_cached","cut":"long"}` 与 `{"event":"cut_cached","cut":"short"}`，
-  **没有重新编码任何一帧**；`revise` 生成的 VID-000004 `sound` 阶段 0.2 s（首次 23.4 s）。
-  也就是说，输入 hash 未变的 cut 会整体复用，改动只影响真正变化的阶段。
-- 已知未验证/风险：**未实现按单镜重新编码再拼接**；revision 仍重渲染整条 cut。
-  原因：当前 Remotion 按 composition 整体渲染，逐镜拼接需要额外处理转场与音画对齐，
-  属于提纲允许的"按 cut 复用"，已在本文档与 README 如实记录，未做脆弱重构。
-
-## Task ID：P0-08 声音与字幕质检升级
-
-- 目标与实际改变：新增 `audioqc.py`：可选本地 ASR（`faster-whisper`，未安装时如实报
-  `disabled`/`unavailable`）、转写与原稿的字符覆盖率/漏词/重复检查、长静音检测
-  （区分片头片尾留白与内部断裂）、混音/原声能量比（配乐是否盖住人声）。`quality.verify_video`
-  增加 `audio_signal` 说明"audible 只表示非静音"。配乐从固定循环扩展为
-  `minimal/tech/documentary` 三种本地合成预设。`speech_replace` 可选发音映射（同时作用于配音与字幕）。
-- 修改文件：`audioqc.py`、`quality.py`、`media.py`、`pipeline.py`、`movelyth.toml`。
-- 新增/调整测试：`tests/test_audioqc.py`（6 项：ASR 可选、覆盖率、内部长静音、尾部留白、配乐过响、缺失文件）。
-- 执行命令与结果：`pytest tests/test_audioqc.py -q` → 6 passed。
-- 有无调用模型/TTS/渲染：真实 FFmpeg 分析 + 合成音频；ASR 见下方实测。
-- 验证类型：单元 + 真实音频分析 + **真实 ASR**。
-- ASR 实测（本机 CPU，`faster-whisper` 1.2.1，模型 `small` int8）：
-  - VID-000008 长版旁白覆盖率 **0.949**、短版 **0.942**，`missing` 为空、无异常重复，
-    转写状态 `completed`，`质检报告.json` 的 `technical.<cut>.asr_checked = true`。
-  - 转写确实出现近音字（"梯度"→"T度"、"步长"→"不常"、"摆动"→"百动"），说明小模型
-    会把形近字写错；报告因此把覆盖率当作**下限信号**，不当成发音正确证明。
-  - 成本：模型首次加载约 139 s，40 s 旁白转写约 8 s；模型在进程内缓存，长短版共用。
-    因此 ASR 默认关闭，只在 `asr_enabled = true` 时执行。
-- 已知未验证/风险：**没有人工实听**，报告里 `listened_by_human=false` 保持不变；
-  ASR 只能发现漏词/重复/长空白，不能判断语气与发音是否自然。
-
-## Task ID：P0-09 源信息安全与不可信内容边界
-
-- 目标与实际改变：`sources.py` 重写：仅 HTTPS/443/无凭据；拒绝 loopback、RFC1918、link-local、
-  metadata、保留地址与 `.internal/.local/.lan` 等主机名；**DNS 解析后固定连接到已校验的公网 IP**
-  （TLS 仍用真实 SNI），重定向逐跳重新校验（最多 3 次）；限制 URL 长度、响应大小、MIME、编码；
-  成功缓存 30 天、失败缓存 6 小时（不会永久读取过期失败）；记录 `retrieved_at`、`resolved_ip`、
-  `content_sha256`、`status`。新增 `safe_local_asset`：受控目录 + 后缀白名单 + 拒绝绝对路径与 `..` 逃逸。
-- 修改文件：`sources.py`、`tests/test_sources.py`。
-- 新增/调整测试：`tests/test_sources.py` 16 项（恶意 URL 参数化、内网解析、重定向到内网、
-  重定向环、超大响应、错误 MIME、失败缓存过期、注入文本按数据处理、素材路径逃逸）。
-- 执行命令与结果：`pytest tests/test_sources.py -q` → 16 passed。
-- 有无调用模型/TTS/渲染：无（注入 opener/resolver）。
-- 验证类型：单元 + 安全边界。
-
-## Task ID：P0-10 第一次跨题材真实验收
-
-- 目标与实际改变：见 `docs/v1-evaluation.md`。
-- 结论：**未完成真实模型驱动的三题材验收**，因为本机 Codex 链路不可用（`tls handshake eof`）。
-  已完成的是 1 个题材（梯度下降）在 mock 剧本 + 真实 TTS + 真实双画幅渲染下的端到端成片，
-  以及 V1 前矩阵主题成片的抽帧对比基线。按提纲要求，只标"代码阶段完成，V1 实片验收未完成"。
-- 验证类型：真实长短版（mock 剧本）+ 片段 + 静帧。
-
-## Task ID：P1-05 模型后端接口抽象
-
-- 目标与实际改变：`agents.py` 新增 `AgentProvider` 协议、`resolve_codex()`（支持 `MOVELYTH_CODEX`）、
-  `MockProvider`（离线、确定性、同样做契约校验）与 `create_provider()`。Codex 仍是默认；
-  未知 provider 直接报错，**不会静默切换到别的模型**。Codex 事件日志中的 `usage` 会解析进质检报告。
-- 修改文件：`agents.py`、`pipeline.py`、`movelyth.toml`、`cli.py`。
-- 新增/调整测试：`tests/test_providers.py`（6 项）。
-- 执行命令与结果：`pytest tests/test_providers.py -q` → 6 passed。
-- 验证类型：mock + 单元。
-
-## Task ID：P1-01/P1-02/P1-03（部分）视觉组件、风格与素材
-
-- 已实现：图表（真实数值/本地 JSON 数据）、有向图与步骤、公式、图形原语、程序动画作为图层；
-  三套风格；本地受控图片素材（`asset-add` 登记 + hash/授权校验 + 复制进受控渲染目录，
-  拒绝远程 URL 与未登记文件）。
-- 未实现（如实记录）：网络队列/丢包示意、算法状态机、读取用户 CSV 的通用数据面板、
-  外部素材搜索与在线许可核查。这些留给下一轮，避免"堆组件"。
-- 验证类型：静帧（`tests/test_render_smoke.py`）+ 单元 + 真实长短版（VID-000009/000010）。
-
-## Task ID：P1-01 视觉组件元数据与真实数值图表
-
-- 目标与实际改变：
-  - 新增 `components.py` 与 `movelyth components`：为 8 种图层统一给出用途、必需字段、
-    限制、可用区域、横竖适配说明和合法样例；测试断言 DSL 类型、文档、样例与
-    `Stage.tsx` 渲染器注册表四者一致。
-  - `chart` 支持本地 JSON **与 CSV**（单列数值或带表头的多列序列），上限 256KB / 每条 2–60 个有限数；
-    数据来源写入 `source_note`，缺数据在渲染前报错。
-  - `shape.line` 改为按全部顶点画折线，`connect=true` 时加起点圆点与箭头，可表达有方向的路径；
-    `chart.scatter` 的 `connect` 会连成闭合轮廓，用于三角形/多边形前后对比。
-  - 新增 `timeline` 图层（阶段条，当前阶段随旁白高亮）与 `diagram` 的方框节点，替代"小圆挤字"。
-- 修改文件：`components.py`、`scenedsl.py`、`models.py`、`cli.py`、`prompts/director.md`、
-  `studio/src/components/{Shape,Chart,Diagram,Timeline}Layer.tsx`、`studio/src/{Stage,types}.tsx|ts`。
-- 新增/调整测试：`tests/test_components.py`（4 项）、`test_csv_data_is_read_with_labels_and_bounded`、
-  `test_timeline_layer_requires_real_steps`、`test_visual_layers_must_use_a_large_region`。
-- 执行命令与结果：`pytest -q -m "not slow"` → 92 passed；真实渲染静帧复核通过。
-- 验证类型：单元 + 静帧。
-- 已知未验证/风险：仍未提供"网络队列/丢包"专用动画与通用状态机组件；
-  这些用 `diagram` + `timeline` + `chart` 组合表达，必要时下一轮再加。
-
-## Task ID：P1-02 多风格
-
-- 目标与实际改变：`theme.ts` 三套风格（minimal/tech/documentary）只管理配色、字体层级、
-  标题字重、动效倍率与圆角，不改变事实与功能约束；编导通过 `style` 字段选择，用户可改。
-- 验证类型：静帧（同一 DSL 在不同 style 下渲染）。
-
-## Task ID：P1-03 本地素材库、授权与来源管理
-
-- 目标与实际改变：新增 `assets.py` 与 `movelyth asset-add`：
-  - 素材必须显式登记（`--source/--author/--license/--scope`），复制进 `workspace/assets/files/`，
-    记录 sha256、字节数、登记时间；**不会自动下载任何来路不明的素材**。
-  - 支持 png/jpg/jpeg/webp/svg，单文件 ≤40MB；同一 id 不会被静默覆盖。
-  - 渲染前校验：文件存在、后缀白名单、路径不逃逸、hash 与登记一致；缺任一授权字段直接拒绝。
-  - 素材被复制进任务受控目录（`asset-<id>.png`），`image` 图层的 `data_ref` 用素材 id 引用；
-    `发布文案.md` 与 `素材来源与署名.md` 追加真实授权行，`制作溯源.json` 记录 `library_assets` hash。
-- 修改文件：`assets.py`、`pipeline.py`、`cli.py`、`scenedsl.py`、`studio/src/components/ImageLayer.tsx`。
-- 新增/调整测试：`tests/test_assets.py`（7 项：登记与署名、拒绝覆盖/缺许可、类型与大小上限、
-  文件被篡改、手改库缺字段、未登记素材、复制进渲染目录）、
-  `test_user_library_asset_flows_into_render_and_credits`、
-  `test_missing_library_asset_fails_before_rendering`（断言渲染前就失败、不生成 render-spec）。
-- 执行命令与结果：`pytest -q` → 89 passed；真实演示 VID-000009/000010 使用已登记素材
-  `demo_scene`，成片抽帧确认图片在区域内不压字幕，`制作溯源.json` 含素材 hash。
-- 验证类型：单元 + 真实长短版（mock 剧本）。
-- 已知未验证/风险：**没有接入外部素材搜索**（提纲要求设置显式开关与许可核查，本轮未做）；
-  图片只做"放进区域、contain 缩放"，没有做内容审核或人脸/隐私识别。
-
-## Task ID：P1-06 低成本稳定性与性能优化
-
-- 目标与实际改变：
-  - `resume --reuse-script`：只修渲染器/排版时复用已审 `film.json`，不重新调用编导，
-    仍按当前契约重新校验并记录 `approved-script-reused`。
-  - 图表画布按区域宽高比生成（不再把宽扁区域塞进 1000×640 后留大片空白），刻度字号随画布缩放，
-    边缘刻度会互相遮挡时自动省略，轴与单位合并到左下角一行。
-  - 审片抽帧位置改为"该镜最后一个动作结束后"，避免抽到半成品画面造成误判。
-  - 阶段耗时、缓存命中、产物大小写入 `workspace/metrics.csv`；按 cut 复用的实测见 P0-07。
-- 新增/调整测试：`test_reuse_script_keeps_approved_film_without_calling_director`、
-  `test_review_frames_are_sampled_after_scene_actions_finish`。
-- 验证类型：单元 + 真实渲染静帧。
-
-## Task ID：P1-07 发布包改进（标题候选、封面文案、交付审计）
-
-- 目标与实际改变：
-  - `Cut` 新增 `title_candidates`（≤4 个、每个 ≤50 字）与 `cover_caption`（≤24 字），编导 prompt
-    要求给出"不夸大、不承诺结果"的平台备选标题和真实结论压缩成的封面短句。
-  - 新增 `publish.py`：`publishing_copy()` 为 B站/抖音分别输出采用标题、备选标题、封面文案、
-    简介、标签与来源署名；`audit_summary()` 生成 `交付审计.md`，逐条列出机器检查结果、
-    ASR/长静音/混音状态、人工观看与实听是否执行、以及"ready 不等于已发布"。
-  - 新增封面专用构图（`cover` 布局，横版左文右图 / 竖版上文下图），修掉首版封面文字压住图表的问题。
-  - 交付包新增 `交付审计.md`，`发布文案.md` 结构化为平台分段；上传仍由用户手动完成。
-- 修改文件：`models.py`、`publish.py`、`pipeline.py`、`scenedsl.py`、`studio/src/{Movie,Stage,types}.tsx|ts`、
-  `prompts/director.md`。
-- 新增/调整测试：`tests/test_publish.py`（4 项：平台分段与候选标题、署名措辞、审计摘要如实标注
-  未执行的人工检查、候选标题上限）、`test_cover_layout_exists_for_both_orientations`。
-- 执行命令与结果：`pytest -q` → 80 passed；真实封面渲染复核（`workspace/cover-probe/`，
-  横竖两版文字与图表不再重叠）。
-- 验证类型：单元 + 静帧。
-- 已知未验证/风险：候选标题只由编导模型生成，仍需人工挑选；没有平台端实际投放与数据回流。
-
-## Task ID：P1-06 时间戳与时区（跨模块细节）
-
-- 目标与实际改变：`util.now()` 不再固定 `Asia/Taipei`，改为 `MOVELYTH_TZ` 可配置（默认
-  `Asia/Shanghai`），并保持带偏移的 ISO 时间戳；历史记录里的 `+08:00` 不会被改写。
-- 修改文件：`util.py`。
-- 新增/调整测试：`tests/test_util.py`（2 项）。
-- 验证类型：单元。
-
-## Task ID：P1-08 CI 与测试分层
-
-- 目标与实际改变：新增 `.github/workflows/ci.yml`：Python 3.11 + Node 20，跑
-  `ruff check`、`pytest -m "not slow and not live"`、`tsc --noEmit`、契约文件一致性检查；
-  不安装 Remotion 渲染器、不调用 Codex/TTS，因此不会产生费用。
-  本地用 `pytest -m slow` 跑真实渲染静帧，`-m live` 留给真实模型/TTS。
-- 修改文件：`.github/workflows/ci.yml`、`pyproject.toml`（markers）。
-- 执行命令与结果：本地 `pytest -q -m "not slow"` 通过；CI 实际运行状态见提交页（本机无法执行 GitHub Actions）。
-- 验证类型：配置 + 本地等价命令。
-- 已知未验证/风险：**CI 从未在 GitHub 上实际运行过**，不能声称已通过。
-
-## Task ID：P1-09 六主题回归集
-
-- 目标与实际改变：`tests/fixtures/topics/*.md` 固化六个验收题目的原始输入与预期能力，
-  `docs/v1-evaluation.md` 保存逐题状态表（当前只有 T03 有离线演示成片）。
-- 验证类型：文档 + 输入固化。
-
-## Task ID：P2-01 “生成今日份视频”选题模式
-
-- 目标与实际改变：
-  - 新增 `TopicCandidate`/`TopicPlan` 契约与 `prompts/planner.md`：每个候选含 title、question、
-    why_now、visual_plan（必须对应渲染器真实图层）、capability（supported / needs_extension /
-    unsupported）、risks，并强制"不与已完成内容语义重复、不承诺播放量"。
-  - `movelyth suggest --count N`：只读历史与能力，写入 `workspace/topic-plan/plan.json`，
-    **不占用编号、不渲染**；返回里额外给出 `supported` 列表。
-  - `movelyth daily [--preview]`：取第一个 supported 候选，调用与 `create` 完全相同的流水线；
-    若全部需要新增能力，直接拒绝并指向 plan.json，不硬套现有动画。
-  - 两者都是一次性命令，**没有定时器**；不会在后台自动选题。
-- 修改文件：`models.py`、`pipeline.py`、`cli.py`、`prompts/planner.md`、`tests/fixtures/demo/planner.json`。
-- 新增/调整测试：`tests/test_suggest.py`（6 项：候选结构与不占编号、全部不支持时拒绝、
-  daily 走同一流水线、契约上限、count 范围、选题 prompt 含历史）。
-- 执行命令与结果：`pytest tests/test_suggest.py -q` → 6 passed；
-  真实运行（mock provider）：`movelyth suggest --count 3` 输出 3 个候选，
-  `movelyth daily --preview` 生成 VID-000011 并停在 `previewed`。
-- **真实 Codex 实测**（`movelyth suggest --count 3`，无 mock）：返回 3 个候选，均标
-  `supported`，分别聚焦时延组成、家用 NAT 端口映射与训练/泛化差异；notes 明确写出
-  "与已有矩阵、旋转、网络路径及梯度下降内容区分"、"尚无发布记录和用户反馈，本次排序不依据
-  受众表现"、"所有数值例子须明确标注假设"。产物在 `workspace/topic-plan/plan.json`。
-  首次真实调用因 `visual_plan` 每条 80 字上限过紧而校验失败，已放宽到 160 字并在 prompt 中
-  写明长度要求。
-- 验证类型：mock + 单元 + **真实模型**。
-- 已知未验证/风险：`daily` 只用 mock 跑过（真实运行会消耗完整制作额度）；"语义重复"仍依赖
-  模型判断，没有向量相似度兜底，属于文档已声明的限制。
-
-## Task ID：P2-02～P2-04（未实施）
-
-- 本地可视化工作台、任务队列/多机、反馈闭环策略：**未实现**。
-  原因：提纲明确要求"P0/P1 未稳不应抢先做"，且这些需要长期运行的服务与界面，
-  与"一次 CLI 制作"的当前形态差别较大；`status`/`assets`/`交付清单.csv` 已覆盖最小可查需求。
-  本轮不声称存在这些能力。
+- **人工完整观看与实听未执行**：三个真实交付包的 `human_review` 均为 `false`。
+- 每个真实题材只做一条，未验证同题多次的稳定性。
+- `revise` 仍重渲染整条 cut（按 cut 复用，未做单镜重编码）。
+- ASR 默认关闭（首次加载模型约 2 分钟）；三个真实成片 `asr_checked=false`。
+- CI 未在 GitHub 实际运行；只在 Windows 验证。
+- 字体容量按字符数估算，没有真实字体测量；无专门的裁切回归测试。
+- 交付包只带 `原声`/`混音` MP3 便于试听，不含分轨工程。

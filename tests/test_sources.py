@@ -8,7 +8,6 @@ from movelyth.sources import (
     SourceError,
     collect_sources,
     fetch_document,
-    safe_local_asset,
     validate_url,
 )
 
@@ -156,20 +155,3 @@ def test_remote_prompt_text_is_kept_as_evidence_not_instructions(tmp_path):
                             opener=opener_for(response))
     assert value[0]["status"] == "retrieved"
     assert "Ignore all previous instructions" in value[0]["excerpt"], "原文保留为数据，不做执行"
-
-
-def test_local_asset_paths_cannot_escape(tmp_path):
-    base = tmp_path / "assets"
-    base.mkdir()
-    good = base / "layer.png"
-    good.write_bytes(b"png")
-    assert safe_local_asset(base, "layer.png") == good.resolve()
-    with pytest.raises(BlockedSource):
-        safe_local_asset(base, "../outside.png")
-    with pytest.raises(BlockedSource):
-        safe_local_asset(base, str(good))
-    with pytest.raises(BlockedSource):
-        safe_local_asset(base, "layer.exe")
-    with pytest.raises(BlockedSource):
-        safe_local_asset(base, "missing.png")
-

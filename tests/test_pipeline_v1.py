@@ -128,6 +128,10 @@ def test_full_offline_pipeline_delivers_manifest_and_quality_report(offline_pipe
         provenance = json.loads((destination / "制作溯源.json").read_text(encoding="utf-8"))
         assert provenance["provider"] == "mock" and provenance["schema_version"] == 1
         assert (destination / "字幕_B站_横版.srt").is_file()
+        # Dry voice and mix travel with the package so the user can audition audio alone.
+        for label in ("原声", "混音"):
+            for platform in ("B站_横版", "抖音_竖版"):
+                assert (destination / f"{label}_{platform}.mp3").is_file()
         again = studio.produce(episode["id"])
         assert again["reused"] is True
     finally:
@@ -167,6 +171,10 @@ def test_user_library_asset_flows_into_render_and_credits(offline_pipeline):
         assert "my_shot" in credits and "自有素材" in credits
         provenance = json.loads((Path(result["delivery"]) / "制作溯源.json").read_text(encoding="utf-8"))
         assert "my_shot" in provenance["library_assets"]
+        from movelyth.assets import load_library
+
+        entry = load_library(studio.workspace)["assets"]["my_shot"]
+        assert entry["used_by_episodes"] == [episode["id"]], "交付后应记录引用任务"
     finally:
         studio.close()
 

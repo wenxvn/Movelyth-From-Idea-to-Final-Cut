@@ -1,104 +1,84 @@
 # 验证记录
 
-## 2026-10-25 · V1（Scene DSL、声画节拍、预览、安全、音频质检）
+## 2026-10-26 · V1
 
-详细任务记录见 [V1 执行记录](v1-execution.md)，跨题材验收见 [V1 验收](v1-evaluation.md)，
-V1 前的基线见 [V1 基线](v1-baseline.md)。
+任务级说明见 [V1 执行记录](v1-execution.md)，跨题材结论见 [V1 验收](v1-evaluation.md)，
+改动前基线见 [V1 基线](v1-baseline.md)，最终状态见 [V1 报告](v1-report.md)。
 
 ### 自动化检查
 
 ```text
-.\.venv\Scripts\python.exe -m pytest -q                      → 72 passed, 1 deselected（默认跳过真实渲染）
-.\.venv\Scripts\python.exe -m pytest -q -m "not slow"        → 72 passed
-.\.venv\Scripts\python.exe -m pytest tests/test_render_smoke.py -q  → 1 passed（真实 Remotion 渲染，横竖 8 张静帧）
-.\.venv\Scripts\python.exe -m ruff check src tests           → All checks passed!
-npm.cmd --prefix studio run typecheck                        → 通过
+pytest -q                            → 111 passed（含 1 项真实渲染 slow 测试）
+pytest -q -m "not slow"              → 110 passed, 1 deselected（CI 用这一条）
+pytest tests/test_render_smoke.py -q → 1 passed（真实 Remotion + Chrome，横竖 10 张静帧）
+ruff check src tests                 → All checks passed
+npm --prefix studio run typecheck    → 通过
 ```
 
-覆盖范围新增：Scene DSL 正反向契约（非法参数、`NaN`、路径/URL 注入、超长文本、超量数据）、
-节拍与真实词语边界解析、区域不越界与不压字幕、旁白与图表趋势/矩阵断言一致性、
-来源抓取 SSRF 与失败缓存过期、音频长静音与配乐过响、可选 ASR 边界、brief 意图隔离、
-旧数据库迁移、阶段指标、mock provider 契约、真实渲染静帧互不相同、预览不入交付、
-局部修订不改无关镜头。
+覆盖：Scene DSL 正反向契约（非法参数、`NaN`、路径/URL 注入、超长文本、超量数据）、
+节拍与真实词语边界解析（含"片段不在旁白中"必须提前失败）、区域不越界/不重叠/不压字幕、
+每镜必须有真实画面图层、旁白与图表趋势/矩阵断言一致性、来源抓取 SSRF 与失败缓存过期、
+音频长静音与配乐过响、可选 ASR 边界、brief 意图隔离、旧数据库迁移、阶段指标、
+mock provider 契约、真实渲染静帧互不相同、预览不入交付、局部修订不改无关镜头、
+缓存脚本在契约变更后重新生成、`--reuse-script` 不重新调用编导、素材库授权与失效、
+选题候选与能力门槛。
 
-### 真实渲染 / 真实 TTS 证据（mock 剧本，非真实模型创作）
+### 真实模型 + 真实 TTS + 真实渲染（三个题材，标题驱动）
 
-使用 `tests/fixtures/demo/movelyth-demo.toml`（`provider = "mock"`，时长缩短为 40s/15s）：
+| 任务 | 主题 | 横版 / 竖版 | 技术检查 | 视觉审片 |
+|---|---|---|---|---|
+| VID-000002 | 矩阵为什么能让整个空间旋转？ | 242.6 s / 64.8 s | 11 项全通过 | `passed=true`，1 条非阻断 warning |
+| VID-000003 | 一条网络消息如何从我的电脑到达服务器？ | 218.9 s / 67.2 s | 11 项全通过 | `passed=true`，无 issue |
+| VID-000004 | 梯度下降为什么能让模型逐步减少错误？ | 242.6 s / 69.5 s | 11 项全通过 | `passed=true`，无 issue |
 
-| 任务 | 命令 | 结果 |
-|---|---|---|
-| VID-000002 | `create "梯度下降为什么能让模型逐步减少错误？"` | `ready`，横版 41.0 s / 竖版 17.0 s，11 项技术检查全通过 |
-| VID-000003 | 同题 `--preview --new` | `previewed`，`storyboard.json` + 12.0 s / 960×540 预览片段 |
-| VID-000004 | `revise VID-000002 --notes …` | `ready`，`sound` 阶段 0.2 s（语音全命中缓存，首次为 23.4 s） |
+三者各 **17 个交付文件**（横竖 MP4、封面、字幕、`原声`/`混音` MP3、发布文案、交付审计、
+脚本、研究、质检、溯源、manifest），`creation_mode=title-driven-codex-agents`，
+`published=false`。manifest 校验通过。
 
-阶段耗时（`workspace/v1-demo/metrics.csv`）：research 0.02 s、script 0.06 s、sound 23.43 s、
-assets 0.22 s、render 90.49 s、check 84.03 s（首次，40s+15s 双画幅，1080p）。
-第二次同题生产（VID-000002）sound 0.15 s、render 107.63 s、check 73.38 s。
-带 brief 的生产（VID-000005/000006）流程相同，`制作溯源.json` 记录 `brief_used: true` 与
-`brief_hash`。
+音频机器指标：混音/原声能量比峰值 1.20–1.25（阈值 1.6）；长静音检查 `ok`；
+三个真实成片 `asr_checked=false`（未开启 ASR）。
 
-按 cut 复用已实测：用 VID-000005 的既有 `render-result.json` 与相同 `render-spec.json`
-重跑渲染器，日志只输出 `cut_cached`（long / short），未重新编码。`revise` 的 `sound`
-阶段 0.2 s（语音缓存全命中）。
+### 真实 ASR 实测（mock 剧本任务 VID-000008）
 
-音频机器指标：长版混音/原声能量比峰值 1.196、均值 0.889；短版 1.157 / 0.875（阈值 1.6）。
-VID-000008 开启本地 ASR（`faster-whisper` 1.2.1，`small` int8）：长版字符覆盖率 **0.949**、
-短版 **0.942**，`missing` 为空，`asr_checked = true`。转写中出现近音字（"梯度"→"T度"、
-"步长"→"不常"、"摆动"→"百动"），因此覆盖率只作为下限信号，不代表发音正确。
+`faster-whisper` 1.2.1，`small` int8，本机 CPU：长版覆盖率 **0.949**、短版 **0.942**，
+`missing` 为空，`technical.<cut>.asr_checked = true`。转写出现近音字
+（"梯度"→"T度"、"步长"→"不常"、"摆动"→"百动"），因此覆盖率只作下限信号。
+成本：模型首次加载约 139 s，40 s 旁白转写约 8 s，进程内缓存复用；默认关闭。
+
+### 成本与缓存（mock 演示，40 s + 15 s 双画幅）
+
+| 阶段 | 首次 | 命中缓存 |
+|---|---:|---:|
+| research | 0.02 s（mock）/ 92.4 s（真实 Codex） | 0 s |
+| script | 0.06 s（mock）/ 610.7 s（真实 Codex） | 0 s |
+| sound | 23.4 s | 0.15–0.2 s |
+| assets | 0.2 s | 0.1 s |
+| render | 90.5 s | 整体 `cut_cached`，未重新编码 |
+| check | 84.0 s | — |
+
+按 cut 复用实测：相同 `render-spec.json` 重跑只输出 `cut_cached`（long / short）。
+`revise` 的 `sound` 阶段 0.2 s（语音缓存全命中）。
+**内存/CPU 峰值未测量**，标为未知。
 
 ### 验证边界（必须与上面的结论一起读）
 
-- **真实 Codex 成片**：VID-000002（矩阵）、VID-000003（网络消息）、VID-000004（梯度下降）
-  三个题材的双画幅成片均通过全部技术检查与独立视觉审片。
-- mock provider 的剧本来自 `tests/fixtures/demo/*.json`，**不能**作为模型创作能力证据；
-  质检报告里 `creation_mode` 会写 `mock-provider`。
-- 没有人工完整观看、没有实听、没有人工 1–5 分评分；`质检报告.json` 的
-  `human_review` 保持 `false`。
-- ASR 只在显式开启时执行（默认关闭，因为首次加载模型约 2 分钟）；未开启时报告写 `disabled`。
+- **人工完整观看与实听未执行**：三个真实交付包的 `human_review` 均为
+  `{watched_full_video: false, listened_audio: false}`，没有 1–5 分人工评分。
+- mock provider 的剧本来自 `tests/fixtures/demo/*.json`，质检报告写 `mock-provider`，
+  不作为模型创作能力证据。
+- 每个真实题材只做一条，未验证同题多次的稳定性。
 - 未上传到任何平台，没有播放量或受欢迎结论。
-- 真实 Codex 制作：VID-000002（矩阵）、VID-000003（网络消息）、VID-000004（梯度下降）
-  三个题材的双画幅成片全部通过技术检查与独立视觉审片。
-- 局部修订仍重渲染整条 cut（见 `docs/architecture.md`）；纯渲染器修复可用 `--reuse-script`
-  复用已审脚本，不重新消耗编导额度。
+- 局部修订仍重渲染整条 cut；纯渲染器修复可用 `--reuse-script` 复用已审脚本。
+- 字体容量按字符数估算，未做真实字体测量与专门裁切回归测试。
 
 ---
 
 ## 2026-10-25 · 首版（0.1.0，V1 之前）
 
 - 22 项 pytest 通过，Ruff、TypeScript 与 skill 格式检查通过。
-- 环境：Windows，Python 3.11.9，Node 24.12.0，Remotion 4.0.538，Chrome，imageio-ffmpeg 7.1
-  以及 Remotion 提供的 ffprobe。
-- Edge TTS 连通实测成功，测试音频 3.672 秒，获取 10 条词语边界。
-- 七类画面组件已完成独立渲染连通测试；测试产物没有进入待上传目录。
-
-### 真实标题验收（已通过）
-
-标题：《矩阵，如何改变我们看到的世界》，任务 VID-000001。
-
-- 从标题调用真实 Codex 研究、编导及独立审稿，未导入人工写好的脚本。
-- 长版 10 镜、928 字；短版 4 镜、266 字，已通过脚本审稿。
-- 所有镜头真实配音完成，时间轴按 PCM 样本和词语边界生成。
-- 首轮渲染观察到内存压力，已保存失败/恢复记录，收紧自身线程、缓存和并发；缓存阶段成功复用。
-- 完整横竖版已通过最终文件检查与独立抽帧审片，交付状态 ready。
-- 首轮最终审片拒绝：矩阵单行四数排版与"两列"的讲解不符，审片上下文也缺研究来源正文。
-  已改为明确 2×2 排版，抓取来源证据并保留可用性/内容 hash；修正后的横竖版预览通过独立审片。
-
-| 版本 | 实际文件时长 | 画幅 | 帧率 | 采样峰值 | 技术与抽帧审片 |
-|---|---:|---|---:|---:|---|
-| B站横版 | 209.9 秒 | 1920×1080 | 30fps | -1.9 dBFS | 通过 |
-| 抖音竖版 | 62.8 秒 | 1080×1920 | 30fps | -2.0 dBFS | 通过 |
-
-两版 H.264/AAC、完整解码、画幅、帧率、音量、时间轴一致性、允许时长范围及时间采样运动检查均通过。
-审片用图直接从最终编码 MP4 提取。成片与交付副本 SHA-256 一致，manifest 校验通过。
-
-本机交付路径：`delivery/待上传/VID-000001_矩阵，如何改变我们看到的世界/r001/`。
-再次运行 `生成视频.ps1` 并输入同题，返回同一编号、同一路径和 `reused=true`。
-
-默认硬时长范围为横版 120–300 秒、竖版 45–90 秒；180/60 秒为参考目标。来源证据 4 项，
-其中 3 项抓取成功，Georgia Tech 因证书验证失败不可用；核心主张由其余一手来源节选支持，
-该限制如实保存在审片 warnings 中。
-
-### 验证边界
-
-已执行的技术检查不代表人工听过音轨或观看完整视频。首版未执行 ASR。外部数据、工具宣传及
-示例效果不作为本项目实测结果。没有发布到平台，所以没有播放量或受欢迎结论。
+- Edge TTS 连通实测成功（3.672 秒，10 条词语边界）。
+- 七类画面组件完成独立渲染连通测试，测试产物未进入待上传目录。
+- 真实标题验收《矩阵，如何改变我们看到的世界》（VID-000001）：长版 10 镜 928 字、
+  短版 4 镜 266 字；横版 209.9 s / 竖版 62.8 s，11 项技术检查与抽帧审片通过；
+  首轮审片曾拒绝（矩阵排版与"两列"讲解不符），修正后重渲染复核通过。
+- 验证边界：未执行 ASR、未人工实听、未完整观看；未发布，无播放数据。

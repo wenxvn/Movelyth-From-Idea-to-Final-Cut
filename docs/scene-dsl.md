@@ -88,7 +88,8 @@ TypeScript，两侧不会各自漂移。**同一布局内的区域互不重叠**
 - **同一布局内的区域互不重叠**，且图表/图示/时间线/程序动画只能放 `main`（compare 可 `main` + `side`），
   避免把核心画面塞进注脚条后被判为不可读。
 - `data_ref` 只能是小写标识符，不能是路径或 URL；`image` 只能引用受控素材目录中已存在的文件
-  （内置 SVD 图或 `movelyth asset-add` 登记的素材，登记时会校验 hash 与授权字段）。
+  （内置 SVD 图或 `movelyth asset-add` 登记的素材，登记时会校验 hash 与授权字段；被
+  `movelyth asset-check` 标记为 `valid=false` 的素材会被拒绝）。
 - `chart` 必须由 `series` 或 `workspace/VID-xxxxxx/data/<data_ref>.json|.csv` 提供真实数值，
   缺失时在渲染前报错。JSON 格式：`{"label": "误差", "unit": "%", "axis": "轮次", "values": [0.9, 0.6, 0.3]}`
   或 `{"series": [{"label": "...", "values": [...]}, ...]}`；CSV 支持单列数值或带表头的多列序列；

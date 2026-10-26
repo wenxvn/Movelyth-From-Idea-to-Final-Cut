@@ -15,7 +15,8 @@ voice = "zh-CN-YunxiNeural"
 voice_rate = "+0%"
 max_retries = 0
 speech_replace = {}
-asr_enabled = true
+# 默认关闭以保持演示快速；改成 true 可复现 ASR 证据（首次加载模型约 2 分钟）。
+asr_enabled = false
 asr_model = "small"
 
 [agents]

@@ -425,11 +425,6 @@ def validate_cut_dsl(cut: Cut, *, vertical: bool) -> list[str]:
     return problems
 
 
-def write_schema_doc(path: Path) -> None:
-    schema = Film.model_json_schema()
-    path.write_text(json.dumps(schema, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
 MAX_DATA_BYTES = 256_000
 DATA_SUFFIXES = (".json", ".csv")
 

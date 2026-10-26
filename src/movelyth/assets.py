@@ -27,17 +27,23 @@ def library_root(workspace: Path) -> Path:
 
 
 def load_library(workspace: Path) -> dict:
+    """Read the library, defaulting fields added after earlier registrations."""
     path = library_root(workspace) / LIBRARY
     if not path.is_file():
         return {"version": 1, "assets": {}}
     data = read_json(path)
     if not isinstance(data.get("assets"), dict):
         raise AssetError("素材库格式无效：assets 必须是对象")
+    for entry in data["assets"].values():
+        entry.setdefault("valid", True)
+        entry.setdefault("used_by_episodes", [])
     return data
 
 
 def verify_entry(workspace: Path, asset_id: str, entry: dict) -> Path:
     """Return the verified file path, or raise with the concrete reason."""
+    if entry.get("valid") is False:
+        raise AssetError(f"素材 {asset_id} 已被标记为失效：{entry.get('invalid_reason') or '需重新登记'}")
     missing = [field for field in REQUIRED_FIELDS if not str(entry.get(field) or "").strip()]
     if missing:
         raise AssetError(f"素材 {asset_id} 缺少授权信息：{', '.join(missing)}")
@@ -80,7 +86,7 @@ def register(workspace: Path, source_file: Path, *, asset_id: str, source: str, 
     shutil.copy2(source_file, target)
     entry = {"file": target.name, "sha256": file_hash(target), "source": source, "author": author,
              "license": license, "scope": scope, "added_at": now(),
-             "bytes": target.stat().st_size}
+             "bytes": target.stat().st_size, "valid": True, "used_by_episodes": []}
     data["assets"][asset_id] = entry
     atomic_json(root / LIBRARY, data)
     return entry
@@ -103,6 +109,46 @@ def credit_lines(workspace: Path, asset_ids: list[str]) -> list[str]:
             continue
         lines.append(f"- 素材 `{asset_id}`：{entry['author']} · {entry['license']} · 来源 {entry['source']}")
     return lines
+
+
+def mark_used(workspace: Path, asset_ids: list[str], episode_id: int) -> list[str]:
+    """Record which episodes reference each asset (the 引用任务 column)."""
+    data = load_library(workspace)
+    touched = []
+    for asset_id in sorted(set(asset_ids)):
+        entry = data["assets"].get(asset_id)
+        if not entry:
+            continue
+        used = list(entry.get("used_by_episodes") or [])
+        if episode_id not in used:
+            used.append(episode_id)
+            entry["used_by_episodes"] = sorted(used)
+            touched.append(asset_id)
+    if touched:
+        atomic_json(library_root(workspace) / LIBRARY, data)
+    return touched
+
+
+def check_library(workspace: Path) -> list[dict]:
+    """Re-verify every registered asset and persist the 有效性 result."""
+    data = load_library(workspace)
+    report = []
+    changed = False
+    for asset_id, entry in sorted(data["assets"].items()):
+        try:
+            verify_entry(workspace, asset_id, entry)
+            status, reason = "valid", ""
+        except AssetError as exc:
+            status, reason = "invalid", str(exc)
+        if (entry.get("valid") is not False) != (status == "valid"):
+            entry["valid"] = status == "valid"
+            entry["invalid_reason"] = reason
+            changed = True
+        report.append({"id": asset_id, "status": status, "reason": reason,
+                       "used_by_episodes": entry.get("used_by_episodes") or []})
+    if changed:
+        atomic_json(library_root(workspace) / LIBRARY, data)
+    return report
 
 
 def stage_for_render(workspace: Path, asset_id: str, destination: Path) -> str:

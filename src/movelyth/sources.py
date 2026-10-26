@@ -27,7 +27,6 @@ FAILURE_TTL = timedelta(hours=6)
 ALLOWED_MIME = {"text/html", "text/plain", "application/xhtml+xml", "application/xml", "text/xml"}
 BLOCKED_HOSTNAMES = {"localhost", "metadata.google.internal", "metadata.azure.internal"}
 BLOCKED_SUFFIXES = (".localhost", ".local", ".internal", ".home.arpa", ".lan")
-ALLOWED_ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".mp4", ".json", ".csv"}
 
 
 class BlockedSource(ValueError):
@@ -230,19 +229,3 @@ def collect_sources(sources: list[dict], directory: Path, *, resolver=None, open
         atomic_json(cached, item)
         result.append(item)
     return result
-
-
-def safe_local_asset(base: Path, candidate: str | Path) -> Path:
-    """Only files inside the controlled directory, without traversal or symlink escape."""
-    base = base.resolve()
-    raw = Path(candidate)
-    if raw.is_absolute():
-        raise BlockedSource("素材路径必须是受控目录内的相对路径")
-    resolved = (base / raw).resolve()
-    if not resolved.is_relative_to(base):
-        raise BlockedSource("素材路径逃逸出受控目录")
-    if resolved.suffix.lower() not in ALLOWED_ASSET_SUFFIXES:
-        raise BlockedSource(f"不支持的素材类型：{resolved.suffix}")
-    if not resolved.is_file():
-        raise BlockedSource("素材文件不存在")
-    return resolved
