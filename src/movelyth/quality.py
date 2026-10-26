@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import subprocess
 from pathlib import Path
@@ -10,6 +11,93 @@ from PIL import Image, ImageDraw
 
 from .media import ffmpeg, ffprobe
 from .util import run
+
+# Delivery loudness.  B站 normalises anything above -28 LUFS up to -14 LUFS and
+# 抖音 sits around -14 to -15, so matching the platform here avoids a second,
+# uncontrolled gain pass on upload.
+LOUDNESS_TARGET = {"integrated_lufs": -14.0, "true_peak_db": -1.5, "lra": 11.0}
+
+# Motion review.  Sampling at 4 fps keeps a 5-minute film cheap while still
+# resolving a frozen shot or a drift that lasts more than a second.
+MOTION_GRID = (8, 6)
+MOTION_SAMPLE_FPS = 4
+EDGE_THRESHOLD = 40
+CELL_CHANGE_PIXELS = 6
+FULL_FRAME_SHARE = 0.6
+FULL_FRAME_SECONDS = 2.0
+SCENE_BOUNDARY_GUARD = 0.6
+# A shot that holds one frozen frame for this long is reported; a scene that
+# animates, pauses, then animates again is normal (real cuts peak around 3–4 s).
+STILL_MIN_SECONDS = 5.0
+
+
+def measure_loudness(path: Path) -> dict:
+    """Pass one: measure the programme so pass two can normalise without guessing."""
+    target = LOUDNESS_TARGET
+    result = subprocess.run(
+        [ffmpeg(), "-hide_banner", "-nostats", "-i", str(path), "-af",
+         (f"loudnorm=I={target['integrated_lufs']}:TP={target['true_peak_db']}"
+          f":LRA={target['lra']}:print_format=json"), "-f", "null", "-"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900, check=False)
+    text = result.stderr
+    start, end = text.rfind("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        return {"status": "unavailable", "reason": "ffmpeg 没有返回响度测量结果"}
+    try:
+        measured = json.loads(text[start:end + 1])
+    except ValueError:
+        return {"status": "unavailable", "reason": "响度测量结果不是有效 JSON"}
+    return {"status": "measured",
+            **{key: measured.get(key) for key in
+               ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")}}
+
+
+def loudness_filter(measured: dict) -> str:
+    """Pass two filter.  Falls back to dynamic mode when the measurement is unusable."""
+    target = LOUDNESS_TARGET
+    base = (f"loudnorm=I={target['integrated_lufs']}:TP={target['true_peak_db']}"
+            f":LRA={target['lra']}")
+    keys = ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
+    try:
+        values = {key: float(measured[key]) for key in keys}
+    except (KeyError, TypeError, ValueError):
+        return f"{base},aresample=48000"
+    if not all(math.isfinite(value) for value in values.values()):
+        # A silent mix measures -inf; linear mode would divide by zero.
+        return f"{base},aresample=48000"
+    return (f"{base}:measured_I={values['input_i']}:measured_TP={values['input_tp']}"
+            f":measured_LRA={values['input_lra']}:measured_thresh={values['input_thresh']}"
+            f":offset={values['target_offset']}:linear=true,aresample=48000")
+
+
+def mux_with_loudness(video: Path, mix: Path, output: Path, *, log: Path | None = None) -> dict:
+    """Mux the render with the mix and hit the loudness target in two passes."""
+    measured = measure_loudness(mix)
+    run([ffmpeg(), "-y", "-v", "error", "-i", str(video), "-i", str(mix),
+         "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+         "-af", loudness_filter(measured), "-ar", "48000", "-c:a", "aac", "-b:a", "192k",
+         "-movflags", "+faststart", str(output)], timeout=900, log=log)
+    return {"target": dict(LOUDNESS_TARGET), "measurement": measured,
+            "mode": "linear" if "measured_I" in loudness_filter(measured) else "dynamic"}
+
+
+def _ebur128(path: Path) -> dict:
+    """Independent read-back of the delivered file, so the mux is not trusted blindly."""
+    result = subprocess.run([ffmpeg(), "-hide_banner", "-nostats", "-i", str(path),
+                             "-af", "ebur128=peak=true", "-f", "null", "-"],
+                            capture_output=True, text=True, encoding="utf-8", errors="replace",
+                            timeout=900, check=False)
+    text = result.stderr
+    tail = text[text.rfind("Summary:"):] if "Summary:" in text else ""
+
+    def number(pattern: str):
+        match = re.search(pattern, tail)
+        if not match or match.group(1) == "-inf":
+            return None
+        return float(match.group(1))
+
+    return {"integrated_lufs": number(r"I:\s+(-?[\d.]+|-inf)\s+LUFS"),
+            "true_peak_db": number(r"Peak:\s+(-?[\d.]+|-inf)\s+dBFS")}
 
 
 def duration_policy(config: dict, cut: str) -> dict:
@@ -23,7 +111,7 @@ def duration_policy(config: dict, cut: str) -> dict:
 
 
 def verify_video(path: Path, *, width: int, height: int, seconds: float, fps: int,
-                 policy: dict | None = None) -> dict:
+                 policy: dict | None = None, loudness_target: float | None = None) -> dict:
     """Decode the actual deliverable, inspect stream metadata, signal and temporal samples."""
     result = run([ffmpeg(), "-hide_banner", "-nostats", "-threads", "2", "-i", str(path),
                   "-map", "0:v:0", "-map", "0:a:0", "-af", "volumedetect", "-f", "null", "-"], timeout=600)
@@ -49,6 +137,13 @@ def verify_video(path: Path, *, width: int, height: int, seconds: float, fps: in
     }
     if policy:
         checks["requested_duration_range"] = policy["minimum_seconds"] <= actual_seconds <= policy["maximum_seconds"]
+    loudness = _ebur128(path)
+    if loudness_target is not None:
+        measured_lufs = loudness["integrated_lufs"]
+        checks["loudness_matches_target"] = (measured_lufs is not None
+                                             and abs(measured_lufs - loudness_target) <= 1.5)
+        checks["true_peak_below_ceiling"] = (loudness["true_peak_db"] is None
+                                             or loudness["true_peak_db"] <= -0.5)
     sample = subprocess.run([ffmpeg(), "-v", "error", "-threads", "2", "-i", str(path),
                              "-vf", "fps=1,scale=128:72,format=gray", "-an", "-f", "rawvideo", "-"],
                             capture_output=True, timeout=300, check=True)
@@ -65,7 +160,103 @@ def verify_video(path: Path, *, width: int, height: int, seconds: float, fps: in
                              "max_volume_db": float(peak[1]) if peak else None,
                              "meaning": "audible 只表示音轨非静音；不表示发音、语速或听感正确"},
             "mean_sample_motion": movement, "audio_listened": False,
+            "loudness": loudness, "loudness_target_lufs": loudness_target,
             "asr_checked": False, "full_motion_aesthetic_review": False}
+
+
+def _longest_run(values: list[bool]) -> int:
+    """Length of the longest consecutive run of True."""
+    best = current = 0
+    for value in values:
+        current = current + 1 if value else 0
+        best = max(best, current)
+    return best
+
+
+def motion_report(video: Path, scenes: list[dict], fps: int, *, portrait: bool) -> dict:
+    """Per-scene stillness and full-frame motion, measured on the encoded file.
+
+    A single average frame difference hides two different defects: a scene that
+    never moves (the picture is frozen while the voice talks) and a shot that
+    drifts or jitters as a whole (a zoom, a shake, sub-pixel wobble).  This samples
+    at :data:`MOTION_SAMPLE_FPS`, judges change only in grid cells that actually
+    hold content, and excludes scene fades, which legitimately move every cell.
+    """
+    width, height = (180, 320) if portrait else (320, 180)
+    gx, gy = MOTION_GRID
+    cell_w, cell_h = width // gx, height // gy
+    sample = subprocess.run([ffmpeg(), "-v", "error", "-threads", "2", "-i", str(video),
+                             "-vf", f"fps={MOTION_SAMPLE_FPS},scale={width}:{height},format=gray",
+                             "-an", "-f", "rawvideo", "-"],
+                            capture_output=True, timeout=600, check=True)
+    frame_bytes = width * height
+    count = len(sample.stdout) // frame_bytes
+    if count < 3:
+        return {"status": "unavailable", "reason": "成片帧数不足，未做运动分析",
+                "sample_fps": MOTION_SAMPLE_FPS}
+    frames = np.frombuffer(sample.stdout[:count * frame_bytes], dtype=np.uint8)
+    frames = frames.reshape(count, height, width)
+    # Trim to whole grid cells: 180 wide / 8 columns is 22.5, so the last column is dropped.
+    frames = frames[:, :cell_h * gy, :cell_w * gx]
+
+    spans, offset = [], 0
+    for scene in scenes:
+        length = max(1, int(scene["frames"]))
+        spans.append((scene["id"], offset / fps, (offset + length) / fps))
+        offset += length
+    boundaries = [start for _sid, start, _end in spans] + [spans[-1][2] if spans else 0.0]
+
+    def scene_at(seconds: float) -> str:
+        for scene_id, start, end in spans:
+            if start <= seconds < end:
+                return scene_id
+        return "-"
+
+    still, glob = [], []
+    previous = frames[0].astype(np.int16)
+    for index in range(1, count):
+        current = frames[index].astype(np.int16)
+        changed = (np.abs(current - previous) > EDGE_THRESHOLD).reshape(gy, cell_h, gx, cell_w)
+        changed = changed.sum(axis=(1, 3))
+        edges = ((np.abs(np.diff(previous, axis=1, append=previous[:, -1:])) > EDGE_THRESHOLD)
+                 | (np.abs(np.diff(previous, axis=0, append=previous[-1:, :])) > EDGE_THRESHOLD))
+        content = edges.reshape(gy, cell_h, gx, cell_w).sum(axis=(1, 3)) >= 40
+        still.append(not changed.any())
+        glob.append(float((changed[content] >= CELL_CHANGE_PIXELS).mean()) if content.sum() >= 6 else 0.0)
+        previous = current
+
+    runs, opened = [], None
+    for index, share in enumerate(glob):
+        seconds = (index + 1) / MOTION_SAMPLE_FPS
+        fading = any(abs(seconds - edge) <= SCENE_BOUNDARY_GUARD for edge in boundaries)
+        moving = share >= FULL_FRAME_SHARE and not fading
+        if moving and opened is None:
+            opened = index
+        elif not moving and opened is not None:
+            begin, finish = (opened + 1) / MOTION_SAMPLE_FPS, (index + 1) / MOTION_SAMPLE_FPS
+            if finish - begin >= FULL_FRAME_SECONDS:
+                runs.append({"from": round(begin, 2), "to": round(finish, 2), "scene": scene_at(begin)})
+            opened = None
+
+    per_scene, frozen = {}, []
+    for scene_id, start, end in spans:
+        first = max(0, int(round(start * MOTION_SAMPLE_FPS)))
+        last = min(len(still), int(round(end * MOTION_SAMPLE_FPS)))
+        segment = still[first:last]
+        if not segment:
+            continue
+        per_scene[scene_id] = round(sum(segment) / len(segment), 2)
+        longest = _longest_run(segment) / MOTION_SAMPLE_FPS
+        if longest >= STILL_MIN_SECONDS:
+            frozen.append({"scene": scene_id, "still_share": per_scene[scene_id],
+                           "longest_still_seconds": round(longest, 2)})
+
+    return {"status": "review" if runs else "ok", "sample_fps": MOTION_SAMPLE_FPS,
+            "grid": list(MOTION_GRID), "frames": count,
+            "still_share_by_scene": per_scene, "frozen_scenes": frozen,
+            "full_frame_runs": runs,
+            "note": "静帧占比是参考；frozen_scenes 只列连续静止 ≥5 秒的镜头，"
+                    "整帧运动通常是缩放/抖动，需人工确认是否设计意图"}
 
 
 def contact_sheet(stills: list[str], output: Path, *, portrait: bool):

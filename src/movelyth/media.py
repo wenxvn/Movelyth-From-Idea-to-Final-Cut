@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import math
 import os
-import re
 import shutil
 import time
 import wave
@@ -15,6 +14,7 @@ import imageio_ffmpeg
 import numpy as np
 from PIL import Image, ImageDraw
 
+from .textfit import caption_chunks
 from .util import atomic_json, file_hash, fingerprint, read_json, run
 
 SAMPLE_RATE = 24000
@@ -97,16 +97,33 @@ def voice(text: str, config: dict, cache: Path) -> tuple[np.ndarray, list[dict],
     raise RuntimeError(f"配音失败，已保留缓存；不会降级为无声视频：{type(error).__name__}: {error}") from error
 
 
-def captions(text: str, boundaries: list[dict], duration: float, max_chars: int) -> tuple[list[dict], str]:
-    parts = []
-    for clause in re.split(r"(?<=[，。！？；：,.!?;:])", text):
-        parts.extend(clause[i:i + max_chars] for i in range(0, len(clause), max_chars))
+def captions(text: str, boundaries: list[dict], duration: float, max_chars: int,
+             spoken: str | None = None, origin: list[int] | None = None) -> tuple[list[dict], str]:
+    """Time caption pages of *text* (what viewers read) against TTS word boundaries.
+
+    ``spoken`` is what the voice actually says, and ``origin`` maps each of its
+    characters back to an index in *text*.  A pronunciation replacement therefore
+    changes the audio without changing the caption on screen.
+    """
+    speech = text if spoken is None else spoken
+    source = list(range(len(speech))) if origin is None else origin
+    if len(source) != len(speech):
+        # A mismatched map would misplace every caption; fall back to display order.
+        speech, source = text, list(range(len(text)))
+    parts = caption_chunks(text, max_chars)
     positions, cursor = [], 0
     for boundary in boundaries:
-        start = text.find(boundary["text"], cursor)
-        if start >= 0:
-            positions.append((start, start + len(boundary["text"]), boundary["start"], boundary["end"]))
-            cursor = start + len(boundary["text"])
+        start = speech.find(boundary["text"], cursor)
+        if start < 0:
+            continue
+        end = start + len(boundary["text"])
+        cursor = end
+        last_index = min(end, len(source)) - 1
+        if last_index < start or last_index < 0:
+            continue
+        first = source[start] if start < len(source) else len(text)
+        last = source[last_index] + 1
+        positions.append((first, last, boundary["start"], boundary["end"]))
     pages, cursor = [], 0
     mode = "tts-word-boundaries" if positions else "estimated-character-timing"
     for part in parts:
@@ -172,15 +189,36 @@ def soundtrack(voice_track: np.ndarray, scene_starts: list[float], style: str = 
     return np.stack([voice_track * 0.85 + bed, voice_track * 0.85 + bed * 0.93], axis=1)
 
 
-def speech_text(text: str, replacements: dict | None = None) -> str:
-    """Optional, explicit pronunciation mapping applied to TTS *and* captions.
+def speech_plan(narration: str, replacements: dict | None = None) -> tuple[str, list[int]]:
+    """Text to speak plus a map from each spoken character back to the narration.
 
-    Defaults to no change so captions always match the written narration.
+    ``speech_replace`` exists to fix how TTS reads a symbol (「熵」→「商」).  The
+    caption must keep showing the written word, so audio text and display text are
+    kept apart and :func:`captions` maps one onto the other.  Without replacements
+    the mapping is the identity.
     """
-    for source, target in (replacements or {}).items():
-        if isinstance(source, str) and isinstance(target, str) and source:
-            text = text.replace(source, target)
-    return text
+    pairs = [(source, target) for source, target in (replacements or {}).items()
+             if isinstance(source, str) and source and isinstance(target, str)]
+    if not pairs:
+        return narration, list(range(len(narration)))
+    # Longest source first so 「行列式」 wins over 「行」.
+    pairs.sort(key=lambda item: len(item[0]), reverse=True)
+    spoken: list[str] = []
+    origin: list[int] = []
+    index = 0
+    while index < len(narration):
+        for source, target in pairs:
+            if narration.startswith(source, index):
+                for offset in range(len(target)):
+                    spoken.append(target[offset])
+                    origin.append(index + min(offset, len(source) - 1))
+                index += len(source)
+                break
+        else:
+            spoken.append(narration[index])
+            origin.append(index)
+            index += 1
+    return "".join(spoken), origin
 
 
 def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait: bool) -> tuple[dict, list[Path]]:
@@ -193,7 +231,7 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
     chunks, starts, paths, scenes, cursor = [], [], [], [], 0
     for raw in cut["scenes"]:
         scene = Scene.model_validate(raw)
-        spoken = speech_text(scene.narration, replacements)
+        spoken, origin = speech_plan(scene.narration, replacements)
         audio, boundaries, generated = voice(spoken, config, cache)
         paths.extend(generated)
         lead = 0.25
@@ -203,7 +241,9 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
         chunk = np.zeros(samples, dtype=np.float32)
         begin = round(lead * SAMPLE_RATE)
         chunk[begin:begin + len(audio)] = audio
-        pages, timing = captions(spoken, boundaries, seconds, 16 if portrait else 25)
+        # The caption shows the written narration; only the voice uses the replacement.
+        pages, timing = captions(scene.narration, boundaries, seconds,
+                                 16 if portrait else 25, spoken=spoken, origin=origin)
         for page in pages:
             page["start"] += lead
             page["end"] += lead

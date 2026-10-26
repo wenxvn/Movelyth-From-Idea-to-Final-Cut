@@ -23,6 +23,7 @@ from .models import (
     Scene,
     VisualKind,
 )
+from .textfit import typography_issues, wrap
 
 MIN_ACTION_FRACTION = 0.02
 
@@ -339,6 +340,12 @@ def layout_warnings(scene: Scene, *, vertical: bool) -> list[str]:
             warnings.append(f"镜头 {scene.id} 的 {layer.id} 节点与步骤列表可能重叠，建议节点 y ≤ 420")
         if layer.type == "chart" and any(len(s.values) > 24 for s in layer.series):
             warnings.append(f"镜头 {scene.id} 的 {layer.id} 数据点超过 24 个，标注会拥挤")
+        if layer.type == "text" and layer.text:
+            # Estimate the same breaks the renderer will make and report what a viewer notices.
+            base, _minimum = layer_font(layer)
+            per_line = max(1, int(box["w"] / (base * 1.02)))
+            for issue in typography_issues(wrap(layer.text, per_line), per_line):
+                warnings.append(f"镜头 {scene.id} 的 {layer.id} 中文排版：{issue}")
     for action in scene.actions:
         if action.kind == "morph":
             warnings.append(f"镜头 {scene.id} 的 morph 以淡入实现，不是真正的形状插值")

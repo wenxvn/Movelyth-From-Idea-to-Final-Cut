@@ -21,7 +21,17 @@ from .media import ffmpeg, image_layers, prepare_cut
 from .metrics import Metrics
 from .models import SCHEMA_VERSION, Cut, Film, Research, Review, TopicPlan
 from .publish import audit_summary, credits, publishing_copy
-from .quality import contact_sheet, duration_policy, encoded_stills, srt, validate_script, verify_video
+from .quality import (
+    LOUDNESS_TARGET,
+    contact_sheet,
+    duration_policy,
+    encoded_stills,
+    motion_report,
+    mux_with_loudness,
+    srt,
+    validate_script,
+    verify_video,
+)
 from .scenedsl import resolve_data_layers, validate_cut_timeline
 from .util import atomic_json, file_hash, fingerprint, now, read_json, run
 
@@ -529,19 +539,22 @@ class Studio:
                              render_action)
 
         def check_action():
-            reports, audio_reports, outputs, images = {}, {}, [], []
+            reports, audio_reports, motion_reports, outputs, images = {}, {}, {}, [], []
             for name in ["long", "short"]:
                 video = job / "renders" / name / "final.mp4"
-                run([ffmpeg(), "-y", "-v", "error", "-i", renders[name]["video"], "-i", timelines[name]["mix"],
-                     "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", "loudnorm=I=-16:TP=-2:LRA=11",
-                     "-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(video)],
-                    timeout=600, log=job / f"mux-{name}.log")
+                # Two passes: measure the mix, then normalise linearly to the platform target.
+                mux_with_loudness(Path(renders[name]["video"]), Path(timelines[name]["mix"]), video,
+                                  log=job / f"mux-{name}.log")
                 reports[name] = verify_video(video, width=renders[name]["width"], height=renders[name]["height"],
                                               fps=config["fps"], seconds=timelines[name]["seconds"],
-                                              policy=duration_policy(config, name))
+                                              policy=duration_policy(config, name),
+                                              loudness_target=LOUDNESS_TARGET["integrated_lufs"])
                 if not reports[name]["passed"]:
                     atomic_json(job / "quality-failed.json", reports)
                     raise RuntimeError(f"{name} 成片检查未通过：{reports[name]['checks']}")
+                motion_reports[name] = motion_report(video, timelines[name]["scenes"], config["fps"],
+                                                     portrait=name == "short")
+                reports[name]["motion"] = motion_reports[name]
                 audio_reports[name] = audio_qc(Path(timelines[name]["voice"]), Path(timelines[name]["mix"]),
                                                "".join(scene["narration"] for scene in timelines[name]["scenes"]),
                                                config=config)

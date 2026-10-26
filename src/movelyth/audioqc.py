@@ -173,12 +173,47 @@ def ducking_report(voice: Path, mix: Path) -> dict:
             "note": "混音/原声能量比，高于 1.6 提示配乐可能盖住人声；不能替代实听"}
 
 
+def key_term_report(script: str, transcript: dict, terms: list[str]) -> dict:
+    """Check that terms whose misreading changes the meaning survived ASR.
+
+    Each entry lists accepted spellings separated by ``|`` (``"Qwen|千问"``), so a
+    correct reading spelled differently is not reported as lost.  A lost term is a
+    review signal, not a hard failure: a small ASR model mis-hears terms that were
+    spoken correctly, and the report says so.
+    """
+    cleaned = [str(term).strip() for term in terms if str(term).strip()]
+    if not cleaned:
+        return {"status": "not-configured", "checked": [], "lost": [], "found": [],
+                "note": "未配置 key_terms；关键术语没有单独检查"}
+    if transcript.get("status") != "completed" or not transcript.get("text"):
+        return {"status": "not-run", "checked": cleaned, "lost": [], "found": [],
+                "reason": "没有可用的 ASR 文本，无法核对术语"}
+    heard = normalize(transcript["text"])
+    written = normalize(script)
+    found, lost = [], []
+    for term in cleaned:
+        variants = [normalize(part) for part in term.split("|") if normalize(part)]
+        if not variants:
+            continue
+        # A term missing from the script is a configuration issue, not a TTS defect.
+        if not any(variant in written for variant in variants):
+            lost.append({"term": term, "reason": "旁白里没有出现该术语，配置可能已过期"})
+        elif any(variant in heard for variant in variants):
+            found.append(term)
+        else:
+            lost.append({"term": term, "reason": "ASR 转写里没有找到该术语或其可接受写法"})
+    return {"status": "ok" if not lost else "review", "checked": cleaned,
+            "found": found, "lost": lost,
+            "limitations": ["术语核对依赖 ASR；未通过只说明需要复听，不等于配音读错"]}
+
+
 def audio_qc(voice: Path, mix: Path, script: str, *, config: dict) -> dict:
     asr = transcribe(voice, enabled=bool(config.get("asr_enabled", False)),
                      model_size=str(config.get("asr_model", "small")))
     return {
         "asr": asr,
         "transcript_check": compare_transcript(script, asr),
+        "key_terms": key_term_report(script, asr, config.get("key_terms") or []),
         "silence": silence_report(mix),
         "ducking": ducking_report(voice, mix),
         "listened_by_human": False,

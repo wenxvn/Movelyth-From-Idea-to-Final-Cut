@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from movelyth.ledger import BusyError, Ledger
-from movelyth.media import captions, image_layers, soundtrack
+from movelyth.media import captions, image_layers, soundtrack, speech_plan
 from movelyth.models import Film, Scene, strict_schema
 from movelyth.pipeline import Studio, intent_key, manifest_valid, safe_title
 from movelyth.quality import srt
@@ -148,6 +148,32 @@ def test_captions_use_real_word_offsets_and_srt_bounds():
     cut = {"scenes": [{"frames": 90, "captions": pages}, {"frames": 90, "captions": pages}]}
     result = srt(cut, 30)
     assert "00:00:03,200" in result
+
+
+def test_pronunciation_replacement_changes_the_voice_but_not_the_caption():
+    narration = "这里用熵来度量不确定性。"
+    spoken, origin = speech_plan(narration, {"熵": "商"})
+    assert spoken == "这里用商来度量不确定性。"
+    assert len(origin) == len(spoken)
+    words = [{"start": 0.1, "end": 0.5, "text": "这里用商来度量"},
+             {"start": 0.6, "end": 1.2, "text": "不确定性。"}]
+    pages, mode = captions(narration, words, 1.6, 12, spoken=spoken, origin=origin)
+    shown = "".join(page["text"] for page in pages)
+    assert mode == "tts-word-boundaries"
+    assert "熵" in shown and "商" not in shown
+    assert pages[0]["start"] == 0.1
+
+
+def test_replacement_that_changes_length_still_times_the_caption():
+    narration = "用 det 表示行列式。"
+    spoken, origin = speech_plan(narration, {"det": "determinant"})
+    assert spoken == "用 determinant 表示行列式。"
+    assert len(origin) == len(spoken)
+    words = [{"start": 0.1, "end": 0.8, "text": "用 determinant 表示"},
+             {"start": 0.9, "end": 1.4, "text": "行列式。"}]
+    pages, mode = captions(narration, words, 1.8, 12, spoken=spoken, origin=origin)
+    assert mode == "tts-word-boundaries"
+    assert "det" in "".join(page["text"] for page in pages)
 
 
 def test_missing_feedback_remains_unknown(studio):

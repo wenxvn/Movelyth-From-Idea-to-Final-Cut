@@ -94,6 +94,16 @@ def offline_pipeline(tmp_path, monkeypatch):
         "passed": True, "checks": {"full_decode": True}, "duration": 60.0, "width": 1920, "height": 1080,
         "fps": 30.0, "mean_sample_motion": 1.0, "audio_listened": False, "asr_checked": False,
         "full_motion_aesthetic_review": False})
+    def fake_mux(video, mix, output, log=None):
+        Path(output).parent.mkdir(parents=True, exist_ok=True)
+        Path(output).write_bytes(b"muxed")
+        return {"target": {"integrated_lufs": -14.0}, "measurement": {"status": "measured"}, "mode": "linear"}
+
+    monkeypatch.setattr("movelyth.pipeline.mux_with_loudness", fake_mux)
+    monkeypatch.setattr("movelyth.pipeline.motion_report",
+                        lambda video, scenes, fps, portrait=False: {
+                            "status": "ok", "sample_fps": 4, "grid": [8, 6], "frames": 240,
+                            "still_share_by_scene": {}, "frozen_scenes": [], "full_frame_runs": []})
     def fake_stills(video, cut, fps, directory, portrait):
         directory.mkdir(parents=True, exist_ok=True)
         result = []

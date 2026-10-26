@@ -4,6 +4,7 @@ from movelyth.audioqc import (
     asr_status,
     compare_transcript,
     ducking_report,
+    key_term_report,
     silence_report,
     transcribe,
 )
@@ -68,3 +69,20 @@ def test_music_that_buries_the_voice_is_flagged(tmp_path):
 def test_ducking_reports_unavailable_instead_of_pretending(tmp_path):
     report = ducking_report(tmp_path / "missing.wav", tmp_path / "missing-mix.wav")
     assert report["status"] == "unavailable"
+
+
+def test_key_terms_accept_an_alternate_spelling_and_flag_a_real_loss():
+    transcript = {"status": "completed", "text": "我们用千问模型做实验"}
+    kept = key_term_report("我们用千问模型做实验", transcript, ["Qwen|千问"])
+    assert kept["status"] == "ok" and kept["found"] == ["Qwen|千问"]
+    lost = key_term_report("这里用熵来度量不确定性", transcript, ["熵|熵值"])
+    assert lost["status"] == "review"
+    assert lost["lost"][0]["term"] == "熵|熵值"
+    stale = key_term_report("我们用千问模型做实验", transcript, ["行列式"])
+    assert stale["status"] == "review" and "配置可能已过期" in stale["lost"][0]["reason"]
+
+
+def test_key_terms_are_not_checked_without_asr():
+    report = key_term_report("这里用熵来度量", {"status": "disabled"}, ["熵"])
+    assert report["status"] == "not-run" and report["lost"] == []
+    assert key_term_report("任意", {"status": "completed", "text": "任意"}, [])["status"] == "not-configured"

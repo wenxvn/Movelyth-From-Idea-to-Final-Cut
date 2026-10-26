@@ -51,12 +51,35 @@ def audit_summary(quality: dict, *, episode: str, schema_version: int) -> str:
              "- 机器检查："]
     for cut, report in technical.items():
         failed = [name for name, ok in (report.get("checks") or {}).items() if not ok]
-        lines.append(f"  - {cut}：{'全部通过' if not failed else '未通过 ' + ', '.join(failed)}")
+        loud = report.get("loudness") or {}
+        lufs, peak = loud.get("integrated_lufs"), loud.get("true_peak_db")
+        if lufs is None:
+            measured = "响度未测"
+        elif peak is None:
+            measured = f"{lufs:.1f} LUFS"
+        else:
+            measured = f"{lufs:.1f} LUFS / 峰值 {peak:.1f} dBTP"
+        lines.append(f"  - {cut}：{'全部通过' if not failed else '未通过 ' + ', '.join(failed)}；{measured}")
+        motion = report.get("motion") or {}
+        if not motion:
+            lines.append("    - 运动分析：未执行")
+        elif motion.get("status") == "unavailable":
+            lines.append(f"    - 运动分析：未执行（{motion.get('reason')}）")
+        else:
+            frozen = len(motion.get("frozen_scenes") or [])
+            runs = len(motion.get("full_frame_runs") or [])
+            detail = (f"连续静止 ≥5 秒的镜头 {frozen} 个" if frozen
+                      else "无连续静止 ≥5 秒的镜头")
+            if runs:
+                detail += f"，整帧运动 {runs} 段（需人工确认是否为设计意图）"
+            lines.append(f"    - 运动分析：{detail}")
     lines.append("- 音频机器检查：")
     for cut, report in audio.items():
+        terms = report.get("key_terms") or {}
         lines.append(f"  - {cut}：ASR {report.get('asr', {}).get('status')}、"
                      f"长静音 {report.get('silence', {}).get('status')}、"
-                     f"混音/原声 {report.get('ducking', {}).get('status')}")
+                     f"混音/原声 {report.get('ducking', {}).get('status')}、"
+                     f"关键术语 {terms.get('status')}")
     human = quality.get("human_review") or {}
     lines.extend([
         "- 人工验证：",

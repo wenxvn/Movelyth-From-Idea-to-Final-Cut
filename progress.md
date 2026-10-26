@@ -3,6 +3,28 @@
 按时间倒序。任务级状态见 [docs/v1-execution.md](docs/v1-execution.md)，
 证据见 [docs/verification.md](docs/verification.md)，结论见 [docs/v1-report.md](docs/v1-report.md)。
 
+## 2026-10-26 · 借鉴 references 的四项质检与排版改进
+
+- 参考 `references/lunamos-paper2video` 的 `verify.py`、`finalize.sh`、`text_check.py` 与
+  `reference/visual-style.md`，补四处 Movelyth 原本的空白，未整库接入。
+- **两遍响度**：`mux_with_loudness` 先测量混音，再用 `measured_I/TP/LRA/thresh/offset` 线性归一
+  到 -14 LUFS / -1.5 dBTP（原为单遍 -16 LUFS），交付后用 `ebur128` 独立复核；
+  纯静音测量为 `-inf` 时退回动态模式。实测 -41.8 LUFS 的混音输出 -14.0 LUFS。
+- **逐镜运动**：`motion_report` 以 4 fps、8×6 网格只统计"有内容格子"的变化，输出每镜静帧占比
+  与整帧漂移段（≥2 秒，排除场景淡入淡出）；连续静止 ≥5 秒的镜头单列。原实现只有全片平均帧差，
+  单镜静止或整屏抖动都会漏过。三份真实成片回测：整帧漂移零误报，最长连续静帧 3.8 秒。
+- **发音与字幕分离**：`speech_plan` 生成配音文本并记录字符来源，`captions` 按来源映射时间；
+  `speech_replace` 只改配音，字幕显示原文。原实现会把"熵→商"直接写进字幕。
+- **中文排版**：新增 `textfit.py`（标点优先断行、不拆拉丁词与数字单位、避头尾、避免孤行），
+  字幕分页改用它，不再硬切出两字残页；`layout_warnings` 报告估算断行里的排版问题。
+- **术语核对**：`key_terms`（如 `"Qwen|千问"`）在 ASR 转写中查找，缺失记为待复听；
+  未开 ASR 时明确写未检查，不影响制作。
+- 交付审计新增实测响度、运动分析与术语状态三行。测试 125 项通过（新增 14 项），
+  Ruff 与真实渲染 smoke 通过。
+- 真实数据验证：VID-000004 重放 `check_action` 全通过（-14.4 LUFS，13 项检查）；
+  326 个真实 TTS 边界用例零失败；真实 edge-tts 验证替换只改配音、字幕保原文。
+  未跑新的真实标题驱动成片，`key_terms` 在真实 ASR 开启时未验证。
+
 ## 2026-10-26 · 收尾与精简
 
 - 三个真实题材全部通过：VID-000002（矩阵，242.6 s / 64.8 s）、VID-000003（网络消息，

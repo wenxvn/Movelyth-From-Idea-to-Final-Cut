@@ -1,5 +1,38 @@
 # 验证记录
 
+## 2026-10-26 · 借鉴 references 的质检与排版改进
+
+改动：两遍响度归一（-14 LUFS / -1.5 dBTP）、逐镜运动分析、发音与字幕分离、
+`textfit.py` 中文断行与字幕分页、`key_terms` 术语核对。
+
+```text
+pytest -q                            → 125 passed（含 1 项真实渲染 slow 测试）
+pytest -q -m "not slow"              → 124 passed, 1 deselected
+pytest tests/test_render_smoke.py -q → 1 passed
+ruff check src tests                 → All checks passed
+npm --prefix studio run typecheck    → 通过
+```
+
+新增 14 项测试：断行/禁则/孤行/拉丁词不拆、字幕页不产生两字残页、发音替换后字幕仍显示原文
+（含替换长度变化）、`key_terms` 接受别名/标记丢失/未开 ASR 时不检查、两遍响度实测达标、
+静音混音退回动态模式、静帧检测与整帧漂移检测（真实 ffmpeg 编码文件）。
+
+### 真实数据验证
+
+- **真实成片重放**（`workspace/VID-000004` 的 silent 渲染 + 混音，重跑 `check_action` 的全部新代码）：
+  横竖版 13 项技术检查全通过，响度 **-14.4 LUFS / -1.1 与 -1.3 dBTP**，运动分析 `ok`、
+  无静帧误报，交付审计文本正确生成。旧实现为 -16.8 / -16.9 LUFS。
+- **326 个真实 TTS 边界用例**（`workspace/voice-cache` 下全部 `timing.json`）：字幕全部走
+  `tts-word-boundaries`，页时间单调、不越界，零失败。
+- **真实 TTS 端到端**（联网 edge-tts，`speech_replace = {"熵": "商", "行列式": "hang lie shi"}`）：
+  配音实际读作「商」「hang lie shi」，字幕仍显示「熵」「行列式」，两页时间 0.10–1.94 / 2.24–4.54 s，
+  模式为真实词语边界而非估算。旧实现会把替换文本直接写进字幕。
+- **真实 film.json 离线校验**（`movelyth check`）：通过，0 errors、0 warnings。
+- 旧交付包未改动，`manifest_valid` 与 `delivery/` 下 4 条任务不受影响。
+
+未做的验证：新流程尚未跑一条完整的真实标题驱动成片（需要 Codex 调用与联网 TTS）；
+`key_terms` 在真实 ASR 开启时未验证（当前 `asr_enabled = false`，报告如实写 `not-run`）。
+
 ## 2026-10-26 · V1
 
 任务级说明见 [V1 执行记录](v1-execution.md)，跨题材结论见 [V1 验收](v1-evaluation.md)，

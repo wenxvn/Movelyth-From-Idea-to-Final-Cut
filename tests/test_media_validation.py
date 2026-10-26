@@ -1,5 +1,12 @@
 from movelyth.media import ffmpeg
-from movelyth.quality import encoded_stills, verify_video
+from movelyth.quality import (
+    encoded_stills,
+    loudness_filter,
+    measure_loudness,
+    motion_report,
+    mux_with_loudness,
+    verify_video,
+)
 from movelyth.util import run
 
 
@@ -54,3 +61,47 @@ def test_review_frames_are_sampled_after_scene_actions_finish():
     assert review_frame_fraction({"actions_resolved": [{"from": 0.76, "to": 1.0}]}) == 0.96
     late = review_frame_fraction({"actions_resolved": [{"from": 0.2, "to": 0.8}]})
     assert 0.8 < late <= 0.96
+
+
+def test_two_pass_loudness_reaches_the_platform_target(tmp_path):
+    video = tmp_path / "render.mp4"
+    create_media(video, sound=True)
+    mix = tmp_path / "mix.wav"
+    run([ffmpeg(), "-y", "-v", "error", "-i", str(video), "-vn", "-af", "volume=-20dB",
+         "-ac", "2", "-ar", "48000", str(mix)], timeout=60)
+    output = tmp_path / "final.mp4"
+    report = mux_with_loudness(video, mix, output)
+    assert report["mode"] == "linear"
+    checked = verify_video(output, width=320, height=180, fps=10, seconds=2, loudness_target=-14.0)
+    assert checked["checks"]["loudness_matches_target"], checked["loudness"]
+    assert checked["checks"]["true_peak_below_ceiling"], checked["loudness"]
+
+
+def test_a_silent_mix_falls_back_to_dynamic_normalisation(tmp_path):
+    mix = tmp_path / "silent.wav"
+    run([ffmpeg(), "-y", "-v", "error", "-f", "lavfi",
+         "-i", "anullsrc=sample_rate=48000:channel_layout=stereo", "-t", "1", str(mix)], timeout=30)
+    measured = measure_loudness(mix)
+    assert "measured_I" not in loudness_filter(measured)
+    assert "linear=true" not in loudness_filter(measured)
+
+
+def test_motion_report_finds_a_frozen_scene(tmp_path):
+    frozen = tmp_path / "frozen.mp4"
+    run([ffmpeg(), "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=#122531:s=320x180:r=10:d=6",
+         "-vf", "drawbox=x=100:y=60:w=80:h=60:color=white:t=fill", "-c:v", "libx264",
+         "-threads", "1", "-pix_fmt", "yuv420p", str(frozen)], timeout=60)
+    report = motion_report(frozen, [{"id": "s1", "frames": 60}], 10, portrait=False)
+    assert report["still_share_by_scene"]["s1"] == 1.0
+    assert report["frozen_scenes"][0]["scene"] == "s1"
+    assert report["full_frame_runs"] == []
+
+
+def test_motion_report_flags_a_whole_frame_drift(tmp_path):
+    moving = tmp_path / "moving.mp4"
+    run([ffmpeg(), "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=10:duration=6",
+         "-c:v", "libx264", "-threads", "1", "-pix_fmt", "yuv420p", str(moving)], timeout=60)
+    report = motion_report(moving, [{"id": "s1", "frames": 60}], 10, portrait=False)
+    assert report["status"] == "review"
+    assert report["full_frame_runs"]
+    assert report["still_share_by_scene"]["s1"] < 0.2

@@ -15,11 +15,16 @@ voice_rate = "+0%"
 max_retries = 2
 # 长版与短版分两次生成：一次输出整部 Film 容易触发 max_output_tokens。
 director_split = true
-# 可选：把公式符号映射成更适合 TTS 的读法。会同时用于配音与字幕，默认不替换。
+# 可选：把公式符号映射成更适合 TTS 的读法。只影响配音，字幕仍显示原文。
 speech_replace = {}
+# 可选：关键术语，用 | 分隔可接受写法（如 "Qwen|千问"、"熵|商"）。
+# 仅用于配音质检核对：ASR 转写里找不到时记为待复听，不影响制作。
+key_terms = []
 # 可选本地 ASR 质检（需自行安装 faster-whisper）。未安装时报告为未检查，不影响制作。
 asr_enabled = false
 asr_model = "small"
+# 交付响度：两遍 loudnorm 到 -14 LUFS / -1.5 dBTP。
+# B站会把高于 -28 LUFS 的音频归一到 -14 LUFS，抖音约 -14~-15，交付即对齐可避免二次增益。
 
 [agents]
 provider = "codex"
