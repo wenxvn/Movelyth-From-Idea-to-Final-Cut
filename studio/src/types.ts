@@ -7,6 +7,9 @@ export type ActionKind = 'appear' | 'fade' | 'move' | 'scale' | 'rotate' | 'high
 export type ShapeKind = 'point' | 'line' | 'rect' | 'circle' | 'arrow' | 'polygon' | 'bracket';
 export type ChartKind = 'line' | 'bar' | 'scatter';
 export type StyleName = 'minimal' | 'tech' | 'documentary';
+export type TransitionKind = 'cut' | 'fade' | 'slide' | 'wipe' | 'dip' | 'zoom';
+export type CameraKind = 'none' | 'push' | 'pull' | 'pan_left' | 'pan_right';
+export type CueKind = 'whoosh' | 'tick' | 'impact' | 'riser' | 'chime';
 
 export type Series = {label: string; values: number[]; unit: string; x_values: number[]};
 export type DiagramNode = {id: string; label: string; x: number; y: number};
@@ -45,8 +48,11 @@ export type ResolvedAction = {
   degrees: number;
 };
 
-export type Caption = {start: number; end: number; text: string};
+/** One real TTS word boundary inside a caption page, for karaoke highlighting. */
+export type CaptionWord = {text: string; start: number; end: number};
+export type Caption = {start: number; end: number; text: string; words?: CaptionWord[]};
 export type BeatTime = {at: number; fraction: number; purpose: string};
+export type SoundCue = {at: number; kind: CueKind; gain: number};
 
 export type Scene = {
   id: string;
@@ -69,6 +75,10 @@ export type Scene = {
   caption_timing: string;
   layout_warnings: string[];
   duration: number;
+  transition?: TransitionKind;
+  camera?: CameraKind;
+  emphasis?: string[];
+  cues_resolved?: SoundCue[];
 };
 
 export type MovieProps = {

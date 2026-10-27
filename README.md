@@ -10,6 +10,12 @@ From Idea to Final Cut.
 配乐与音效为本地程序合成。V1 增加了**可组合的 Scene DSL**、按真实配音驱动的节拍、
 低成本预览、按镜头局部修改、音频质检与来源抓取安全边界。
 
+V2 把重心从"能自动出片"移到"像专业团队做的片"：重做构图栅格与字阶、图表刻度与曲线、
+五类镜头转场、逐词高亮字幕；配音改为**按句合成**（句级语速/音高、真实句间停顿），
+配乐改为**分段编排**并按人声做带 lookahead 的侧链压低，新增**与画面同源的本地合成音效**。
+新增的镜头字段（`transition`/`camera`/`emphasis`/`cues`）都有默认值，V1 已审脚本可原样渲染。
+方案与实测见 [docs/v2-plan.md](docs/v2-plan.md)、[docs/v2-evaluation.md](docs/v2-evaluation.md)。
+
 ```text
 标题 (+ 可选 brief) → 研究 Agent（主张—证据映射）→ 编导 Agent（Scene DSL 多图层分镜）
      → 独立脚本审稿（结构化 findings）→ 受控 DSL 校验

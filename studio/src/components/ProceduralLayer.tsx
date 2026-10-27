@@ -2,18 +2,85 @@
 import {Img, staticFile} from 'remotion';
 import type {Layer, Scene} from '../types';
 import {accent, clamp, ease} from '../theme';
+import type {Box} from '../Stage';
 
 const px = (x: number) => 500 + x * 95;
 const py = (y: number) => 320 - y * 95;
 
+/**
+ * Width of the drawing when the region is much wider than the 1000×640 canvas.
+ *
+ * A procedural drawing scaled to the region height leaves a large empty band on
+ * both sides of a full-width "immersive" frame.  Filling the width entirely would
+ * crop the drawing's labels, so it is enlarged by at most 1.4× and centred: the
+ * content reads bigger and the crop stays inside the empty margins.
+ */
+const svgWidth = (box?: Box): string => {
+  if (!box || box.h <= 0) return '100%';
+  const natural = (box.h * 1000) / 640;
+  const target = Math.min(box.w, natural * 1.4);
+  return `${Math.max(natural, target)}px`;
+};
+
 /** The original seven procedural animations, now one layer type among others. */
 export const ProceduralLayer: React.FC<{
   layer: Layer; scene: Scene; time: number; progress: number; reveal: number; layers: string[];
-}> = ({layer, scene, time, progress, reveal, layers}) => {
+  box?: Box;
+}> = ({layer, scene, time, progress, reveal, layers, box}) => {
   const kind = layer.procedural || scene.visual;
   const color = accent[layer.color] || '#68e5ed';
   const p = ease(progress);
   const textStyle = {fill: '#e9eedf', fontFamily: 'inherit', fontSize: 34};
+
+  /**
+   * A vector or projection drawn from real coefficients can occupy a tiny corner of
+   * the 1000×640 canvas (a unit vector is 95 px).  Fitting the viewBox to the
+   * content keeps the arrow readable at any scale without changing the data.
+   */
+  const zoomedViewBox = (points: [number, number][], pad = 150): string => {
+    const xs = points.map(([x]) => x);
+    const ys = points.map(([, y]) => y);
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    const spanY = Math.max(...ys) - Math.min(...ys);
+    // Padding proportional to the drawing: a fixed 150 px margin around a 140 px
+    // vector left it looking like a dot in the middle of the frame.
+    const margin = Math.min(pad, Math.max(46, Math.max(spanX, spanY) * 0.55));
+    const minX = Math.min(...xs) - margin;
+    const maxX = Math.max(...xs) + margin;
+    const minY = Math.min(...ys) - margin;
+    const maxY = Math.max(...ys) + margin;
+    const aspect = box && box.h > 0 ? Math.max(0.9, Math.min(2.6, box.w / box.h)) : 1000 / 640;
+    let w = Math.max(240, maxX - minX);
+    let h = Math.max(170, maxY - minY);
+    if (w / h > aspect) h = w / aspect;
+    else w = h * aspect;
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    return `${cx - w / 2} ${cy - h / 2} ${w} ${h}`;
+  };
+
+  const vectorValues = layer.series[0]?.values;
+  const directionValues = layer.series[1]?.values;
+  let viewBox = '0 0 1000 640';
+  if (kind === 'vectors' && vectorValues && vectorValues.length >= 2) {
+    const [a, b] = vectorValues;
+    viewBox = zoomedViewBox([[px(0), py(0)], [px(a), py(0)], [px(a), py(b)]], 150);
+  } else if (kind === 'projection' && vectorValues && vectorValues.length >= 2) {
+    const [x, y] = vectorValues;
+    const ux = directionValues && directionValues.length >= 2 ? directionValues[0] : 1;
+    const uy = directionValues && directionValues.length >= 2 ? directionValues[1] : 0.5;
+    const factor = (x * ux + y * uy) / (ux * ux + uy * uy);
+    viewBox = zoomedViewBox([[px(0), py(0)], [px(x), py(y)], [px(factor * ux), py(factor * uy)]], 160);
+  }
+  // Caption anchor: the top-left corner of the *visible* area, so a zoomed-in
+  // vector keeps its formula on screen instead of cropping it away.
+  const [vbX, vbY, vbW] = viewBox.split(' ').map(Number);
+  const captionX = vbX + vbW * 0.04;
+  const captionY = vbY + vbW * 0.06;
+  const captionSize = Math.max(26, Math.min(40, vbW * 0.034));
+  // The clip is 1000×640; the halo and the crosshair are part of the original
+  // composition and look wrong when they are scaled to a zoomed vector.
+  const zoomed = kind === 'vectors' || kind === 'projection';
   if (kind === 'image_layers' && layers.length) {
     const phase = clamp(progress) * (layers.length - 1);
     const current = Math.min(layers.length - 1, Math.floor(phase));
@@ -67,7 +134,7 @@ export const ProceduralLayer: React.FC<{
       <line x1={px(a)} y1="320" x2={px(a)} y2={py(b)} stroke="#ff8e80" strokeWidth="8"/>
       <line x1="500" y1="320" x2={px(a)} y2={py(b)} stroke={color} strokeWidth="7" markerEnd="url(#arrow)"/>
       <circle cx={px(a)} cy={py(b)} r="13" fill={color}/>
-      <text x="50" y="70" style={textStyle}>v = {a.toFixed(2)} e₁ + {b.toFixed(2)} e₂</text>
+      <text x={captionX} y={captionY} style={{...textStyle, fontSize: captionSize}}>v = {a.toFixed(2)} e₁ + {b.toFixed(2)} e₂</text>
       <text x={px(a / 2) - 30} y="360" style={{...textStyle, fill: '#ffc976'}}>{a.toFixed(1)} e₁</text>
       <text x={px(a) + 24} y={py(b / 2)} style={{...textStyle, fill: '#ff8e80'}}>{b.toFixed(1)} e₂</text>
     </>;
@@ -87,7 +154,7 @@ export const ProceduralLayer: React.FC<{
       <line x1="500" y1="320" x2={px(qx)} y2={py(qy)} stroke={color} strokeWidth="9"/>
       <circle cx={px(qx)} cy={py(qy)} r="11" fill={color}/>
       <circle cx={px(x)} cy={py(y)} r="11" fill="#ffc976"/>
-      <text x="45" y="80" style={textStyle}>projᵤ(v) = (v·u / u·u) u</text>
+      <text x={captionX} y={captionY} style={{...textStyle, fontSize: captionSize}}>projᵤ(v) = (v·u / u·u) u</text>
       <text x={px(x) + 20} y={py(y) - 18} style={{...textStyle, fill: '#ffc976'}}>原向量</text>
       <text x={px(qx) + 16} y={py(qy) + 44} style={{...textStyle, fill: color}}>投影</text>
     </>;
@@ -129,16 +196,24 @@ export const ProceduralLayer: React.FC<{
       
     </>;
   }
-  return <svg viewBox="0 0 1000 640" width="100%" height="100%" style={{overflow: 'hidden'}}>
-    <defs>
-      <radialGradient id={`halo-${layer.id}`}><stop stopColor={color} stopOpacity="0.2"/><stop offset="1" stopColor={color} stopOpacity="0"/></radialGradient>
-      <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10" fill={color}/></marker>
-    </defs>
-    <ellipse cx="500" cy="320" rx="470" ry="310" fill={`url(#halo-${layer.id})`}/>
-    <line x1="35" y1="320" x2="965" y2="320" stroke="#e7e3d0" strokeOpacity="0.22"/>
-    <line x1="500" y1="20" x2="500" y2="620" stroke="#e7e3d0" strokeOpacity="0.22"/>
-    <g opacity={reveal}>{content}</g>
-  </svg>;
+  return <div style={{width: '100%', height: '100%', overflow: 'hidden', display: 'flex',
+    alignItems: 'center', justifyContent: 'center'}}>
+    {/* A zoomed drawing already matches the region's aspect ratio, so it fills the
+        box; the fixed-aspect drawings keep their natural width to avoid cropping. */}
+    <svg viewBox={viewBox} width={zoomed ? '100%' : svgWidth(box)} height="100%"
+      style={{flexShrink: 0}}>
+      <defs>
+        <radialGradient id={`halo-${layer.id}`}><stop stopColor={color} stopOpacity="0.2"/><stop offset="1" stopColor={color} stopOpacity="0"/></radialGradient>
+        <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10" fill={color}/></marker>
+      </defs>
+      {!zoomed && <>
+        <ellipse cx="500" cy="320" rx="470" ry="310" fill={`url(#halo-${layer.id})`}/>
+        <line x1="35" y1="320" x2="965" y2="320" stroke="#e7e3d0" strokeOpacity="0.22"/>
+        <line x1="500" y1="20" x2="500" y2="620" stroke="#e7e3d0" strokeOpacity="0.22"/>
+      </>}
+      <g opacity={reveal}>{content}</g>
+    </svg>
+  </div>;
 };
 
 

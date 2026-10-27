@@ -24,6 +24,7 @@ from .publish import audit_summary, credits, publishing_copy
 from .quality import (
     LOUDNESS_TARGET,
     ScriptIssues,
+    audio_design_report,
     contact_sheet,
     downgrade_axis_readings,
     duration_policy,
@@ -35,7 +36,7 @@ from .quality import (
     validate_script,
     verify_video,
 )
-from .scenedsl import resolve_data_layers, validate_cut_timeline
+from .scenedsl import pacing_report, resolve_data_layers, validate_cut_timeline
 from .util import atomic_json, file_hash, fingerprint, now, read_json, run
 
 MAX_BRIEF = 4000
@@ -126,11 +127,20 @@ RENDERER_CAPABILITIES = {
         "image_layers": "程序生成山水图，逐通道真实 SVD 的 1/4/12/32 阶重建",
         "orbit": "旋转矩阵变换的三维结点云，非物理模拟",
     },
-    "layouts": {"immersive": "全屏沉浸", "diagram": "图解讲解", "compare": "左右/上下对照"},
+    "layouts": {"immersive": "全屏沉浸（标题在上、主画面铺满整个宽度）", "diagram": "图解讲解（右侧主画面 + 左侧标题）",
+                "compare": "左右/上下对照"},
     "regions": ["main", "side", "top", "bottom", "annotation", "full"],
     "actions": ["appear", "fade", "move", "scale", "rotate", "highlight", "draw", "morph"],
     "time_reference": "start/end/0–1 小数/narration:旁白片段",
     "styles": ["minimal", "tech", "documentary"],
+    "scene_direction": {
+        "transition": ["cut", "fade", "slide", "wipe", "dip", "zoom"],
+        "camera": ["none", "push", "pull", "pan_left", "pan_right"],
+        "cues": {"kinds": ["whoosh", "tick", "impact", "riser", "chime"],
+                 "meaning": "本地程序合成的音效，落在真实配音时间轴上；impact 一集不超过 2 次"},
+        "emphasis": "1–3 个在 narration 里逐字出现的重点词；配音放慢、字幕高亮",
+    },
+    "pacing": "镜头时长要有快慢对比（8–14s / 18–28s / 10–16s），全片等长会被判为像幻灯片",
 }
 
 
@@ -610,7 +620,7 @@ class Studio:
                              render_action)
 
         def check_action():
-            reports, audio_reports, motion_reports, outputs, images = {}, {}, {}, [], []
+            reports, audio_reports, motion_reports, pacing, design, outputs, images = {}, {}, {}, {}, {}, [], []
             for name in ["long", "short"]:
                 video = job / "renders" / name / "final.mp4"
                 # Two passes: measure the mix, then normalise linearly to the platform target.
@@ -626,6 +636,10 @@ class Studio:
                 motion_reports[name] = motion_report(video, timelines[name]["scenes"], config["fps"],
                                                      portrait=name == "short")
                 reports[name]["motion"] = motion_reports[name]
+                pacing[name] = pacing_report(timelines[name], config["fps"])
+                design[name] = audio_design_report(timelines[name], Path(timelines[name]["mix"]))
+                reports[name]["pacing"] = pacing[name]
+                reports[name]["sound_design"] = design[name]
                 audio_reports[name] = audio_qc(Path(timelines[name]["voice"]), Path(timelines[name]["mix"]),
                                                "".join(scene["narration"] for scene in timelines[name]["scenes"]),
                                                config=config)
@@ -643,6 +657,7 @@ class Studio:
             visual_raw = provider.call("reviewer", {"stage": "visual", "film": film,
                                   "research": research_data, "source_evidence": evidence,
                                   "technical_reports": reports, "audio_reports": audio_reports,
+                                  "pacing": pacing, "sound_design": design,
                                   "duration_policy": {k: duration_policy(config, k) for k in ["long", "short"]},
                                   "image_order": ["long contact sheet", "short contact sheet"]},
                                   Review, job / "agents" / "visual-review", images=images)
@@ -659,6 +674,7 @@ class Studio:
                 raise VisualReviewError("实际画面审片未通过：" + "；".join(visual.issues))
             report = job / "quality.json"
             atomic_json(report, {"technical": reports, "audio": audio_reports,
+                                 "pacing": pacing, "sound_design": design,
                                  "script_review": read_json(job / "script-review.json"),
                                  "script_warnings": warnings,
                                  "visual_review": visual.model_dump(), "checked_at": now(),
@@ -678,6 +694,7 @@ class Studio:
 
         self.stage(episode, "check", {"implementation": file_hash(Path(__file__).with_name("quality.py")),
                    "audioqc": file_hash(Path(__file__).with_name("audioqc.py")),
+                   "media": file_hash(Path(__file__).with_name("media.py")),
                    "renders": renders, "timelines": timelines, "review_prompt": prompts["reviewer.md"]},
                    check_action)
         return self.deliver(episode, job, film, research_data, timelines, library_ids)
@@ -718,6 +735,10 @@ class Studio:
                 "end": round(offset + seconds, 2),
                 "layers": [{"id": layer["id"], "type": layer["type"], "region": layer["region"]}
                            for layer in scene["layers"]],
+                "transition": scene.get("transition", "fade"),
+                "camera": scene.get("camera", "push"),
+                "emphasis": scene.get("emphasis", []),
+                "cues": scene.get("cues_resolved", []),
                 "beats": scene.get("beat_times", []),
                 "actions": [{"target": item["target"], "kind": item["kind"],
                              "from": item["from"], "to": item["to"]}

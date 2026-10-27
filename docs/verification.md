@@ -1,5 +1,68 @@
 # 验证记录
 
+## 2026-10-27 · V2 工艺层（同一脚本的受控对照）
+
+```text
+pytest -q                            → 195 passed（含真实 Remotion 静帧 slow 测试）
+ruff check src tests                 → All checks passed
+npm --prefix studio run typecheck    → 通过（tsc --noEmit 无输出）
+movelyth check --film workspace/ab/film-004-v2.json   → passed=true，2 条节奏警告
+```
+
+### 对照设置
+
+本机**没有 `codex` 可执行文件**，所以没有重跑模型。改用已审脚本做受控对照：
+
+- 输入：`workspace/VID-000004/film.json` + `research.json`（V1 交付时通过审片的脚本）。
+- 机械修复：`workspace/ab/make_film.py` 只重排 `l2` 两个重叠节点（65 单位）、
+  补齐 `transition`/`camera`/`cues` 默认方向；文字、图层类型、时长逐字不变。
+- 运行：`MOVELYTH_CONFIG=workspace/ab/movelyth-ab.toml`，
+  `movelyth create "…" --new --import-film workspace/ab/film-004-v2.json --import-research …`。
+- 审片角色：`provider = "mock"`（预设通过），因此 `质检报告.json` 的
+  `provider` 是 `mock`；**这不是真实 Codex 审片，也没有 AI 看过新画面**。
+  画面结论来自本机逐帧抽检（见 `docs/v2-evaluation/`）。
+
+### 产物
+
+| 任务 | 内容 | 结果 |
+|---|---|---|
+| VID-000006/007/008/009/010/011/012/013/014/015 | 同一脚本的迭代重渲染（每次修一个真实缺陷后重跑） | 最终 `VID-000015` |
+| VID-000015 | 横版 231.5 s / 竖版 65.2 s | 13 项技术检查全通过 |
+
+关键指标（`workspace/VID-000015/quality.json`）：
+
+- 响度 -14.3 LUFS，真峰值 -1.1 dBTP。
+- 混音/原声最大比 1.196（横）/ 1.154（竖），阈值 1.6。
+- `frozen_scenes: []`（无 ≥5 s 冻结镜头）；每镜静止采样占比 0–29%。
+- `pacing`：9 镜 24.5–28.2 s，`uniform_shots: 9`，转场 5 种，音效 9 个。
+- `sound_design`：2.33 音效/分钟，配乐 RMS -30.5 dBFS，动态范围 20.3 dB，`prosody: sentence`。
+
+### 本轮由抽帧/测量暴露并修复的缺陷
+
+| 缺陷 | 证据 | 修复 |
+|---|---|---|
+| wipe 转场整镜空白 | 成片 26 s 处只有字幕 | 转场包装层补 `position:absolute`（原先 `clipPath` 把 0 高元素裁空） |
+| 转场时旧画面提前消失 | `tr-26.jpg` 是新画面浮在背景上 | 双层合成：旧镜保留到交接完成 |
+| 两套标题在接缝处重叠 | 帧 782 两个标题叠在一起 | wipe 改羽化遮罩、旧镜同步淡出 |
+| `draw` 开始前整图空白 | 26.15 s 只剩一个节点框 | 结构化图形预揭示 45%；柱状图改为从基线生长 |
+| 柱值标签被遮罩裁掉 | 帧 4560 顶部 25 不可见 | 柱内标签 + 类别半槽留白 + 揭示遮罩覆盖全画布 |
+| 图表刻度非整 | `0.76 / 2.0 / 3.24` | 1-2-5 取整 |
+| 常量序列画成假数据线 | "当前点 L=5" 变成一条水平线压住图例 | 识别为参考线/标记点 |
+| 单位向量只有几十像素 | 帧 5300 箭头几乎看不见 | 按内容与区域宽高比缩放 viewBox |
+| 竖版 bottom 区 34 px | 导入脚本被判"公式放不下" | 重排竖版栅格（bottom 84 px） |
+| 首帧标题与图表争位 | 早前版本标题压住数据 | 标题/标签改为同一列流式排版 |
+
+### 未验证 / 限制
+
+- **没有真实模型参与本轮**：新 prompt 的采纳率（`transition`/`camera`/`emphasis`/`cues`）
+  完全未验证；也可能因为字段变多而更容易触发修复循环。
+- **没有人工观看与实听**：我只能抽帧与测信号。`human_review` 仍为
+  `{watched_full_video: false, listened_audio: false}`。
+- 节奏仍均匀（9 镜 24.5–28.2 s），属脚本层面问题，渲染器无法修正。
+- 转场时长固定 0.4–0.5 s，未按内容自适应。
+
+---
+
 ## 2026-10-27 · 通用 provider 与真实弱模型验收
 
 ```text

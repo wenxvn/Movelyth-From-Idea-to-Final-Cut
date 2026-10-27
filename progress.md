@@ -2,6 +2,31 @@
 
 按时间倒序。任务级状态见 [docs/v1-execution.md](docs/v1-execution.md)，
 证据见 [docs/verification.md](docs/verification.md)，结论见 [docs/v1-report.md](docs/v1-report.md)。
+V2 的方案与实测见 [docs/v2-plan.md](docs/v2-plan.md)、[docs/v2-evaluation.md](docs/v2-evaluation.md)。
+
+## 2026-10-27 · V2：把"能出片"做到"像专业团队做的片"
+
+同一份已审脚本（VID-000004）用 V2 渲染器与 V2 声音重做，作为受控对照（VID-000015）。
+本机没有 Codex CLI，所以本轮不改脚本、不冒充真实模型创作；脚本只做两处机械修复
+（两个节点重叠、补齐 V2 字段默认值），其余逐字相同。
+
+- **构图**：重做 12 列栅格与字阶（标题 92 px 起、标签紧跟标题、`immersive` 变成全宽 hero 带），
+  修掉 V1 每帧左栏 400 px 的空白。竖版边距 70 px，主画面 1000×660–700。
+- **图表**：1-2-5 取整刻度、单调三次插值（不过冲）、图例独立带、值标签避让、
+  常量序列识别为参考线、同 x 序列识别为标记点、柱状图从基线生长。
+- **动效与转场**：bezier/spring 风格入场、镜头内缓慢运镜（2–4%）、五类转场
+  （fade/slide/wipe/dip/zoom，`cut` 为硬切），旧画面保留到交接完成。
+- **字幕**：TTS 词级时间进入 captions，逐词高亮 + 重点词着色；字号 39→46。
+- **声音**：按句合成 TTS（句级 rate/pitch/volume、按标点停顿、裁掉引擎首尾静音），
+  三段式配乐（intro/body/outro + 低音 + 琶音 + 轻打击），带 lookahead 的平滑侧链，
+  本地合成 whoosh/tick/impact/riser/chime 并跟随人声压低。
+- **契约**：新增 `transition`/`camera`/`emphasis`/`cues`（全部有默认值）；
+  `emphasis` 必须逐字出现在旁白、`impact` 每 cut 最多 2 次；节奏问题写警告不阻断。
+- **质量报告**：新增 `pacing`（每镜时长、离散度、重复视觉签名、转场种类、音效数）与
+  `sound_design`（每分钟音效、类型分布、运镜分布、混音电平）；运动检查改为 2 fps 中位数 + 静止占比。
+- **实测**：231.5 s / 65.2 s，13 项技术检查通过，-14.3 LUFS / -1.1 dBTP，
+  混音/原声最大比 1.196，`frozen_scenes: []`，9 个音效、5 种转场。
+- **未完成**：真实 Codex 端到端（无 CLI）、人工观看与实听（如实标为未做）。
 
 ## 2026-10-27 · 通用 [OI] 兼容 provider 与真实弱模型暴露的九个缺陷
 

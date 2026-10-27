@@ -1,117 +1,84 @@
-# Scene DSL v1
+# Scene DSL v1.1：导演字段、转场、音效与字幕
 
-版本号：`schema_version = 1`。Python 契约在 `src/movelyth/models.py`，渲染端类型在
-`studio/src/types.ts`，布局常量在 `src/movelyth/scenedsl.py`，并由
-`write_renderer_contracts()` 生成 `studio/src/generated/layout.json` 与
-`studio/src/generated/scene-schema.json`。
+版本号仍是 `schema_version = 1`。V2 只**新增有默认值的字段**，不改变已有字段的含义，
+所以 V1 已审脚本可以原样渲染。Python 契约在 `src/movelyth/models.py`，渲染端类型在
+`studio/src/types.ts`，布局常量在 `src/movelyth/scenedsl.py`，并由 `write_renderer_contracts()`
+生成 `studio/src/generated/layout.json` 与 `scene-schema.json`。
 
-模型只输出符合该契约的 JSON；制作进程只读取枚举、数字和短字符串，**从不执行模型生成的代码**。
+## 1. 新增的镜头字段
 
-## 1. 兼容性
+| 字段 | 取值 | 默认 | 作用 |
+|---|---|---|---|
+| `transition` | `cut` / `fade` / `slide` / `wipe` / `dip` / `zoom` | `fade` | 上一镜交接到这一镜的方式 |
+| `camera` | `none` / `push` / `pull` / `pan_left` / `pan_right` | `push` | 镜头内的缓慢运镜（幅度 2–4%） |
+| `emphasis` | 1–3 个 ≤12 字的词 | `[]` | 重点词；配音放慢+略响，字幕高亮 |
+| `cues` | `[{at, kind, gain}]`，≤4 个 | `[]` | 声音提示；`kind` 为 whoosh/tick/impact/riser/chime |
 
-- 旧任务（只有 `visual` + `matrix` + `labels`）仍可读取：`layers` 为空时自动退化为单个
-  `procedural` 图层，画面与旧版一致。
-- 新任务应显式写 `layers`，同一镜头可组合 1–6 个图层。
-- `schema_version` 目前只接受 `1`。未来版本升级时，读取端按版本分派，旧 revision 不会被就地改写。
+`at` 与 `actions.start` 使用同一套时间写法（`start` / `end` / 0–1 小数 / `narration:片段`）。
 
-## 2. 结构
+### 转场如何实现
 
-```json
-{
-  "schema_version": 1,
-  "id": "gradient_descent",
-  "heading": "误差在下降",
-  "narration": "每一次更新，都在寻找更小的误差。",
-  "visual": "matrix",
-  "matrix": [1, 0, 0, 1],
-  "color": "cyan",
-  "source_index": 0,
-  "layout": "diagram",
-  "beats": [{"at": "start", "purpose": "展示初始误差"},
-            {"at": "narration:更小的误差", "purpose": "强调损失下降"}],
-  "layers": [
-    {"id": "loss", "type": "chart", "chart": "line", "region": "main",
-     "series": [{"label": "损失", "values": [0.9, 0.6, 0.35, 0.2], "unit": ""}],
-     "axis": "更新轮次", "source_note": "示意", "color": "cyan", "emphasis": 1},
-    {"id": "note", "type": "text", "text": "梯度下降示意", "region": "annotation"}
-  ],
-  "actions": [
-    {"target": "loss", "kind": "draw", "start": "start", "end": "narration:更小的误差"},
-    {"target": "note", "kind": "appear", "start": "0.6", "end": "0.8"}
-  ],
-  "visual_intent": "折线真实反映每轮误差下降，用于说明损失降低而非装饰。"
-}
-```
+渲染端同时绘制上一镜的最后一帧与这一镜的入场帧：
 
-### 图层类型
+- `fade`：新镜淡入，旧镜淡出；新镜略快于旧镜消失。
+- `slide`：新镜从右侧推入，旧镜同时淡出。
+- `wipe`：新镜以**羽化边缘**从左向右揭开，旧镜同步淡出。硬边擦除会让两套版式在接缝处
+  互相穿插，看起来像坏掉的幻灯片，因此边缘是渐变遮罩而不是硬切。
+- `dip`：两镜之间短暂压黑（`sin` 曲线），用于分段。
+- `zoom`：新镜从 1.05 倍轻微推近进入。
+- `cut`：硬切，不叠加任何过渡，用于强调或转折。
 
-`movelyth components` 会输出同一份元数据（用途、必需字段、限制、可用区域、横竖适配、合法样例），
-并由 `tests/test_components.py` 校验：每个 DSL 类型都有文档、每个样例都能通过 Pydantic、
-且与 `studio/src/Stage.tsx` 的渲染器注册表完全一致。
+转场不改变时间轴：它占用新镜开头的 0.4–0.5 秒，旧的画面在这段时间里仍然可见，
+因此不会出现"两镜之间闪一下背景"。音频此时本来就有 0.85 s 尾静音 + 0.25 s 前导静音。
 
-| type | 用途 | 关键参数 |
-|---|---|---|
-| `text` | 短文本/注解 | `text` ≤120 字，`emphasis` 1–3 |
-| `math` | 公式行（Unicode `^`/`_`，`\n` 保留换行） | `text` |
-| `shape` | 点/线/矩形/圆/箭头/多边形/括号 | `shape`、`points`（x,y 对，0–1000 / 0–640）、`connect` |
-| `chart` | 折线/柱状/散点 | `chart`、`series` 或本地 `data_ref`、`unit`、`axis`、`source_note`、`connect` |
-| `diagram` | 有向节点图 | `nodes`（2–12）、`edges`、`steps`（≤6） |
-| `timeline` | 阶段/里程碑条 | `steps`（2–6，每个 ≤24 字） |
-| `image` | 本地受控素材 | `data_ref` 为已登记素材 id（`movelyth asset-add`）或内置 `svd_1/4/12/32` |
-| `procedural` | 原有七类程序动画 | `procedural` = matrix/vectors/projection/wave/network/image_layers/orbit |
+### 声音提示
 
-### 布局与区域
+`cues` 由 numpy 本地合成（无采样库、无授权风险），混在配乐层并**跟随人声做侧链压低**，
+所以 whoosh 不会盖住句子开头的第一个词。`impact` 每个 cut 最多 2 次（超出会在契约校验被拒）。
 
-`layout`：`immersive`（全屏沉浸）、`diagram`（图解讲解）、`compare`（左右/上下对照）。
-`region`：`main`、`side`、`top`、`bottom`、`annotation`、`full`。每个布局的矩形由 Python 定义并生成给
-TypeScript，两侧不会各自漂移。**同一布局内的区域互不重叠**，所以同一镜头里两个图层不能占同一区域
-（会被判为互相遮挡）；图表/图示/时间线/程序动画只能放在 `main`（compare 布局可放 `main` + `side`）。
+## 2. 布局栅格（V2）
 
-保留区：标题区、标签区、字幕区、页脚区。图层不得与之重叠，脚本审批前即报错。
+从 V1 的"右栏 1100×440、左栏留大片空白"改为 12 列栅格：
 
-### 节拍与动画
+- 横版外边距 96 px，文字列 660 px，画面列 1024×660 px。
+- 竖版外边距 70 px，主画面 1000×660–700 px。
+- `immersive` 不再是"第二个 diagram"：标题在上、主画面占满整个宽度（1728×430），
+  标题下方有一层渐变压暗，保证文字压在图上的可读性。
+- 标题与标签改为**同一列流式排版**：标签永远紧跟标题，不再固定钉在 y≈690 造成中间空洞。
+- 字阶：display 96–104 / heading 78–92 / body 40–42 / caption 44–46 / label 32 / micro ≈22。
+  标题按区域宽度自动降级（`fitFont` 以 em 宽度估算中英混排）。
 
-`at` / `start` / `end` 支持：
+## 3. 图表绘制规则
 
-- `start` / `end`：镜头起止；
-- `0`–`1` 的小数：镜头内比例；
-- `narration:片段`：该片段在旁白中**第一次出现**的位置，按真实 Edge TTS 词语边界换算成秒。
+- 刻度用 1-2-5 取整（`0 / 2 / 4 / 6`），不再出现 `0.76 / 2.0 / 3.24` 这种由等分缩放产生的数字。
+- 折线/散点连线用**单调三次插值**（Fritsch–Carlson），曲线平滑但不会过冲或凭空造出数据点。
+- 常量序列（如"当前点 L=5"）识别为**参考线**（虚线 + 右侧标签）；同一 x 上的多个点识别为
+  **标记点**（圆环 + 标签 + 垂线），不再画成一条假的水平数据线。
+- 首末值标签带底色块并做垂直避让，不会互相压住；柱子过高时数值移到柱内。
+- 图例独立成带，只列真正的数据系列；`source_note` 单独一行。
+- x 轴补回刻度（V1 完全没有），柱状图只显示类别位置。
 
-动画原语：`appear`、`fade`、`move`、`scale`、`rotate`、`highlight`、`draw`、`morph`。
-`morph` 目前以淡入实现，属于已知限制（报告会记录）。动画只依赖 props 与 frame，可确定性复现。
+## 4. 字幕与配音
 
-## 3. 校验边界
+- 配音**按句合成**：每句单独调用 TTS，句间插入按标点决定的停顿（。0.30 s / ？0.36 s /
+  ；0.22 s / ，0.15 s），并裁掉引擎在每句首尾加的约 0.2 s + 0.9 s 静音。
+  不裁的话，4 分钟片会多出约 45 秒死气。
+- 每句可有自己的 `rate` / `pitch` / `volume`：含 `emphasis` 的句子放慢 7%、响 5%，
+  问句抬高 2 Hz，首句略慢、末句更慢，长句略快。
+- 字幕页携带**词级时间**（来自 TTS 的真实 word boundary），渲染端做卡拉 OK 高亮：
+  已读词亮、当前词用 accent 色、未读词降为 55% 不透明度。没有词边界时退化为整页显示。
 
-- 文本长度、坐标范围、元素数量、帧数、时长全部有上限；拒绝 `NaN`/`Infinity`、超大列表。
-- **每镜至少一个画面图层**（shape/chart/diagram/timeline/image/procedural）；只有 text + math 的镜头
-  视为"动态字幕"，在脚本审批阶段拒绝。
-- **同一布局内的区域互不重叠**，且图表/图示/时间线/程序动画只能放 `main`（compare 可 `main` + `side`），
-  避免把核心画面塞进注脚条后被判为不可读。
-- `data_ref` 只能是小写标识符，不能是路径或 URL；`image` 只能引用受控素材目录中已存在的文件
-  （内置 SVD 图或 `movelyth asset-add` 登记的素材，登记时会校验 hash 与授权字段；被
-  `movelyth asset-check` 标记为 `valid=false` 的素材会被拒绝）。
-- `chart` 必须由 `series` 或 `workspace/VID-xxxxxx/data/<data_ref>.json|.csv` 提供真实数值，
-  缺失时在渲染前报错。JSON 格式：`{"label": "误差", "unit": "%", "axis": "轮次", "values": [0.9, 0.6, 0.3]}`
-  或 `{"series": [{"label": "...", "values": [...]}, ...]}`；CSV 支持单列数值或带表头的多列序列；
-  上限 256 KB、每序列 2–60 个有限数。`x_values` 可选，给散点/折线提供真实 x 坐标。
-- 旁白与画面一致性检查见 `consistency.py`：数据趋势、面积/长度/塌缩断言、示意数据被说成实测等。
-- **中文排版**：`textfit.py` 按标点优先断行，不拆拉丁词与"数字+单位"，遵守避头尾（行首不出现
-  `，。）》`、行尾不出现 `（《「`），并避免 1–2 字孤行；`layout_warnings` 会把估算断行里仍存在的问题
-  写成警告，字幕分页复用同一套规则，不产生两字残页。
-- 渲染器无法表达的动作或数据在脚本审批阶段拒绝，不会退化成一张无关的通用图。
+## 5. 校验边界（新增）
 
-## 4. 生成与校验命令
+- `emphasis` 的词必须逐字出现在该镜 `narration` 中，否则脚本在审批阶段被拒。
+- 同一 cut 的 `impact` 超过 2 次被拒。
+- `cues.at` 的 `narration:` 片段同样必须在旁白里出现。
+- 节奏是**警告而非拒绝**：镜头时长过于均匀、转场全片一种、没有任何 cues 都会写进
+  `validation_warnings` 与 `pacing`，交回编导参考，但不阻断一个本身正确的脚本。
 
-```powershell
-# 离线校验一份脚本（不调用模型、不渲染），适合反复修改 JSON 时用
-.\.venv\Scripts\python.exe -m movelyth check --film .\film.json --research .\research.json
+## 6. 兼容性
 
-# 重新生成渲染端契约（修改布局或模型后必须执行）
-.\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0,'src'); from pathlib import Path; from movelyth.scenedsl import write_renderer_contracts; write_renderer_contracts(Path('studio/src'))"
-
-# 查看当前 JSON Schema
-.\.venv\Scripts\python.exe -m movelyth schema
-```
-
-`tests/test_scenedsl.py` 会比对已提交的生成文件与 Python 契约、TypeScript 枚举与 Pydantic 枚举，
-任何一侧漂移都会失败。
+- 旧脚本（无 `transition`/`camera`/`emphasis`/`cues`）按默认值渲染：`fade` + `push` + 无音效。
+- `schema_version` 仍为 1；读取端按字段默认值兼容，旧 revision 不会被就地改写。
+- 布局矩形变了，因此**旧脚本的视觉会变**（更大的画面、更高的标题）。这是本轮的目标，
+  不是兼容性回归：语义、图层、时间轴、字幕文本都不变。

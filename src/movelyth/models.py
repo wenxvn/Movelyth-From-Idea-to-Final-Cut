@@ -21,6 +21,13 @@ ShapeKind = Literal["point", "line", "rect", "circle", "arrow", "polygon", "brac
 ChartKind = Literal["line", "bar", "scatter"]
 StyleName = Literal["minimal", "tech", "documentary"]
 Color = Literal["cyan", "amber", "coral", "mint"]
+# How the previous scene hands over to this one.  "fade" is the safe default for
+# older scripts; "cut" is a hard cut for a punchy beat.
+TransitionKind = Literal["cut", "fade", "slide", "wipe", "dip", "zoom"]
+# A slow, bounded camera move.  Long shots otherwise sit still while the voice talks.
+CameraKind = Literal["none", "push", "pull", "pan_left", "pan_right"]
+# Procedurally synthesised sound cues (no third-party audio, no licence risk).
+CueKind = Literal["whoosh", "tick", "impact", "riser", "chime"]
 
 
 def _finite(values: list[float], limit: float, message: str) -> list[float]:
@@ -235,6 +242,23 @@ class Action(Contract):
         return value
 
 
+class Cue(Contract):
+    """A sound effect placed on the real narration timeline.
+
+    Only a bounded enumeration and a gain are accepted: the renderer synthesises
+    the sound locally, so nothing here can point at a remote or unlicensed file.
+    """
+
+    at: str = Field(min_length=1, max_length=48)
+    kind: CueKind
+    gain: float = Field(default=0.6, ge=0, le=1)
+
+    @field_validator("at")
+    @classmethod
+    def time_reference(cls, value: str) -> str:
+        return Beat.bounded_time_reference(value)
+
+
 class Scene(Contract):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
     heading: str = Field(min_length=2, max_length=24)
@@ -251,12 +275,26 @@ class Scene(Contract):
     layers: list[Layer] = Field(default_factory=list, max_length=6)
     actions: list[Action] = Field(default_factory=list, max_length=12)
     visual_intent: str = Field(default="", max_length=240)
+    # V2 direction fields.  All have defaults so an approved V1 script still renders.
+    transition: TransitionKind = "fade"
+    camera: CameraKind = "push"
+    # Words in the narration that carry the point of this shot.  Used for caption
+    # emphasis and for a slightly slower, louder delivery of that sentence.
+    emphasis: list[str] = Field(default_factory=list, max_length=3)
+    cues: list[Cue] = Field(default_factory=list, max_length=4)
 
     @field_validator("labels")
     @classmethod
     def label_lengths(cls, values: list[str]) -> list[str]:
         if any(not v.strip() or len(v) > 22 for v in values):
             raise ValueError("每个画面标签需为 1–22 字")
+        return values
+
+    @field_validator("emphasis")
+    @classmethod
+    def emphasis_words(cls, values: list[str]) -> list[str]:
+        if any(not v.strip() or len(v) > 12 for v in values):
+            raise ValueError("emphasis 每个词需为 1–12 字")
         return values
 
     @field_validator("matrix")

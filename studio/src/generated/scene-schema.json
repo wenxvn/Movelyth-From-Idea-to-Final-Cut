@@ -97,6 +97,42 @@
       "title": "Beat",
       "type": "object"
     },
+    "Cue": {
+      "additionalProperties": false,
+      "description": "A sound effect placed on the real narration timeline.\n\nOnly a bounded enumeration and a gain are accepted: the renderer synthesises\nthe sound locally, so nothing here can point at a remote or unlicensed file.",
+      "properties": {
+        "at": {
+          "maxLength": 48,
+          "minLength": 1,
+          "title": "At",
+          "type": "string"
+        },
+        "gain": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Gain",
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "whoosh",
+            "tick",
+            "impact",
+            "riser",
+            "chime"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "kind"
+      ],
+      "title": "Cue",
+      "type": "object"
+    },
     "Cut": {
       "additionalProperties": false,
       "properties": {
@@ -420,6 +456,18 @@
           "title": "Beats",
           "type": "array"
         },
+        "camera": {
+          "default": "push",
+          "enum": [
+            "none",
+            "push",
+            "pull",
+            "pan_left",
+            "pan_right"
+          ],
+          "title": "Camera",
+          "type": "string"
+        },
         "color": {
           "enum": [
             "cyan",
@@ -429,6 +477,22 @@
           ],
           "title": "Color",
           "type": "string"
+        },
+        "cues": {
+          "items": {
+            "$ref": "#/$defs/Cue"
+          },
+          "maxItems": 4,
+          "title": "Cues",
+          "type": "array"
+        },
+        "emphasis": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Emphasis",
+          "type": "array"
         },
         "heading": {
           "maxLength": 24,
@@ -488,6 +552,19 @@
           "minimum": 0,
           "title": "Source Index",
           "type": "integer"
+        },
+        "transition": {
+          "default": "fade",
+          "enum": [
+            "cut",
+            "fade",
+            "slide",
+            "wipe",
+            "dip",
+            "zoom"
+          ],
+          "title": "Transition",
+          "type": "string"
         },
         "visual": {
           "enum": [
