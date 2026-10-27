@@ -12,3 +12,11 @@
 实际 Python/Node 依赖分别在 pyproject.toml 与 studio/package-lock.json。源代码仓库保留各第三方许可；展示作品、外部配乐与图片不因此获得授权。本版配乐、音效和图像为程序生成。
 
 Codex CLI 结构化调用依据 [OpenAI 官方文档](https://developers.openai.com/codex/noninteractive)。本项目调用用户已登录的 CLI，不复制账号凭据，也不把凭据存进配置或日志。CLI 自身的账号与用量由用户管理。
+
+## 模型端点
+
+`provider = "openai"` 时通过标准 `/chat/completions` 协议调用任意兼容端点，代码只依赖该协议本身
+（`Authorization: Bearer`、`response_format`、`image_url` 内容块），没有绑定任何厂商的 SDK。
+已验证端点：DeepSeek 官方 `api.deepseek.com/v1`（`deepseek-flash`、`deepseek-v4-pro`）。
+`json_schema` 在部分端点上不可用，因此实现为三级降级：`json_schema` → `json_object` → 纯提示词 +
+内联 schema。密钥只从环境变量读取，不写入 `movelyth.toml`，也不写进日志或交付包。

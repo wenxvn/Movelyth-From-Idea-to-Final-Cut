@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .ledger import BusyError
 from .media import ffmpeg, ffprobe
+from .openai_compat import probe_endpoint
 from .pipeline import Studio, browser
 from .util import now, run
 
@@ -56,6 +57,25 @@ def doctor(root: Path) -> dict:
     needs_codex = provider == "codex"
     check["ready_for_generation"] = bool(node and check["renderer_installed"] and check["config"]
                                         and (codex if needs_codex else True))
+    if provider == "openai":
+        agents = (config.get("agents") or {})
+        env_name = str(agents.get("api_key_env") or "OPENAI_API_KEY")
+        endpoint = {
+            "base_url": agents.get("base_url"),
+            "model": agents.get("model"),
+            "api_key_env": env_name,
+            "api_key_present": bool(os.getenv(env_name)),
+            "structured_output": agents.get("structured_output", "auto"),
+            "vision": agents.get("vision", "auto"),
+        }
+        check["endpoint"] = endpoint
+        missing = [name for name in ("base_url", "model") if not agents.get(name)]
+        if missing:
+            endpoint["reason"] = "缺少 " + "、".join(f"agents.{name}" for name in missing)
+        elif not endpoint["api_key_present"]:
+            endpoint["reason"] = f"环境变量 {env_name} 未设置"
+        check["ready_for_generation"] = bool(check["ready_for_generation"] and not endpoint.get("reason"))
+        check["endpoint_note"] = "doctor 只检查配置与密钥是否存在；连通性请运行 movelyth probe"
     if provider == "mock":
         check["mock_note"] = "provider=mock：只用于离线测试与预览，产物不是真实模型创作"
     check["note"] = "环境检查不等同于 Codex 配额、TTS 连通性或视频生成验证"
@@ -78,6 +98,11 @@ def main(argv=None) -> int:
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="Movelyth 项目根目录")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="检查本地工具和配置")
+    probe = sub.add_parser("probe", help="探测 [OI] 兼容端点：连通性、JSON 输出与图片能力")
+    probe.add_argument("--base-url", help="默认取 agents.base_url")
+    probe.add_argument("--model", help="默认取 agents.model")
+    probe.add_argument("--api-key-env", help="默认取 agents.api_key_env")
+    probe.add_argument("--image", type=Path, help="可选：附带一张图片验证视觉能力")
     create = sub.add_parser("create", help="从一个标题（可选 brief）自动制作完整上传包")
     create.add_argument("title")
     create.add_argument("--new", action="store_true", help="明确要求同题另做一个新任务")
@@ -134,6 +159,19 @@ def main(argv=None) -> int:
             result = doctor(root)
             emit(result)
             return 0 if result["ready_for_generation"] else 1
+        if args.command == "probe":
+            from .pipeline import settings
+
+            config = settings(root) if (root / "movelyth.toml").is_file() else {}
+            agents = (config.get("agents") or {})
+            base_url = args.base_url or agents.get("base_url")
+            model = args.model or agents.get("model")
+            env_name = args.api_key_env or agents.get("api_key_env") or "OPENAI_API_KEY"
+            if not base_url or not model:
+                raise SystemExit("需要 --base-url 与 --model，或在 movelyth.toml 的 [agents] 中配置")
+            result = probe_endpoint(base_url, env_name, model, image=args.image)
+            emit(result)
+            return 0 if result.get("reachable") and result.get("json_output") else 1
         if args.command == "schema":
             from .models import Film
 

@@ -20,7 +20,9 @@ From Idea to Final Cut.
 
 ## 运行
 
-需要 Python 3.11+、Node.js 兼容当前 Remotion 的版本、已登录的 Codex CLI，以及联网配音服务。
+需要 Python 3.11+、Node.js 兼容当前 Remotion 的版本，以及联网配音服务。
+脚本生成默认使用你已登录的 **Codex CLI**；也可以改用任意 **[OI] 兼容端点**
+（DeepSeek 官方、中转网关、vLLM、Ollama）。见下方「其他模型」。
 当前 Windows 开发环境为 Python 3.11 / Node 24 / Chrome；其它平台尚未端到端验证。
 
 ```powershell
@@ -33,6 +35,31 @@ cd Movelyth-From-Idea-to-Final-Cut
 
 已有项目环境时，只需要最后一行。也可以运行不带参数的 `生成视频.ps1`，直接输入标题。
 需要重做相同标题的另一条视频时增加 `-New`。
+
+## 其他模型（[OI] 兼容端点）
+
+Movelyth 的画面是本地 Remotion 程序动画，**不需要文生图或文生视频模型**。整条链路只有四个角色调用
+模型：研究、编导、脚本审稿、画面审片。任何支持 `/chat/completions` 的端点都能驱动这四个角色。
+
+```toml
+[agents]
+provider = "openai"
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"   # 密钥只从环境变量读取，不写入本文件
+model = "deepseek-flash"
+# structured_output = "auto"       # auto 先试 json_schema，再退 json_object，最后纯提示词
+# vision = "auto"                  # 审片要读抽帧；disabled 时会明确拒绝而不是假装审过
+# thinking = "disabled"            # 推理模型的隐藏思考会占用输出上限
+```
+
+```powershell
+.\.venv\Scripts\python.exe -m movelyth doctor   # 配置与密钥是否存在
+.\.venv\Scripts\python.exe -m movelyth probe --image .\test.jpg   # 连通性 + JSON + 图片能力
+```
+
+`probe` 会实际发一次请求并报告该端点是否真的支持 JSON 输出与图片输入——"密钥存在"说明不了这些。
+模型能力差异是真实的：较小的模型需要更多修复轮次（`studio.max_retries`），
+`movelyth probe` 与 `workspace/VID-*/agents/*/events.log` 记录了每一轮的实际失败原因。
 
 ## 两种入口
 

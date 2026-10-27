@@ -62,7 +62,6 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
   const grid = ticks(min, max).map((value) => ({value, y: yAt(value)}));
   const xTicks = ticks(xMin, xMax, 4).map((value) => ({value, x: xAt(value)}));
   const count = Math.max(...series.map((s) => s.values.length));
-  const barWidth = Math.max(6, (width / count) * 0.55);
   // Bars grow from zero (or the axis floor when all values are negative), so a 0 value
   // renders as no bar at all instead of a floating stub.
   const baseline = yAt(Math.max(0, min));
@@ -84,17 +83,27 @@ export const ChartLayer: React.FC<{layer: Layer; theme: Theme; reveal: number; v
         const xValues = explicitX ? s.x_values : s.values.map((_v, i) => i);
         const points = s.values.map((value, index) => [xAt(xValues[index]), yAt(value)] as const);
         if (layer.chart === 'bar') {
+          // Group bars that share an x value side by side instead of drawing them on top
+          // of each other: two series at the same x used to render as one bar with two
+          // overlapping labels, which reads as a broken chart.
+          const group = series.length;
+          const slot = Math.max(6, (width / count) * 0.72);
+          const barWidth = Math.max(4, slot / group);
           return <g key={s.label}>
-            <text x={left} y={top - 10} fill={color} fontSize={font(28)} fontWeight={700}>{s.label}</text>
             {s.values.map((value, index) => {
-              const x = xAt(xValues[index]) - barWidth / 2;
+              const x = xAt(xValues[index]) - slot / 2 + sIndex * barWidth;
               const y = yAt(value);
               const full = Math.abs(baseline - y);
               const h = full * reveal;
               const topY = value >= 0 ? baseline - h : baseline;
+              // A zero bar has no height and would vanish, leaving "0 vs -2" looking like
+              // one bar.  Draw a visible baseline tick so the zero case is still readable.
+              const zeroTick = full < 1;
               return <g key={index}>
-                <rect x={x} y={topY} width={barWidth} height={h} fill={color} opacity={0.82} rx={3}/>
-                <text x={x + barWidth / 2} y={value >= 0 ? topY - 10 : topY + h + font(26)}
+                {zeroTick
+                  ? <rect x={x} y={baseline - 4} width={barWidth} height={8} fill={color} opacity={0.9} rx={2}/>
+                  : <rect x={x} y={topY} width={barWidth} height={h} fill={color} opacity={0.82} rx={3}/>}
+                <text x={x + barWidth / 2} y={zeroTick ? baseline - 16 : (value >= 0 ? topY - 10 : topY + h + font(26))}
                   textAnchor="middle" fill={theme.text} fontSize={font(24)}>{format(value)}</text>
               </g>;
             })}

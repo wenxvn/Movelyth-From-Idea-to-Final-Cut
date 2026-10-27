@@ -215,7 +215,13 @@ def resolve_actions(scene: Scene, duration: float, boundaries: list[dict] | None
         start = max(0.0, min(duration, start))
         end = max(0.0, min(duration, end))
         if end <= start:
-            raise ValueError(f"镜头 {scene.id} 的动画 {action.kind} 起止时间无效")
+            same = action.start == action.end
+            raise ValueError(
+                f"镜头 {scene.id} 的动画 {action.kind}（target={action.target}）"
+                + (f"的 start 与 end 是同一个锚点「{action.start}」，解析后起止时间相同"
+                   if same else
+                   f"的 end「{action.end}」早于或等于 start「{action.start}」")
+                + "；请让 end 指向旁白中更靠后的片段，或改用 start/end 与 0–1 小数")
         fraction = max(MIN_ACTION_FRACTION, (end - start) / max(1e-6, duration))
         resolved.append({"target": action.target, "kind": action.kind,
                          "from": round(start / max(1e-6, duration), 4),
@@ -255,9 +261,23 @@ MATH_BASE = {1: 56, 2: 68, 3: 86}
 MIN_FONT = {"text": 22, "math": 34}
 
 
-def text_capacity(box: dict[str, int], font_size: int) -> int:
-    per_line = max(1, int(box["w"] / (font_size * 1.02)))
-    lines = max(1, int(box["h"] / (font_size * 1.42)))
+# Math layers are drawn inside a padded surface box (studio/src/components/TextLayer.tsx
+# uses padding 14px 20px), so the usable box is smaller than the region.
+MATH_PADDING_Y = 28
+MATH_PADDING_X = 40
+LINE_HEIGHT = 1.42
+
+
+def text_capacity(box: dict[str, int], font_size: int, *, single_line: bool = False,
+                  math: bool = False) -> int:
+    """Characters the box holds at *font_size*; ``single_line`` for formulas."""
+    width = box["w"] - (MATH_PADDING_X if math else 0)
+    height = box["h"] - (MATH_PADDING_Y if math else 0)
+    per_line = max(1, int(width / (font_size * 1.02)))
+    if single_line:
+        # A single line must also fit the box height, or it is clipped rather than wrapped.
+        return per_line if font_size * LINE_HEIGHT <= height else 0
+    lines = max(1, int(height / (font_size * LINE_HEIGHT)))
     return per_line * lines
 
 
@@ -282,6 +302,80 @@ def scene_visual_errors(scene: Scene) -> list[str]:
     return []
 
 
+NODE_HEIGHT = 112
+NODE_MIN_WIDTH = 210
+# Each node box carries ~35 units of horizontal padding per side, so boxes that
+# overlap by less than this never cover the label text they hold.
+NODE_OVERLAP_TOLERANCE = 40
+
+
+def node_width(label: str) -> int:
+    """Mirror of the renderer's node box width (studio/src/components/DiagramLayer.tsx)."""
+    return max(NODE_MIN_WIDTH, len(label) * 46 + 70)
+
+
+def chart_semantic_errors(layer: Layer) -> list[str]:
+    """Charts whose data cannot express what the narration claims.
+
+    A bar chart with two series that are each constant (``[0,0]`` and ``[-2,-2]``)
+    draws four bars where the narration compares two values, and the zero-height
+    bar is invisible.  That is a data-shape error, not a styling preference.
+    """
+    if layer.chart != "bar" or len(layer.series) < 2:
+        return []
+    problems = []
+    constant = [s for s in layer.series if len(set(s.values)) == 1]
+    if len(constant) == len(layer.series):
+        problems.append(
+            f"柱状图 {layer.id} 的每个系列都是同一个常数值，无法表达对照；"
+            f"要对比两个值请用**一个** series（values 放这两个值，x_values 放两个位置），"
+            f"不同类别才用多个 series")
+    if any(all(v == 0 for v in s.values) for s in layer.series):
+        problems.append(f"柱状图 {layer.id} 有一个系列全是 0，等于没有数据；"
+                        f"请把该值放进同一 series 的对照里，或改用折线")
+    return problems
+
+
+def diagram_node_overlaps(layer: Layer) -> list[str]:
+    """Nodes that cover each other, so a label is drawn over by its neighbour.
+
+    A real render showed '(-1)×(-1)=-1' clipped to '(-1)×(' because the next node
+    started inside it.  The renderer draws nodes in order, so an overlap is always
+    visible text loss, never a deliberate layer.
+
+    Note that the SVG viewBox is computed from the nodes, so a node beyond 0–1000
+    is *not* clipped — it only makes the whole diagram smaller.  That is a layout
+    warning (:func:`diagram_scale_warning`), not a hard error.
+    """
+    problems = []
+    boxes = []
+    for node in layer.nodes:
+        width = node_width(node.label)
+        boxes.append((node, node.x - width / 2, node.x + width / 2, node.y - NODE_HEIGHT / 2,
+                      node.y + NODE_HEIGHT / 2))
+    for index, (first, left1, right1, top1, bottom1) in enumerate(boxes):
+        for second, left2, right2, top2, bottom2 in boxes[index + 1:]:
+            if left1 < right2 and left2 < right1 and top1 < bottom2 and top2 < bottom1:
+                overlap = min(right1, right2) - max(left1, left2)
+                if overlap <= NODE_OVERLAP_TOLERANCE:
+                    continue
+                problems.append(
+                    f"图示节点 {first.id}「{first.label}」与 {second.id}「{second.label}」重叠 "
+                    f"{overlap:.0f} 单位，后者会盖住前者的文字；请拉开 x（每个节点按标签长度约占 "
+                    f"{node_width(first.label)} 单位）或改成不同 y 分行")
+    return problems
+
+
+def diagram_scale_warning(layer: Layer) -> str | None:
+    """The diagram is much wider than the 1000-unit design space, so it renders small."""
+    span = max((node.x + node_width(node.label) / 2 for node in layer.nodes), default=0) - \
+        min((node.x - node_width(node.label) / 2 for node in layer.nodes), default=0)
+    if span > 1300:
+        return (f"图示内容宽约 {span:.0f} 单位（设计空间 1000），会整体缩小约 "
+                f"{1000 / span:.0%}；建议缩短节点标签或减少并排节点")
+    return None
+
+
 def layout_errors(scene: Scene, *, vertical: bool) -> list[str]:
     """Hard errors: unrenderable placement, overlap, or text that cannot fit at all."""
     orientation = "portrait" if vertical else "landscape"
@@ -296,6 +390,11 @@ def layout_errors(scene: Scene, *, vertical: bool) -> list[str]:
             continue
         if layer.region == "full":
             continue
+        if layer.type == "diagram":
+            errors.extend(f"镜头 {scene.id} 的 {layer.id}：{problem}"
+                          for problem in diagram_node_overlaps(layer))
+        if layer.type == "chart":
+            errors.extend(f"镜头 {scene.id} 的 {problem}" for problem in chart_semantic_errors(layer))
         if layer.type in VISUAL_TYPES and layer.region not in {"main", "full", "side"}:
             errors.append(
                 f"镜头 {scene.id} 的 {layer.id}（{layer.type}）放在 {layer.region} 会缩得太小；"
@@ -312,14 +411,26 @@ def layout_errors(scene: Scene, *, vertical: bool) -> list[str]:
         used.append((layer.id, box))
         if layer.text:
             _base, minimum = layer_font(layer)
-            capacity = text_capacity(box, minimum)
+            math = layer.type == "math"
+            capacity = text_capacity(box, minimum, math=math)
             if len(layer.text) > capacity:
                 hint = ("；公式太长时请移到 main，或拆成两行并压缩字数"
-                        if layer.type == "math" else "")
+                        if math else "")
                 errors.append(
                     f"镜头 {scene.id} 的 {layer.id} 文本 {len(layer.text)} 字超出"
                     f"{layer.region} 区域的最小字号容量 {capacity} 字{hint}")
+            if formula_is_one_line(layer) and len(layer.text) > text_capacity(
+                    box, minimum, single_line=True, math=True):
+                errors.append(
+                    f"镜头 {scene.id} 的 {layer.id} 公式在 {layer.region} 区域放不下："
+                    f"缩到最小字号 {minimum}px 仍会折行或被裁切；"
+                    f"请缩短公式、改写成多行（用 \\n），或移到更大的区域")
     return errors
+
+
+def formula_is_one_line(layer: Layer) -> bool:
+    """A math layer is one expression unless the director wrote explicit rows."""
+    return layer.type == "math" and "\n" not in layer.text
 
 
 def layout_warnings(scene: Scene, *, vertical: bool) -> list[str]:
@@ -330,7 +441,8 @@ def layout_warnings(scene: Scene, *, vertical: bool) -> list[str]:
     for layer in effective_layers(scene):
         box = boxes.get(layer.region) or boxes["main"]
         base, minimum = layer_font(layer)
-        capacity = text_capacity(box, base)
+        capacity = text_capacity(box, base, single_line=formula_is_one_line(layer),
+                                 math=layer.type == "math")
         if layer.text and len(layer.text) > capacity:
             warnings.append(f"镜头 {scene.id} 的 {layer.id} 文本 {len(layer.text)} 字超出"
                             f"约 {capacity} 字容量，渲染时会缩到 {minimum}px 以内")
@@ -338,6 +450,10 @@ def layout_warnings(scene: Scene, *, vertical: bool) -> list[str]:
             warnings.append(f"镜头 {scene.id} 的 {layer.id} 步骤过多，竖版可能拥挤")
         if layer.type == "diagram" and layer.steps and any(node.y > 420 for node in layer.nodes):
             warnings.append(f"镜头 {scene.id} 的 {layer.id} 节点与步骤列表可能重叠，建议节点 y ≤ 420")
+        if layer.type == "diagram":
+            scale = diagram_scale_warning(layer)
+            if scale:
+                warnings.append(f"镜头 {scene.id} 的 {layer.id}：{scale}")
         if layer.type == "chart" and any(len(s.values) > 24 for s in layer.series):
             warnings.append(f"镜头 {scene.id} 的 {layer.id} 数据点超过 24 个，标注会拥挤")
         if layer.type == "text" and layer.text:
@@ -430,7 +546,6 @@ def validate_cut_dsl(cut: Cut, *, vertical: bool) -> list[str]:
         except ValueError as exc:
             problems.append(str(exc))
     return problems
-
 
 MAX_DATA_BYTES = 256_000
 DATA_SUFFIXES = (".json", ".csv")

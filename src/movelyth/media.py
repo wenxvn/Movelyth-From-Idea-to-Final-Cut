@@ -68,6 +68,20 @@ async def synthesize(text: str, voice: str, rate: str, mp3: Path) -> list[dict]:
     return boundaries
 
 
+def timing_matches_audio(audio: np.ndarray, boundaries: list[dict]) -> bool:
+    """Word boundaries must lie inside the audio they were measured on.
+
+    A truncated WAV with intact boundaries silently drops the last captions: one
+    cached entry out of 338 had 17.4 s of timings on 14.6 s of audio, which clipped
+    two pages.  Treating that as a cache miss regenerates the take instead.
+    """
+    if not boundaries:
+        return True
+    seconds = len(audio) / SAMPLE_RATE
+    last = max(float(item.get("end") or 0) for item in boundaries)
+    return last <= seconds + 0.05
+
+
 def voice(text: str, config: dict, cache: Path) -> tuple[np.ndarray, list[dict], list[Path]]:
     key = fingerprint({"text": text, "voice": config["voice"], "rate": config["voice_rate"], "version": 1})
     folder = cache / key
@@ -77,7 +91,10 @@ def voice(text: str, config: dict, cache: Path) -> tuple[np.ndarray, list[dict],
     if receipt.exists():
         hashes = read_json(receipt)
         if all(p.exists() and hashes.get(p.name) == file_hash(p) for p in (wav, mp3, timing)):
-            return read_wav(wav), read_json(timing), [wav, mp3, timing, receipt]
+            cached_audio, cached_timing = read_wav(wav), read_json(timing)
+            if timing_matches_audio(cached_audio, cached_timing):
+                return cached_audio, cached_timing, [wav, mp3, timing, receipt]
+            print("[缓存] 配音时长与词语边界不一致，重新合成", flush=True)
     error = None
     for attempt in range(config["max_retries"] + 1):
         try:
@@ -87,6 +104,8 @@ def voice(text: str, config: dict, cache: Path) -> tuple[np.ndarray, list[dict],
             audio = read_wav(wav)
             if len(audio) < SAMPLE_RATE or float(np.max(np.abs(audio))) < 0.001:
                 raise RuntimeError("配音为空或近乎静音")
+            if not timing_matches_audio(audio, boundaries):
+                raise RuntimeError("词语边界超出音频时长，重新合成该段配音")
             atomic_json(timing, boundaries)
             atomic_json(receipt, {p.name: file_hash(p) for p in (wav, mp3, timing)})
             return audio, boundaries, [wav, mp3, timing, receipt]
@@ -124,7 +143,7 @@ def captions(text: str, boundaries: list[dict], duration: float, max_chars: int,
         first = source[start] if start < len(source) else len(text)
         last = source[last_index] + 1
         positions.append((first, last, boundary["start"], boundary["end"]))
-    pages, cursor = [], 0
+    pages, cursor, previous_end = [], 0, 0.0
     mode = "tts-word-boundaries" if positions else "estimated-character-timing"
     for part in parts:
         if not part:
@@ -133,13 +152,19 @@ def captions(text: str, boundaries: list[dict], duration: float, max_chars: int,
         matched = [p for p in positions if p[0] < end and p[1] > start]
         t0 = matched[0][2] if matched else duration * start / max(1, len(text))
         t1 = matched[-1][3] if matched else duration * end / max(1, len(text))
-        pages.append({"start": min(t0, duration), "end": min(max(t1, t0 + 0.15), duration),
+        # Two pages can share one TTS word when a page boundary falls inside it; the
+        # second page must not start before the first one ended, or the timeline
+        # check rejects the cut ("字幕交叠").
+        t0 = max(t0, previous_end)
+        t1 = max(t1, t0 + 0.15)
+        pages.append({"start": min(t0, duration), "end": min(t1, duration),
                       "text": part.strip(" ，。！？；：,.!?;:")})
+        previous_end = pages[-1]["end"]
         cursor = end
     # Silence between clauses keeps the last caption briefly visible, without overlapping the next.
     for i, page in enumerate(pages):
         next_start = pages[i + 1]["start"] if i + 1 < len(pages) else duration
-        page["end"] = min(next_start, max(page["end"], page["start"] + 0.5))
+        page["end"] = max(page["start"], min(next_start, max(page["end"], page["start"] + 0.5)))
     return [p for p in pages if p["text"] and p["end"] > p["start"]], mode
 
 

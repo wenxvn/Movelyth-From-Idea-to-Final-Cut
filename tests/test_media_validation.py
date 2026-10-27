@@ -1,5 +1,6 @@
 from movelyth.media import ffmpeg
 from movelyth.quality import (
+    contact_sheet,
     encoded_stills,
     loudness_filter,
     measure_loudness,
@@ -41,6 +42,7 @@ def test_silent_audio_stream_does_not_pass_as_sound(tmp_path):
 
 
 def test_review_frames_are_extracted_from_encoded_video(tmp_path):
+    """Stills keep the encoded resolution: downscaling made on-screen text unreadable."""
     from PIL import Image, ImageChops
 
     path = tmp_path / "actual.mp4"
@@ -48,8 +50,25 @@ def test_review_frames_are_extracted_from_encoded_video(tmp_path):
     frames = encoded_stills(path, {"scenes": [{"frames": 10}, {"frames": 10}]}, 10,
                              tmp_path / "frames", portrait=False)
     with Image.open(frames[0]) as first, Image.open(frames[1]) as second:
-        assert first.size == second.size == (960, 540)
+        assert first.size == second.size == (320, 180)
         assert ImageChops.difference(first.convert("RGB"), second.convert("RGB")).getbbox() is not None
+
+
+def test_contact_sheet_keeps_text_legible(tmp_path):
+    """A 480 px cell reduced a 50 px axis label to 12 px; the reviewer then guessed."""
+    from PIL import Image, ImageDraw
+
+    stills = []
+    for index in range(3):
+        path = tmp_path / f"still-{index}.jpg"
+        image = Image.new("RGB", (1920, 1080), "#122531")
+        ImageDraw.Draw(image).text((100, 100), "L = 1.25(w-2)^2", fill="white")
+        image.save(path)
+        stills.append(str(path))
+    output = tmp_path / "sheet.jpg"
+    contact_sheet(stills, output, portrait=False)
+    with Image.open(output) as sheet:
+        assert sheet.size == (3 * 960, 540 + 34)
 
 
 def test_review_frames_are_sampled_after_scene_actions_finish():

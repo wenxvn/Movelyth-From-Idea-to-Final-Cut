@@ -20,6 +20,10 @@ speech_replace = {}
 # 可选：关键术语，用 | 分隔可接受写法（如 "Qwen|千问"、"熵|商"）。
 # 仅用于配音质检核对：ASR 转写里找不到时记为待复听，不影响制作。
 key_terms = []
+# 审片模型读不准图表坐标刻度（刻度由程序按数据范围等分生成，有测试覆盖）。
+# true：把纯刻度读数类 finding 降级为 warning，避免无谓重渲染；false：按原样阻断。
+# 涉及空白/遮挡/缺字等结构性问题的 finding 不受影响。
+downgrade_axis_readings = true
 # 可选本地 ASR 质检（需自行安装 faster-whisper）。未安装时报告为未检查，不影响制作。
 asr_enabled = false
 asr_model = "small"
@@ -34,6 +38,24 @@ timeout_seconds = 1500
 model = ""
 # provider = "mock" 时用于离线测试的预设响应目录（不用于真实创作）。
 # mock_dir = "tests/fixtures/mock"
+
+# ---------------------------------------------------------------- 通用 [OI] 兼容端点
+# provider = "openai" 时改用任意兼容 /chat/completions 的服务（DeepSeek 官方、
+# 中转网关、vLLM、Ollama 等）。密钥只从环境变量读取，不写进本文件。
+# provider = "openai"
+# base_url = "https://api.deepseek.com/v1"
+# api_key_env = "DEEPSEEK_API_KEY"
+# model = "deepseek-flash"
+# 结构化输出：auto 先试 json_schema，失败退 json_object，再退纯提示词。
+# structured_output = "auto"
+# 审片需要看图。disabled 时会明确拒绝带图片的调用，而不是假装审过。
+# vision = "auto"
+# 一集 long 约 9 镜、short 约 4 镜；低于 8192 容易截断（会报错，不会静默）。
+# max_tokens = 8192
+# temperature = 0.7
+# 部分网关不支持 $defs/$ref，默认内联成自包含 schema。
+# inline_schema = true
+# 连通性检查：movelyth doctor 会探测；也可单独运行 movelyth probe
 
 [paths]
 workspace = "workspace"

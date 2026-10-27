@@ -1,5 +1,52 @@
 # 验证记录
 
+## 2026-10-27 · 通用 provider 与真实弱模型验收
+
+```text
+pytest -q                            → 181 passed（含 1 项真实渲染 slow 测试）
+pytest -q -m "not slow"              → 180 passed, 1 deselected
+ruff check src tests                 → All checks passed
+npm --prefix studio run typecheck    → 通过
+```
+
+### 真实 DeepSeek 端到端（不是模拟）
+
+| 阶段 | 结果 |
+|---|---|
+| `movelyth probe` | `reachable=true`、`json_output=true`、`vision=true`（真实图片问答返回"深黑色背景"） |
+| research | 通过 |
+| script | 通过（多轮契约修复后收敛，最佳草稿 1 项待修） |
+| sound | 通过（真实 Edge TTS，含一条损坏缓存的自动重合成） |
+| render | 通过（横版 + 竖版真实 Remotion 渲染） |
+| check | 横版 152.9s / -14.4 LUFS / -1.2 dBTP，竖版 62.8s / -14.4 LUFS / -1.4 dBTP，13 项检查全通过 |
+| visual-review | **拒收**（真实内容缺陷，见下） |
+
+`json_schema` 在 DeepSeek 官方端点返回 400（`This response_format type is unavailable now`），
+自动降级到 `json_object` 成功；该模式按进程记忆，后续调用不再重试。
+
+### 真实抽帧暴露的缺陷（已修复并复验）
+
+| 缺陷 | 证据 | 修复 |
+|---|---|---|
+| 公式折行 | `L＝(4＋16)÷4＝5` 渲染成两行，第二行只有 `＝5` | math 层单行收缩 + 高度检查；重新渲染确认单行 |
+| 公式被裁切 | `side` 区（高 55px）只显示 `-1 + (-1)×(-1)` 上半截 | 计入渲染器 14px 内边距；重新渲染确认完整 |
+| diagram 节点重叠 | `(-1)×(-1)=-1` 画成 `(-1)×(` | 节点宽度校验与 TSX 公式一致 |
+| 柱状图柱子重叠 | 同 x 两系列完全叠在一起，标签压成一块 | 并排分组渲染 |
+| 零值柱不可见 | `0.0` 柱高为零，"0 对 -2"只剩一根柱 | 画可见基准线；重新渲染确认 `0.0` 可读 |
+
+### 未通过的部分
+
+VID-000005 未产出交付包。审片拒收理由（已逐条核对抽帧确认为真）：
+l5 与 l6 是同一论证重复、l1 数轴未标 -3/0/+3、部分推导链在画面上不闭合。
+这些是内容与编排缺陷，需要更强模型重新生成脚本；程序侧的检查与修复闭环本身已验证通过。
+
+### 边界
+
+- `deepseek-flash` 在 8 镜结构里反复犯同类契约错误，12 轮修复仍卡在 1 项；`deepseek-v4-pro` 同样
+  未能收敛到 0 项。弱模型可用，但需要更多轮次，且内容质量明显低于 Codex。
+- 视觉模型（DeepSeek）对中文细节与坐标刻度的读数不可靠：同一张图两次审片给出不同刻度数字，
+  因此纯刻度类 finding 已降级为 warning。
+
 ## 2026-10-26 · 借鉴 references 的质检与排版改进
 
 改动：两遍响度归一（-14 LUFS / -1.5 dBTP）、逐镜运动分析、发音与字幕分离、

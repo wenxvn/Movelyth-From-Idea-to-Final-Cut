@@ -176,6 +176,34 @@ def test_replacement_that_changes_length_still_times_the_caption():
     assert "det" in "".join(page["text"] for page in pages)
 
 
+def test_captions_never_go_backwards_when_two_pages_share_one_word():
+    """A page boundary inside a TTS word used to give both pages the same start.
+
+    The timeline check then rejected the whole cut with "字幕交叠" — a real failure
+    on a DeepSeek-generated script.
+    """
+    text = "所以结果的符号取正：负一乘负一，得正一。"
+    words = [{"start": 0.1, "end": 0.5, "text": "所以"},
+             {"start": 0.5, "end": 1.4, "text": "结果的符号取正"},
+             {"start": 1.4, "end": 2.0, "text": "负一乘负一"},
+             {"start": 2.0, "end": 2.4, "text": "得正一"}]
+    pages, _mode = captions(text, words, 2.5, 8)
+    assert pages
+    assert all(a["end"] <= b["start"] + 1e-9 for a, b in zip(pages, pages[1:]))
+
+
+def test_voice_cache_rejects_boundaries_longer_than_the_audio():
+    """One cached take had 17.4 s of timings on 14.6 s of audio and clipped captions."""
+    from movelyth.media import SAMPLE_RATE, timing_matches_audio
+
+    audio = np.zeros(int(SAMPLE_RATE * 2.0), dtype=np.float32)
+    inside = [{"start": 0.1, "end": 1.9, "text": "好"}]
+    beyond = [{"start": 0.1, "end": 2.9, "text": "好"}]
+    assert timing_matches_audio(audio, inside) is True
+    assert timing_matches_audio(audio, beyond) is False
+    assert timing_matches_audio(audio, []) is True
+
+
 def test_missing_feedback_remains_unknown(studio):
     episode = studio.create("反馈测试")
     studio.ledger.add_feedback(episode["id"], "bilibili", "https://www.bilibili.com/video/example", {})

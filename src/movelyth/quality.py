@@ -259,19 +259,30 @@ def motion_report(video: Path, scenes: list[dict], fps: int, *, portrait: bool) 
                     "整帧运动通常是缩放/抖动，需人工确认是否设计意图"}
 
 
-def contact_sheet(stills: list[str], output: Path, *, portrait: bool):
-    cell_w, cell_h = (270, 480) if portrait else (480, 270)
-    columns = 3
+def contact_sheet(stills: list[str], output: Path, *, portrait: bool, columns: int = 3,
+                  cell: int = 960):
+    """Tile review stills for the reviewer agent.
+
+    Cells stay large enough to read on-screen text: a chart's axis labels are about
+    50 px at 1920 wide, so 480 px cells reduced them to ~12 px and the reviewer
+    reported guessed values as defects.  960 px cells keep them legible while the
+    whole sheet stays under a few megabytes.
+    """
+    if not stills:
+        raise ValueError("没有可拼图的审片静帧")
+    cell_w = cell
+    cell_h = round(cell * 9 / 16) if not portrait else round(cell * 16 / 9)
+    columns = max(1, min(columns, len(stills)))
     rows = (len(stills) + columns - 1) // columns
-    sheet = Image.new("RGB", (columns * cell_w, rows * (cell_h + 30)), "#122531")
+    sheet = Image.new("RGB", (columns * cell_w, rows * (cell_h + 34)), "#122531")
     draw = ImageDraw.Draw(sheet)
     for i, name in enumerate(stills):
         with Image.open(name) as im:
-            im = im.convert("RGB").resize((cell_w, cell_h))
-            x, y = (i % columns) * cell_w, (i // columns) * (cell_h + 30)
+            im = im.convert("RGB").resize((cell_w, cell_h), Image.LANCZOS)
+            x, y = (i % columns) * cell_w, (i // columns) * (cell_h + 34)
             sheet.paste(im, (x, y))
-            draw.text((x + 10, y + cell_h + 5), f"SCENE {i + 1:02d}", fill="white")
-    sheet.save(output)
+            draw.text((x + 10, y + cell_h + 8), f"SCENE {i + 1:02d}", fill="white")
+    sheet.save(output, quality=90)
 
 
 def review_frame_fraction(scene: dict) -> float:
@@ -281,17 +292,113 @@ def review_frame_fraction(scene: dict) -> float:
 
 
 def encoded_stills(video: Path, cut: dict, fps: int, directory: Path, *, portrait: bool) -> list[str]:
+    """Extract one still per scene at native resolution for review.
+
+    Downscaling here used to make on-screen text unreadable to the reviewer, which
+    then reported guessed values as defects.
+    """
     directory.mkdir(parents=True, exist_ok=True)
     offset, images = 0, []
     for index, scene in enumerate(cut["scenes"]):
         seconds = (offset + int(scene["frames"] * review_frame_fraction(scene))) / fps
         output = directory / f"scene-{index + 1:02d}.jpg"
         run([ffmpeg(), "-y", "-v", "error", "-ss", f"{seconds:.6f}", "-threads", "2", "-i", str(video),
-             "-frames:v", "1", "-vf", "scale=540:-2" if portrait else "scale=960:-2",
-             "-threads", "1", str(output)], timeout=60)
+             "-frames:v", "1", "-vf", "scale=iw:ih",
+             "-threads", "1", "-q:v", "3", str(output)], timeout=60)
         images.append(str(output))
         offset += scene["frames"]
     return images
+
+
+AXIS_READING_PATTERN = re.compile(
+    r"刻度|坐标轴|纵轴|横轴|axis|ticks?|y-?axis|x-?axis", re.IGNORECASE)
+
+
+def downgrade_axis_readings(review, *, enabled: bool = True) -> dict:
+    """Separate reviewer findings that are really guesses about axis tick labels.
+
+    Chart ticks are generated deterministically from the data range and covered by
+    Python tests; a vision model reading ~25 px labels on a contact sheet gets them
+    wrong often enough that two runs on the same stills disagree with each other.
+    Those findings are kept but downgraded to warnings so they inform a human
+    without forcing a re-render.  A finding that also reports something structural
+    (blank area, overlap, wrong shape) is *not* downgraded.
+    """
+    structural = re.compile(r"空白|遮挡|溢出|裁切|重叠|缺字|不可读|过暗|太小|颜色|布局|位置错|未显示")
+    kept, moved = [], []
+    for issue in review.issues:
+        if enabled and AXIS_READING_PATTERN.search(issue) and not structural.search(issue):
+            moved.append(issue)
+        else:
+            kept.append(issue)
+    findings_kept, findings_moved = [], []
+    for finding in review.findings:
+        detail = finding.detail
+        if (enabled and finding.category == "visual_mismatch"
+                and AXIS_READING_PATTERN.search(detail) and not structural.search(detail)):
+            findings_moved.append(finding)
+        else:
+            findings_kept.append(finding)
+    if not moved and not findings_moved:
+        return {"review": review, "downgraded": [], "applied": False}
+    warnings = list(review.warnings) + [
+        f"已降级为参考（视觉模型读不准坐标刻度，刻度由程序按数据范围等分生成）：{text[:200]}"
+        for text in moved]
+    warnings += [
+        f"已降级为参考（同上，{finding.scene_id or '未定位'}）：{finding.detail[:200]}"
+        for finding in findings_moved]
+    downgraded = review.model_copy(update={
+        # The original `passed=False` was caused by these findings; once they are
+        # warnings, an otherwise clean review is a pass.
+        "passed": not kept and not findings_kept,
+        "issues": kept, "findings": findings_kept, "warnings": warnings[:20]})
+    return {"review": downgraded, "downgraded": moved + [f.detail for f in findings_moved],
+            "applied": True}
+
+
+class ScriptIssues(ValueError):
+    """Script contract failures, itemized so the director can fix each one.
+
+    A single semicolon-joined sentence makes a weak model re-break the same rule;
+    one item per defect with the scene id is what actually gets repaired.
+    """
+
+    def __init__(self, problems: list[str], headline: str = "脚本不满足渲染契约"):
+        self.problems = [str(problem) for problem in problems]
+        super().__init__(headline + "：" + "；".join(self.problems))
+
+
+def repair_dangling_actions(value: dict) -> tuple[dict, list[str]]:
+    """Drop actions whose target layer is not in the scene, and say so.
+
+    This is a mechanical defect, not an editorial choice: the action cannot be
+    drawn, and one such action otherwise fails the whole contract four times in a
+    row on a weaker model (observed with DeepSeek).  Removing it loses an animation
+    but keeps the picture and the narration intact, and the removal is recorded.
+
+    Works on a whole Film (``long``/``short``) or a single Cut (``scenes``).
+    """
+    notes: list[str] = []
+
+    def visit(container: dict) -> None:
+        for scene in container.get("scenes") or []:
+            layers = {layer.get("id") for layer in scene.get("layers") or []}
+            if not layers:
+                continue
+            kept = []
+            for action in scene.get("actions") or []:
+                if action.get("target") in layers:
+                    kept.append(action)
+                else:
+                    notes.append(f"{scene.get('id')}: 删除引用不存在图层 "
+                                 f"{action.get('target')} 的 {action.get('kind')} 动作")
+            scene["actions"] = kept
+
+    visit(value)
+    for cut_name in ("long", "short"):
+        if isinstance(value.get(cut_name), dict):
+            visit(value[cut_name])
+    return value, notes
 
 
 def validate_script(film, research, long_seconds: int, short_seconds: int) -> list[str]:
@@ -299,21 +406,22 @@ def validate_script(film, research, long_seconds: int, short_seconds: int) -> li
     from .consistency import check_film
     from .scenedsl import scene_signature, validate_cut_dsl
 
+    problems: list[str] = []
     for name, target in [("long", long_seconds), ("short", short_seconds)]:
         cut = getattr(film, name)
         characters = sum(len(scene.narration) for scene in cut.scenes)
         if not target * 3.4 <= characters <= target * 6.5:
-            raise ValueError(f"{name} 旁白长度 {characters} 字不适配目标 {target} 秒")
+            problems.append(f"{name} 旁白长度 {characters} 字不适配目标 {target} 秒")
         if len({scene_signature(scene) for scene in cut.scenes}) < 3:
-            raise ValueError(f"{name} 至少应有三种与内容相关的视觉表达")
+            problems.append(f"{name} 至少应有三种与内容相关的视觉表达")
         if any(s.source_index >= len(research.sources) for s in cut.scenes):
-            raise ValueError("source_index 引用了不存在的来源")
-        problems = validate_cut_dsl(cut, vertical=name == "short")
-        if problems:
-            raise ValueError("；".join(problems[:6]))
+            problems.append(f"{name} 有镜头的 source_index 引用了不存在的来源")
+        problems.extend(validate_cut_dsl(cut, vertical=name == "short"))
+    if problems:
+        raise ScriptIssues(problems)
     errors, warnings = check_film(film)
     if errors:
-        raise ValueError("旁白与画面不一致：" + "；".join(errors[:6]))
+        raise ScriptIssues(errors, headline="旁白与画面不一致")
     return warnings
 
 

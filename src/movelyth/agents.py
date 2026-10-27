@@ -26,7 +26,7 @@ class AgentProvider(Protocol):
     name: str
 
     def call(self, role: str, context: dict, contract: type[BaseModel], directory: Path,
-             images: list[Path] | None = None) -> BaseModel: ...
+             images: list[Path] | None = None, sanitize=None) -> BaseModel: ...
 
 
 def resolve_codex() -> str | None:
@@ -50,7 +50,7 @@ class CodexAgents:
 
 
     def call(self, role: str, context: dict, contract: type[BaseModel], directory: Path,
-             images: list[Path] | None = None):
+             images: list[Path] | None = None, sanitize=None):
         base = directory
         if any((base / name).exists() for name in ["prompt.txt", "events.log", "response.json"]):
             directory = base / "attempts" / uuid.uuid4().hex[:12]
@@ -133,7 +133,7 @@ class MockProvider:
         return cls(responses)
 
     def call(self, role: str, context: dict, contract: type[BaseModel], directory: Path,
-             images: list[Path] | None = None):
+             images: list[Path] | None = None, sanitize=None):
         self.calls.append(role)
         directory.mkdir(parents=True, exist_ok=True)
         atomic_json(directory / "schema.json", strict_schema(contract))
@@ -154,6 +154,10 @@ def create_provider(root: Path, config: dict) -> AgentProvider:
     provider = (config or {}).get("provider", "codex")
     if provider == "codex":
         return CodexAgents(root, config)
+    if provider == "openai":
+        from .openai_compat import create_endpoint_agents
+
+        return create_endpoint_agents(root, config)
     if provider == "mock":
         directory = config.get("mock_dir")
         if not directory:
@@ -164,5 +168,5 @@ def create_provider(root: Path, config: dict) -> AgentProvider:
         if not path.is_dir():
             raise ValueError(f"mock provider 目录不存在：{path}")
         return MockProvider.from_directory(path)
-    raise ValueError(f"未知 provider：{provider}；当前支持 codex（默认）与 mock（测试用）")
+    raise ValueError(f"未知 provider：{provider}；支持 codex（默认）、openai（[OI] 兼容端点）与 mock（测试用）")
 
