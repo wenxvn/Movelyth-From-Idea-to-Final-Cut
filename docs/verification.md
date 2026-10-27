@@ -217,6 +217,21 @@ mock provider 契约、真实渲染静帧互不相同、预览不入交付、局
 
 ---
 
+## 2026-10-27 · V3（同脚本对照）
+
+- `pytest -q`：207 项通过（新增 12 项 V3 测试：coverage beat、自动 Foley、混音电平、
+  构图测量、叙事检查、契约字段、storyboard 字段）。
+- `ruff check src tests` 通过；`npx tsc --noEmit` 通过；真实 Remotion 静帧 smoke 通过。
+- 同脚本 A/B：`VID-000025`（V3）对照 `VID-000015`（V2）。13 项技术检查通过，
+  长版 229.4 s / 竖版 65.4 s，-14.3 / -1.1 dBTP，混音比 1.167 / 1.179。
+  主体高度中位数 0.206 → 0.528，空白网格 0.439 → 0.267，音效 9 → 41 个（2 → 10 类），
+  静止采样 4.3% → 2.6%。详见 `v3-evaluation.md`。
+- 音频合成合并进 `sound.py` 后重跑 `VID-000023`，指标逐项相同（去重没有改变成片）；
+  之后 `VID-000024` / `VID-000025` 只改 `immersive` 注的排位。
+- V2 旧脚本（无 V3 字段）用当前渲染器重渲仍正常：`workspace/audit-v3/compat-long/`。
+- **未执行**：真实 Codex 端到端、人工完整观看、人工实听、平台上传。
+  质检报告 `provider: mock`，`human_review` 仍为 false。
+
 ## 2026-10-25 · 首版（0.1.0，V1 之前）
 
 - 22 项 pytest 通过，Ruff、TypeScript 与 skill 格式检查通过。

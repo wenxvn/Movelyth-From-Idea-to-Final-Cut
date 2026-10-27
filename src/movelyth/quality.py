@@ -4,7 +4,6 @@ import json
 import math
 import re
 import subprocess
-import wave
 from pathlib import Path
 
 import numpy as np
@@ -298,43 +297,6 @@ def review_frame_fraction(scene: dict) -> float:
     return min(0.96, max(0.55, last + 0.04))
 
 
-def audio_design_report(cut: dict, mix: Path) -> dict:
-    """What the sound design actually contains, measured rather than claimed.
-
-    Counts cues per minute, reports the music/bed sections and the mix level, so a
-    film with no sound design cannot pass as one that has it.
-    """
-    from .audioqc import _read_mono
-
-    seconds = sum(scene["frames"] for scene in cut["scenes"]) / 30.0
-    cues = sum(len(scene.get("cues_resolved") or []) for scene in cut["scenes"])
-    kinds = {}
-    for scene in cut["scenes"]:
-        for cue in scene.get("cues_resolved") or []:
-            kinds[cue["kind"]] = kinds.get(cue["kind"], 0) + 1
-    transitions = [scene.get("transition", "fade") for scene in cut["scenes"]]
-    cameras = [scene.get("camera", "push") for scene in cut["scenes"]]
-    bed = {}
-    try:
-        audio = _read_mono(mix)
-        window = 2400
-        frames = len(audio) // window
-        if frames > 4:
-            rms = np.sqrt(np.mean(audio[:frames * window].reshape(frames, window) ** 2, axis=1))
-            bed = {"rms_db": round(float(20 * np.log10(max(1e-6, float(np.median(rms))))), 1),
-                   "dynamic_range_db": round(float(20 * np.log10(
-                       max(1e-6, float(np.percentile(rms, 95))) / max(1e-6, float(np.percentile(rms, 10))))), 1)}
-    except (OSError, ValueError, wave.Error) as exc:  # pragma: no cover - corrupt wav
-        bed = {"status": "unavailable", "reason": str(exc)}
-    return {"seconds": round(seconds, 1), "cues": cues,
-            "cues_per_minute": round(cues / max(1e-6, seconds / 60), 2),
-            "cue_kinds": kinds, "transition_variety": len(set(transitions)),
-            "camera_moves": {name: cameras.count(name) for name in sorted(set(cameras))},
-            "mix_levels": bed,
-            "prosody": cut.get("prosody", "flat"),
-            "limitations": ["程序合成的音效与配乐不是采样音源；机器统计不能替代实听"]}
-
-
 def encoded_stills(video: Path, cut: dict, fps: int, directory: Path, *, portrait: bool) -> list[str]:
     """Extract one still per scene at native resolution for review.
 
@@ -471,6 +433,9 @@ def validate_script(film, research, long_seconds: int, short_seconds: int) -> li
     for name in ("long", "short"):
         for warning in pacing_estimate(getattr(film, name))["warnings"]:
             warnings.append(f"{name} 节奏：{warning}")
+    from .craft import narrative_report
+
+    warnings.extend(narrative_report(film)["warnings"])
     return warnings
 
 

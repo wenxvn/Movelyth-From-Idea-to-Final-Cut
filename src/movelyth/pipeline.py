@@ -16,6 +16,7 @@ from .agents import create_provider
 from .assets import credit_lines, mark_used, stage_for_render
 from .assets import resolve as resolve_library
 from .audioqc import audio_qc
+from .craft import composition_report, narrative_report, rhythm_report, sound_design_report
 from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
 from .metrics import Metrics
@@ -24,7 +25,6 @@ from .publish import audit_summary, credits, publishing_copy
 from .quality import (
     LOUDNESS_TARGET,
     ScriptIssues,
-    audio_design_report,
     contact_sheet,
     downgrade_axis_readings,
     duration_policy,
@@ -528,6 +528,7 @@ class Studio:
             return data, list(set(paths + [out]))
 
         timelines = self.stage(episode, "sound", {"implementation": file_hash(Path(__file__).with_name("media.py")),
+                               "sound": file_hash(Path(__file__).with_name("sound.py")),
                                "scenedsl": file_hash(Path(__file__).with_name("scenedsl.py")),
                                "film": film, "voice": {k: config[k] for k in
                                ["voice", "voice_rate", "fps", "max_retries"]},
@@ -620,7 +621,9 @@ class Studio:
                              render_action)
 
         def check_action():
-            reports, audio_reports, motion_reports, pacing, design, outputs, images = {}, {}, {}, {}, {}, [], []
+            reports, audio_reports, motion_reports = {}, {}, {}
+            pacing, design, composition, rhythm = {}, {}, {}, {}
+            outputs, images = [], []
             for name in ["long", "short"]:
                 video = job / "renders" / name / "final.mp4"
                 # Two passes: measure the mix, then normalise linearly to the platform target.
@@ -637,8 +640,10 @@ class Studio:
                                                      portrait=name == "short")
                 reports[name]["motion"] = motion_reports[name]
                 pacing[name] = pacing_report(timelines[name], config["fps"])
-                design[name] = audio_design_report(timelines[name], Path(timelines[name]["mix"]))
+                rhythm[name] = rhythm_report(timelines[name], config["fps"])
+                design[name] = sound_design_report(timelines[name], Path(timelines[name]["mix"]))
                 reports[name]["pacing"] = pacing[name]
+                reports[name]["rhythm"] = rhythm[name]
                 reports[name]["sound_design"] = design[name]
                 audio_reports[name] = audio_qc(Path(timelines[name]["voice"]), Path(timelines[name]["mix"]),
                                                "".join(scene["narration"] for scene in timelines[name]["scenes"]),
@@ -648,6 +653,8 @@ class Studio:
                 actual_stills = encoded_stills(video, timelines[name], config["fps"], job / "encoded-stills" / name,
                                                portrait=name == "short")
                 contact_sheet(actual_stills, image, portrait=name == "short")
+                composition[name] = composition_report(actual_stills, portrait=name == "short")
+                reports[name]["composition"] = composition[name]
                 images.append(image)
                 outputs.extend([video, image])
                 outputs.extend(Path(p) for p in actual_stills)
@@ -674,7 +681,9 @@ class Studio:
                 raise VisualReviewError("实际画面审片未通过：" + "；".join(visual.issues))
             report = job / "quality.json"
             atomic_json(report, {"technical": reports, "audio": audio_reports,
-                                 "pacing": pacing, "sound_design": design,
+                                 "pacing": pacing, "rhythm": rhythm,
+                                 "composition": composition, "sound_design": design,
+                                 "narrative": narrative_report(Film.model_validate(film)),
                                  "script_review": read_json(job / "script-review.json"),
                                  "script_warnings": warnings,
                                  "visual_review": visual.model_dump(), "checked_at": now(),
@@ -695,6 +704,8 @@ class Studio:
         self.stage(episode, "check", {"implementation": file_hash(Path(__file__).with_name("quality.py")),
                    "audioqc": file_hash(Path(__file__).with_name("audioqc.py")),
                    "media": file_hash(Path(__file__).with_name("media.py")),
+                   "sound": file_hash(Path(__file__).with_name("sound.py")),
+                   "craft": file_hash(Path(__file__).with_name("craft.py")),
                    "renders": renders, "timelines": timelines, "review_prompt": prompts["reviewer.md"]},
                    check_action)
         return self.deliver(episode, job, film, research_data, timelines, library_ids)
@@ -731,9 +742,14 @@ class Studio:
             seconds = scene["frames"] / fps
             rows.append({
                 "index": index + 1, "id": scene["id"], "layout": scene["layout"],
-                "heading": scene["heading"], "start": round(offset, 2),
+                "heading": scene["heading"], "chapter": scene.get("chapter", ""),
+                "role": scene.get("role", "mechanism"), "takeaway": scene.get("takeaway", ""),
+                "metric": scene.get("metric", ""), "hero": scene.get("hero", ""),
+                "start": round(offset, 2),
                 "end": round(offset + seconds, 2),
-                "layers": [{"id": layer["id"], "type": layer["type"], "region": layer["region"]}
+                "layers": [{"id": layer["id"], "type": layer["type"], "region": layer["region"],
+                            "annotations": layer.get("annotations", []),
+                            "highlight": layer.get("highlight", [])}
                            for layer in scene["layers"]],
                 "transition": scene.get("transition", "fade"),
                 "camera": scene.get("camera", "push"),

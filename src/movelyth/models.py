@@ -28,6 +28,8 @@ TransitionKind = Literal["cut", "fade", "slide", "wipe", "dip", "zoom"]
 CameraKind = Literal["none", "push", "pull", "pan_left", "pan_right"]
 # Procedurally synthesised sound cues (no third-party audio, no licence risk).
 CueKind = Literal["whoosh", "tick", "impact", "riser", "chime"]
+#A shot's job in the story.  Used for music energy, pacing checks and the header.
+SceneRole = Literal["hook", "mechanism", "example", "turn", "conclusion"]
 
 
 def _finite(values: list[float], limit: float, message: str) -> list[float]:
@@ -138,6 +140,25 @@ class DiagramEdge(Contract):
     label: str = Field(default="", max_length=12)
 
 
+class Annotation(Contract):
+    """A short callout on a chart at a real x position.
+
+    An annotation is data storytelling, not decoration: it must name a value that
+    the series actually contains (the renderer snaps to the nearest sample), so a
+    model cannot invent a point on the curve that does not exist.
+    """
+
+    x: float = Field(ge=-1_000_000, le=1_000_000)
+    text: str = Field(min_length=1, max_length=20)
+
+    @field_validator("x")
+    @classmethod
+    def finite_x(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("注释坐标必须是有限数")
+        return value
+
+
 class Layer(Contract):
     """One bounded visual layer inside a scene.
 
@@ -166,6 +187,20 @@ class Layer(Contract):
     # Connect scattered points into a path (closed shape when the first and last
     # point coincide is up to the data).  Used for triangles, polygons and routes.
     connect: bool = False
+    # A chart's story beats: up to four labelled points.  The renderer snaps each
+    # x to the nearest real sample and refuses to draw a point that is not in the
+    # data, so an annotation cannot claim a value the series does not contain.
+    annotations: list[Annotation] = Field(default_factory=list, max_length=4)
+    # An x interval that deserves emphasis (the "overshoot" region, the feasible
+    # range).  Two finite numbers; ignored by non-chart layers.
+    highlight: list[float] = Field(default_factory=list, max_length=2)
+
+    @field_validator("highlight")
+    @classmethod
+    def finite_highlight(cls, values: list[float]) -> list[float]:
+        if values and len(values) != 2:
+            raise ValueError("highlight 需要两个 x 值（区间起止）")
+        return _finite(values, 1_000_000, "highlight 必须是有限数")
 
     @field_validator("points")
     @classmethod
@@ -282,6 +317,16 @@ class Scene(Contract):
     # emphasis and for a slightly slower, louder delivery of that sentence.
     emphasis: list[str] = Field(default_factory=list, max_length=3)
     cues: list[Cue] = Field(default_factory=list, max_length=4)
+    # V3 direction fields.  A short chapter label, the shot's narrative job, the
+    # one sentence a viewer should remember, and the number/term that carries it.
+    # All default to empty so V1/V2 approved scripts render unchanged.
+    chapter: str = Field(default="", max_length=8)
+    role: SceneRole = "mechanism"
+    takeaway: str = Field(default="", max_length=30)
+    metric: str = Field(default="", max_length=16)
+    # The layer that should read as the hero.  Empty means "first drawing layer in
+    # main", which is what every existing script already relies on visually.
+    hero: str = Field(default="", max_length=24)
 
     @field_validator("labels")
     @classmethod
@@ -311,6 +356,8 @@ class Scene(Contract):
             raise ValueError(f"镜头 {self.id} 的图层 id 不能重复")
         if any(action.target not in identifiers for action in self.actions):
             raise ValueError(f"镜头 {self.id} 的动画引用了不存在的图层")
+        if self.hero and self.hero not in identifiers:
+            raise ValueError(f"镜头 {self.id} 的 hero 引用了不存在的图层 {self.hero}")
         return self
 
 

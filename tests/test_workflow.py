@@ -8,10 +8,11 @@ import pytest
 from pydantic import ValidationError
 
 from movelyth.ledger import BusyError, Ledger
-from movelyth.media import captions, image_layers, soundtrack, speech_plan
+from movelyth.media import captions, image_layers, speech_plan
 from movelyth.models import Film, Scene, strict_schema
 from movelyth.pipeline import Studio, intent_key, manifest_valid, safe_title
 from movelyth.quality import srt
+from movelyth.sound import soundtrack
 from movelyth.util import atomic_json, file_hash
 
 

@@ -16,6 +16,7 @@ const defaults: MovieProps = {
       id: 'visual', type: 'procedural', region: 'main', text: '', shape: 'rect', chart: 'line',
       procedural: 'matrix', series: [], nodes: [], edges: [], steps: [], points: [], data_ref: '',
       unit: '', axis: '', source_note: '', color: 'cyan', emphasis: 1, connect: false,
+      annotations: [], highlight: [],
     }],
   }],
 };

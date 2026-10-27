@@ -10,6 +10,9 @@ export type StyleName = 'minimal' | 'tech' | 'documentary';
 export type TransitionKind = 'cut' | 'fade' | 'slide' | 'wipe' | 'dip' | 'zoom';
 export type CameraKind = 'none' | 'push' | 'pull' | 'pan_left' | 'pan_right';
 export type CueKind = 'whoosh' | 'tick' | 'impact' | 'riser' | 'chime';
+export type SceneRole = 'hook' | 'mechanism' | 'example' | 'turn' | 'conclusion';
+
+export type Annotation = {x: number; text: string};
 
 export type Series = {label: string; values: number[]; unit: string; x_values: number[]};
 export type DiagramNode = {id: string; label: string; x: number; y: number};
@@ -35,6 +38,8 @@ export type Layer = {
   color: Color;
   emphasis: number;
   connect: boolean;
+  annotations: Annotation[];
+  highlight: number[];
 };
 
 export type ResolvedAction = {
@@ -79,6 +84,11 @@ export type Scene = {
   camera?: CameraKind;
   emphasis?: string[];
   cues_resolved?: SoundCue[];
+  chapter?: string;
+  role?: SceneRole;
+  takeaway?: string;
+  metric?: string;
+  hero?: string;
 };
 
 export type MovieProps = {

@@ -8,6 +8,7 @@ const headingBands = contract.heading_bands as unknown as Record<string, Record<
 const labelBands = contract.label_bands as unknown as Record<string, Record<string, Box>>;
 const captionBands = contract.caption_bands as unknown as Record<string, {top: number; bottom: number}>;
 const footerBands = contract.footer_bands as unknown as Record<string, {top: number; bottom: number}>;
+const insightBands = contract.insight_bands as unknown as Record<string, Record<string, Box>>;
 
 export const orientation = (vertical: boolean): string => (vertical ? 'portrait' : 'landscape');
 
@@ -23,6 +24,9 @@ export const headingBand = (vertical: boolean, layout: LayoutKind | string): Box
 
 export const labelBand = (vertical: boolean, layout: LayoutKind | string): Box =>
   pick(labelBands[orientation(vertical)], layout);
+
+export const insightBand = (vertical: boolean, layout: LayoutKind | string): Box =>
+  pick(insightBands[orientation(vertical)], layout);
 
 export const captionBand = (vertical: boolean): {top: number; bottom: number} =>
   captionBands[orientation(vertical)];

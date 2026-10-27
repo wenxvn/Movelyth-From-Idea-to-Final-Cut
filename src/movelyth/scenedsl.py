@@ -23,6 +23,7 @@ from .models import (
     LayoutKind,
     Region,
     Scene,
+    SceneRole,
     TransitionKind,
     VisualKind,
 )
@@ -44,60 +45,72 @@ MIN_ACTION_FRACTION = 0.02
 # the right-hand column.
 LAYOUTS: dict[str, dict[str, dict[str, tuple[int, int, int, int]]]] = {
     "landscape": {
-        # Immersive: a full-width hero band under the headline.  It is the "wide
-        # shot" of the three layouts — the visual gets the whole column and the
-        # text sits above it, instead of the V1 version where "immersive" and
-        # "diagram" were the same 1200×480 box.
-        "immersive": {"main": (96, 384, 1728, 430), "top": (1100, 128, 724, 46),
-                      "annotation": (96, 826, 1728, 44), "side": (96, 876, 848, 36),
-                      "bottom": (976, 876, 848, 36), "full": (0, 0, 1920, 1080)},
-        "diagram": {"main": (800, 170, 1024, 660), "top": (800, 96, 1024, 58),
-                    "annotation": (800, 842, 1024, 50), "side": (96, 600, 660, 56),
-                    "bottom": (96, 676, 660, 190), "full": (0, 0, 1920, 1080)},
-        "compare": {"main": (96, 300, 850, 430), "side": (974, 300, 850, 430),
-                    "top": (96, 748, 1728, 52), "annotation": (96, 812, 1728, 46),
-                    "bottom": (96, 866, 1728, 40), "full": (0, 0, 1920, 1080)},
+        # V3 grid: the visual is the hero, not a card next to a lot of empty
+        # paper.  The diagram layout gives it 1164×730 (V2: 1024×660) and the
+        # left column now has a real job: title, chips, formula and the insight
+        # card that names the number the sentence is about.
+        "immersive": {"main": (96, 436, 1728, 408), "top": (96, 372, 560, 48),
+                      "annotation": (1240, 372, 584, 48), "side": (670, 372, 560, 48),
+                      "bottom": (96, 852, 820, 40), "full": (0, 0, 1920, 1080)},
+        "diagram": {"main": (660, 150, 1164, 730), "top": (660, 100, 1164, 42),
+                    "annotation": (96, 700, 520, 30), "side": (96, 480, 520, 76),
+                    "bottom": (96, 566, 520, 124), "full": (0, 0, 1920, 1080)},
+        "compare": {"main": (96, 290, 850, 520), "side": (974, 290, 850, 520),
+                    "top": (720, 820, 550, 40), "annotation": (1274, 820, 550, 40),
+                    "bottom": (96, 866, 1728, 24), "full": (0, 0, 1920, 1080)},
         # Cover composition: title block on the left, one visual on the right.
-        "cover": {"top": (860, 120, 960, 50), "main": (860, 180, 960, 660),
-                  "annotation": (860, 850, 960, 26), "side": (860, 882, 960, 24),
+        "cover": {"top": (860, 110, 960, 40), "main": (860, 160, 960, 680),
+                  "annotation": (860, 850, 960, 26), "side": (860, 882, 960, 14),
                   "bottom": (96, 846, 700, 30), "full": (0, 0, 1920, 1080)},
     },
     "portrait": {
-        "immersive": {"main": (40, 520, 1000, 840), "top": (70, 120, 940, 44),
-                      "annotation": (70, 1372, 940, 44), "side": (70, 1424, 940, 44),
-                      "bottom": (70, 1476, 940, 44), "full": (0, 0, 1080, 1920)},
-        "diagram": {"main": (40, 760, 1000, 660), "top": (60, 566, 960, 40),
-                    "annotation": (70, 1428, 940, 42), "side": (70, 1476, 940, 40),
-                    "bottom": (60, 610, 960, 84), "full": (0, 0, 1080, 1920)},
-        "compare": {"main": (50, 600, 980, 380), "side": (50, 1000, 980, 380),
-                    "top": (50, 536, 980, 50), "annotation": (50, 1396, 980, 50),
-                    "bottom": (50, 1456, 980, 50), "full": (0, 0, 1080, 1920)},
+        "immersive": {"main": (40, 646, 1000, 714), "top": (70, 516, 460, 44),
+                      "annotation": (550, 568, 460, 44), "side": (70, 568, 460, 44),
+                      "bottom": (550, 516, 460, 44), "full": (0, 0, 1080, 1920)},
+        "diagram": {"main": (40, 722, 1000, 638), "top": (70, 520, 940, 44),
+                    "annotation": (70, 1366, 940, 36), "side": (70, 568, 940, 44),
+                    "bottom": (70, 616, 940, 96), "full": (0, 0, 1080, 1920)},
+        "compare": {"main": (50, 490, 980, 390), "side": (50, 900, 980, 390),
+                    "top": (50, 1408, 980, 28), "annotation": (50, 1440, 980, 28),
+                    "bottom": (50, 1472, 980, 56), "full": (0, 0, 1080, 1920)},
         # Cover composition: title on top, one visual below it.
-        "cover": {"top": (50, 150, 980, 44), "main": (50, 700, 980, 760),
-                  "annotation": (70, 1466, 940, 30), "side": (70, 1500, 940, 28),
-                  "bottom": (70, 1532, 940, 24), "full": (0, 0, 1080, 1920)},
+        "cover": {"top": (70, 150, 940, 44), "main": (50, 670, 980, 760),
+                  "annotation": (70, 1440, 940, 40), "side": (70, 1484, 940, 40),
+                  "bottom": (70, 1524, 940, 20), "full": (0, 0, 1080, 1920)},
     },
+}
+
+# The insight card is an overlay, not a model-controlled region: it is generated
+# from the scene's real data (a chart point, the active step, the emphasis word),
+# so it cannot invent a second story.  Keeping it out of ``regions`` means an old
+# script can never collide with it.
+INSIGHT_BANDS: dict[str, dict[str, tuple[int, int, int, int]]] = {
+    "landscape": {"diagram": (96, 740, 520, 140), "immersive": (1290, 180, 534, 180),
+                  "compare": (96, 820, 600, 60), "cover": (96, 760, 700, 60)},
+    "portrait": {"diagram": (70, 1408, 940, 128), "immersive": (70, 1368, 940, 160),
+                 "compare": (50, 1300, 980, 100), "cover": (70, 660, 940, 0)},
 }
 
 # Title and label bands depend on the layout: "compare" puts the heading across
 # the top, while the other layouts use the left column (landscape) or a block
 # above the visual (portrait).
 HEADING_BANDS: dict[str, dict[str, tuple[int, int, int, int]]] = {
-    "landscape": {"immersive": (96, 120, 980, 180), "diagram": (96, 140, 660, 300),
-                  "compare": (96, 100, 1728, 110), "cover": (96, 220, 700, 500)},
-    "portrait": {"immersive": (70, 176, 940, 220), "diagram": (70, 140, 940, 280),
-                 "compare": (70, 140, 940, 230), "cover": (70, 200, 940, 430)},
+    "landscape": {"immersive": (96, 110, 1000, 190), "diagram": (96, 120, 520, 250),
+                  "compare": (96, 100, 1728, 110), "cover": (96, 200, 700, 500)},
+    "portrait": {"immersive": (70, 176, 940, 200), "diagram": (70, 140, 940, 260),
+                 "compare": (70, 140, 940, 230), "cover": (70, 200, 940, 400)},
 }
 LABEL_BANDS: dict[str, dict[str, tuple[int, int, int, int]]] = {
-    "landscape": {"immersive": (96, 312, 980, 52), "diagram": (96, 460, 660, 120),
-                  "compare": (96, 222, 1728, 54), "cover": (96, 730, 700, 100)},
-    "portrait": {"immersive": (70, 404, 940, 100), "diagram": (70, 430, 940, 128),
-                 "compare": (70, 380, 940, 110), "cover": (70, 640, 940, 60)},
+    "landscape": {"immersive": (96, 310, 1000, 60), "diagram": (96, 380, 520, 90),
+                  "compare": (96, 218, 1728, 50), "cover": (96, 730, 700, 100)},
+    "portrait": {"immersive": (70, 386, 940, 80), "diagram": (70, 410, 940, 100),
+                 "compare": (70, 380, 940, 80), "cover": (70, 610, 940, 40)},
 }
 
 # Captions and the source footer are reserved bands: no layer may be placed there.
-CAPTION_BANDS = {"landscape": (916, 1012), "portrait": (1560, 1742)}
-FOOTER_BANDS = {"landscape": (1022, 1062), "portrait": (1766, 1816)}
+# V3 raises the caption band for a 66 px two-line subtitle (V2: 46 px, one line).
+CAPTION_BANDS = {"landscape": (900, 1012), "portrait": (1544, 1750)}
+FOOTER_BANDS = {"landscape": (1020, 1062), "portrait": (1762, 1816)}
 SAFE_MARGIN = {"landscape": 96, "portrait": 70}
 
 
@@ -118,6 +131,12 @@ def heading_band(orientation: str, layout: str) -> dict[str, int]:
 
 def label_band(orientation: str, layout: str) -> dict[str, int]:
     bands = LABEL_BANDS[orientation]
+    return _region_tuple(bands.get(layout) or bands["diagram"])
+
+
+def insight_band(orientation: str, layout: str) -> dict[str, int]:
+    """Overlay rectangle for the auto-generated insight card."""
+    bands = INSIGHT_BANDS[orientation]
     return _region_tuple(bands.get(layout) or bands["diagram"])
 
 
@@ -152,16 +171,19 @@ def renderer_contract() -> dict:
                         for orientation, bands in LABEL_BANDS.items()},
         "caption_bands": {k: {"top": v[0], "bottom": v[1]} for k, v in CAPTION_BANDS.items()},
         "footer_bands": {k: {"top": v[0], "bottom": v[1]} for k, v in FOOTER_BANDS.items()},
+        "insight_bands": {orientation: {name: _region_tuple(box) for name, box in bands.items()}
+                          for orientation, bands in INSIGHT_BANDS.items()},
         "safe_margin": SAFE_MARGIN,
         "layer_kinds": list(LayerKind.__args__),
         "procedural_kinds": list(VisualKind.__args__),
+        "scene_roles": list(SceneRole.__args__),
         "action_kinds": list(ActionKind.__args__),
         "layout_kinds": list(LayoutKind.__args__),
         "regions": list(Region.__args__),
         "transition_kinds": list(TransitionKind.__args__),
         "camera_kinds": list(CameraKind.__args__),
         "cue_kinds": list(CueKind.__args__),
-        "type_scale": {"display": 96, "heading": 78, "body": 40, "caption": 44, "label": 32},
+        "type_scale": {"display": 132, "heading": 110, "body": 46, "caption": 66, "label": 38},
     }
 
 
@@ -274,9 +296,9 @@ def scene_signature(scene: Scene) -> str:
     return "|".join(sorted(parts))
 
 
-TEXT_BASE = {1: 30, 2: 36, 3: 44}
-MATH_BASE = {1: 56, 2: 68, 3: 86}
-MIN_FONT = {"text": 22, "math": 34}
+TEXT_BASE = {1: 38, 2: 44, 3: 54}
+MATH_BASE = {1: 64, 2: 78, 3: 96}
+MIN_FONT = {"text": 26, "math": 38}
 
 
 # Math layers are drawn inside a padded surface box (studio/src/components/TextLayer.tsx
@@ -476,6 +498,18 @@ def layout_warnings(scene: Scene, *, vertical: bool) -> list[str]:
                 warnings.append(f"镜头 {scene.id} 的 {layer.id}：{scale}")
         if layer.type == "chart" and any(len(s.values) > 24 for s in layer.series):
             warnings.append(f"镜头 {scene.id} 的 {layer.id} 数据点超过 24 个，标注会拥挤")
+        if layer.type == "chart":
+            xs = [value for series in layer.series
+                  for value in (series.x_values if series.x_values else list(range(len(series.values))))]
+            for annotation in layer.annotations:
+                if xs and min(abs(annotation.x - value) for value in xs) > max(1e-6, (max(xs) - min(xs)) * 0.12):
+                    warnings.append(f"镜头 {scene.id} 的 {layer.id} 注释 x={annotation.x} 离最近数据点较远，"
+                                    f"会吸附到相邻样本；请用真实数据坐标")
+            if layer.highlight and xs and (min(xs) > layer.highlight[1] or max(xs) < layer.highlight[0]):
+                warnings.append(f"镜头 {scene.id} 的 {layer.id} highlight 区间不在数据范围内")
+            if len(layer.annotations) > 2:
+                warnings.append(f"镜头 {scene.id} 的 {layer.id} 有 {len(layer.annotations)} 个注释，"
+                                f"同一帧超过两个会互相争抢注意力")
         if layer.type == "text" and layer.text:
             # Estimate the same breaks the renderer will make and report what a viewer notices.
             base, _minimum = layer_font(layer)
@@ -612,7 +646,8 @@ def pacing_report(cut: dict, fps: int) -> dict:
     lengths = [scene["frames"] / fps for scene in cut["scenes"]]
     if not lengths:
         return {"status": "unavailable", "reason": "没有镜头"}
-    return _pacing_summary(lengths, cut["scenes"])
+    return _pacing_summary(lengths, cut["scenes"],
+                           sound_events=len(cut.get("sound_events") or cut.get("cues") or []))
 
 
 def pacing_estimate(cut, chars_per_second: float = 4.6) -> dict:
@@ -622,7 +657,8 @@ def pacing_estimate(cut, chars_per_second: float = 4.6) -> dict:
     return _pacing_summary(lengths, scenes, estimated=True)
 
 
-def _pacing_summary(lengths: list[float], scenes: list[dict], estimated: bool = False) -> dict:
+def _pacing_summary(lengths: list[float], scenes: list[dict], estimated: bool = False,
+                    sound_events: int = 0) -> dict:
     shortest, longest = min(lengths), max(lengths)
     mean = sum(lengths) / len(lengths)
     spread = (longest - shortest) / mean if mean else 0
@@ -635,6 +671,11 @@ def _pacing_summary(lengths: list[float], scenes: list[dict], estimated: bool = 
     repeated = {key: count for key, count in signatures.items() if count > 1}
     cues = sum(len(scene.get("cues_resolved") or scene.get("cues") or []) for scene in scenes)
     actions = sum(len(scene.get("actions_resolved") or scene.get("actions") or []) for scene in scenes)
+    try:
+        from .craft import _coverage_beats
+        beats = sum(len(_coverage_beats(scene, seconds)) for scene, seconds in zip(scenes, lengths))
+    except Exception:  # pragma: no cover - defensive for stripped build contexts
+        beats = 0
     transitions = [scene.get("transition", "fade") for scene in scenes[1:]]
     warnings = []
     if len(lengths) >= 3 and spread < 0.25:
@@ -644,13 +685,14 @@ def _pacing_summary(lengths: list[float], scenes: list[dict], estimated: bool = 
         warnings.append(f"{uniform}/{len(lengths)} 个镜头时长几乎相同，节奏会像幻灯片")
     if len(transitions) >= 2 and len(set(transitions)) == 1:
         warnings.append(f"全部使用同一种转场（{transitions[0]}），建议按内容选择 fade/slide/wipe/dip/cut")
-    if cues == 0:
+    if cues == 0 and sound_events == 0:
         warnings.append("没有任何声音提示（cues），动作与音效不会同步")
     return {"status": "review" if warnings else "ok", "estimated": estimated,
             "shots": len(lengths), "seconds": [round(value, 2) for value in lengths],
             "shortest": round(shortest, 2), "longest": round(longest, 2), "mean": round(mean, 2),
             "spread_ratio": round(spread, 2), "uniform_shots": uniform,
             "repeated_visual_signatures": repeated, "cues": cues, "actions": actions,
+            "coverage_beats": beats,
             "transitions": transitions, "transition_variety": len(set(transitions)),
             "warnings": warnings}
 

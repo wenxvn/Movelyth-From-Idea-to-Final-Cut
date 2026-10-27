@@ -3,6 +3,38 @@
 按时间倒序。任务级状态见 [docs/v1-execution.md](docs/v1-execution.md)，
 证据见 [docs/verification.md](docs/verification.md)，结论见 [docs/v1-report.md](docs/v1-report.md)。
 V2 的方案与实测见 [docs/v2-plan.md](docs/v2-plan.md)、[docs/v2-evaluation.md](docs/v2-evaluation.md)。
+V3 见 [docs/v3-plan.md](docs/v3-plan.md)、[docs/v3-evaluation.md](docs/v3-evaluation.md)。
+
+## 2026-10-27 · V3：从“专业的画面”到“专业的讲述”
+
+同一份已审脚本（VID-000004）换 V3 渲染与 V3 声音重做，作为受控对照（最终 `VID-000025`）。
+本机仍无 Codex CLI，所以脚本只加**导演元数据**（chapter/role/takeaway/metric/hero、
+两个注释点、一个区间高亮、短版散点改连线），旁白、数据、图层类型逐字未改。
+
+- **构图 3.0**：主画面 1024×660 → 1164×730，标题 92 → 110 px，标签改 chip；
+  左栏新增**渲染器生成的 Insight 卡**（优先用 metric/takeaway，否则从真实数据推导；
+  每个 coverage beat 换一次）。主体高度中位数 0.206 → **0.528**，空白网格 0.439 → **0.267**。
+- **讲述节拍**：按真实字幕句把长镜切成 2–4 个 coverage beat（长版 36 个），每 beat 换注释点、
+  换 Insight、把镜头轻推/轻拉 3% 并留末段稳定期。静止采样 4.3% → 2.6%，帧间运动 0.386 → 1.05。
+- **图表 3.0**：数据注释（吸附真实样本，数值+判断两行）、区间高亮、两柱 Δ 括号、单系列图名面板、
+  刻度/轴标题/图例字号 +30%。
+- **声音 3.0**：句 → 从句 → 重点短语三级韵律；`sound.py` 新增自适应配乐（按 role 能量）、
+  13 种合成音效、自动 Foley（转场提前 0.24 s、画线起止、落点、重点词、结论、翻页声；
+  20/min 上限、0.30 s 合并、导演 cues 优先）、按 `sum|h|` 归一的混响总线、房间底噪、分侧立体声。
+  音效 9 → 41 个、2 → 10 类；混音/原声比 1.20 → 1.17；-14.3 LUFS。
+- **质量报告**：新增 `composition`（主体高度/空白网格）、`rhythm`（字幕页覆盖率/beat 数）、
+  重写 `sound_design`（事件/来源/同步率/立体声）、`narrative`（离线叙事检查）。
+- **契约**：`chapter`/`role`/`takeaway`/`metric`/`hero`/`annotations`/`highlight` 全部有默认值；
+  `hero` 必须存在，`annotations.x` 离数据太远只警告，竖版/横版区域重排并有测试。
+- **实测**：229.4 s / 65.4 s，13 项技术检查通过，-14.3 / -1.1 dBTP，混音比 1.17 / 1.18，
+  `frozen_scenes: []`，转场 5 种，36 个 beat，41 个声音事件。
+- **由真实帧暴露并修掉的 12 个缺陷**：Insight 卡裁字、注释与末值 chip 重叠、柱状图自动注释、
+  公式折行、文字幽灵态、单系列图无图名、竖版 compare 空区与遮挡、混响脉冲按峰值归一（混音比 9.19）、
+  颗粒层让文件 19→80 MB、句首打字声变节拍器、全宽布局的注压在画面上、竖版注压住网格。
+  逐条见 v3-evaluation.md §3.1。
+- 测试 207 项通过（新增 12 项 V3 测试），Ruff 与 `tsc --noEmit` 通过，真实渲染 smoke 通过。
+- **未完成**：真实 Codex 端到端（无 CLI）、人工完整观看与实听（如实标为未做）、
+  镜头时长仍均匀（脚本层，9 镜 24–28 s）、单镜重渲染、章节卡、本地 TTS 接口。
 
 ## 2026-10-27 · V2：把"能出片"做到"像专业团队做的片"
 

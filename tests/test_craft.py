@@ -7,18 +7,11 @@ without calling TTS or rendering.
 import numpy as np
 import pytest
 
-from movelyth.media import (
-    SAMPLE_RATE,
-    _process_voice,
-    _sidechain,
-    prosody_plan,
-    sentence_spans,
-    soundtrack,
-    trim_silence,
-)
+from movelyth.media import SAMPLE_RATE, prosody_plan, sentence_spans, trim_silence
 from movelyth.models import Cue, Film, Scene
 from movelyth.quality import ScriptIssues
 from movelyth.scenedsl import pacing_estimate, pacing_report, resolve_cues
+from movelyth.sound import _process_voice, _sidechain, soundtrack
 from tests import factories
 
 

@@ -58,6 +58,10 @@ export type Theme = {
   /** Fraction of a second used by an entrance; scaled by `motion`. */
   enter: number;
   shadow: string;
+  /** Deep tone used for the insight card's border and the hero rim. */
+  heroRim: string;
+  /** Background mesh tint, layered under the vignette. */
+  mesh: string;
 };
 
 const scale = (display: number, heading: number, body: number, caption: number): TypeScale => ({
@@ -89,9 +93,12 @@ export const themes: Record<StyleName, Theme> = {
     letterSpacing: 0.5,
     motion: 1,
     radius: 18,
-    type: scale(104, 92, 42, 46),
+    type: scale(132, 112, 46, 66),
     enter: 0.52,
     shadow: '0 26px 90px #00000066',
+    heroRim: '#6fe6ef',
+    mesh: 'radial-gradient(ellipse 60% 55% at 72% 32%, #1d5a6e42, transparent 68%),'
+      + 'radial-gradient(ellipse 50% 45% at 18% 78%, #12324344, transparent 72%)',
   },
   minimal: {
     name: 'minimal',
@@ -111,9 +118,12 @@ export const themes: Record<StyleName, Theme> = {
     letterSpacing: 1.2,
     motion: 0.72,
     radius: 10,
-    type: scale(96, 84, 40, 44),
+    type: scale(124, 104, 44, 64),
     enter: 0.62,
     shadow: '0 22px 70px #00000059',
+    heroRim: '#e8d9a8',
+    mesh: 'radial-gradient(ellipse 58% 50% at 70% 30%, #4a422b3a, transparent 70%),'
+      + 'radial-gradient(ellipse 48% 42% at 16% 80%, #2b2b1d40, transparent 74%)',
   },
   documentary: {
     name: 'documentary',
@@ -133,9 +143,12 @@ export const themes: Record<StyleName, Theme> = {
     letterSpacing: 1,
     motion: 0.86,
     radius: 6,
-    type: scale(100, 88, 42, 46),
+    type: scale(128, 108, 44, 64),
     enter: 0.58,
     shadow: '0 24px 80px #0000005e',
+    heroRim: '#ffc978',
+    mesh: 'radial-gradient(ellipse 60% 52% at 72% 30%, #7a53302e, transparent 68%),'
+      + 'radial-gradient(ellipse 50% 44% at 14% 82%, #3d2a1744, transparent 74%)',
   },
 };
 

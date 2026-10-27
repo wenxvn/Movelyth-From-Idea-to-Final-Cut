@@ -68,24 +68,42 @@ export const TextLayer: React.FC<{
   const deep = accentDeep[layer.color] || color;
 
   if (math) {
-    const base = Math.round((theme.type.subhead + emphasis * 14) * regionFactor * (vertical ? 1.06 : 1));
-    const size = fitSize(layer.text, box, base, 30, true);
+    const base = Math.round((theme.type.subhead + emphasis * 16) * regionFactor * (vertical ? 1.06 : 1));
+    // The card has internal padding; fitting against the raw region made a long
+    // one-line formula wrap at the last token and clip its second line.
+    const inner = {x: box.x, y: box.y, w: Math.max(80, box.w - Math.round(base * 0.62)),
+      h: Math.max(40, box.h - Math.round(base * 0.42))};
+    const size = fitSize(layer.text, inner, base, 38, true);
+    const singleLine = !layer.text.includes('\n');
+    const parts = layer.text.split(/([=＝])/);
+    const equalAt = parts.findIndex((part) => part === '=' || part === '＝');
     return <div style={{width: '100%', height: '100%', display: 'flex', alignItems: 'center',
       justifyContent: 'center', opacity: reveal}}>
       <div style={{
         fontSize: size, lineHeight: 1.34, fontWeight: 600, color,
         fontFamily: '"Cascadia Mono", "Consolas", "Cambria Math", monospace',
-        letterSpacing: 0.4, whiteSpace: 'pre-wrap', maxWidth: '100%', maxHeight: '100%',
-        overflow: 'hidden', textAlign: 'center', padding: `${Math.round(size * 0.34)}px ${Math.round(size * 0.5)}px`,
+        letterSpacing: 0.4, whiteSpace: singleLine ? 'nowrap' : 'pre-wrap',
+        width: '100%', minWidth: 0, maxWidth: '100%', maxHeight: '100%', boxSizing: 'border-box',
+        overflow: 'hidden', textAlign: 'center',
+        padding: `${Math.round(size * 0.22)}px ${Math.round(size * 0.3)}px`,
         background: `linear-gradient(150deg, ${theme.surfaceAlt}f2, ${theme.surface}e0)`,
-        borderLeft: `4px solid ${deep}`, borderRadius: theme.radius * 0.7, boxShadow: theme.shadow,
-      }}>{withBreaks(layer.text)}</div>
+        borderLeft: `5px solid ${deep}`, borderRadius: theme.radius * 0.7, boxShadow: theme.shadow,
+        position: 'relative',
+      }}>
+        <div style={{position: 'absolute', right: 14, top: 8, fontSize: Math.max(18, Math.round(size * 0.3)),
+          letterSpacing: 3, color: `${color}99`, fontWeight: 700}}>FORMULA</div>
+        {equalAt >= 0 ? <>
+          <span>{parts.slice(0, equalAt).join('')}</span>
+          <span style={{color: deep}}>=</span>
+          <span style={{color}}>{parts.slice(equalAt + 1).join('')}</span>
+        </> : withBreaks(layer.text)}
+      </div>
     </div>;
   }
 
   const kicker = layer.region === 'top';
-  const base = Math.round((theme.type.body + emphasis * 6) * regionFactor * (vertical ? 1.08 : 1));
-  const size = fitSize(layer.text, box, base, 24);
+  const base = Math.round((theme.type.body + emphasis * 8) * regionFactor * (vertical ? 1.08 : 1));
+  const size = fitSize(layer.text, box, base, 28);
 
   if (kicker) {
     // A kicker is a label above the visual, not a second paragraph: small, spaced,
@@ -104,14 +122,15 @@ export const TextLayer: React.FC<{
   return <div style={{width: '100%', height: '100%', display: 'flex', alignItems: 'flex-start',
     justifyContent: 'flex-start', opacity: reveal}}>
     <div style={{
-      fontSize: size, lineHeight: 1.34, fontWeight: 600, color: theme.text,
+      fontSize: size, lineHeight: 1.36, fontWeight: 650, color: theme.text,
       fontFamily: theme.fontFamily, letterSpacing: theme.letterSpacing * 0.3,
       overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'pre-wrap',
       maxWidth: '100%', maxHeight: '100%', overflow: 'hidden', textAlign: 'left',
-      borderLeft: `${Math.max(3, Math.round(size * 0.11))}px solid ${color}`,
-      paddingLeft: Math.round(size * 0.55),
-      paddingTop: Math.round(size * 0.12),
-      paddingBottom: Math.round(size * 0.12),
+      borderLeft: `${Math.max(4, Math.round(size * 0.12))}px solid ${color}`,
+      background: `linear-gradient(120deg, ${theme.surface}cc, ${theme.surface}66)`,
+      borderRadius: 12,
+      padding: `${Math.round(size * 0.26)}px ${Math.round(size * 0.5)}px`,
+      paddingLeft: Math.round(size * 0.62),
     }}>{withBreaks(layer.text)}</div>
   </div>;
 };

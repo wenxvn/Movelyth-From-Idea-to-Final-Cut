@@ -73,6 +73,30 @@
       "title": "Action",
       "type": "object"
     },
+    "Annotation": {
+      "additionalProperties": false,
+      "description": "A short callout on a chart at a real x position.\n\nAn annotation is data storytelling, not decoration: it must name a value that\nthe series actually contains (the renderer snaps to the nearest sample), so a\nmodel cannot invent a point on the curve that does not exist.",
+      "properties": {
+        "text": {
+          "maxLength": 20,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "x": {
+          "maximum": 1000000,
+          "minimum": -1000000,
+          "title": "X",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "text"
+      ],
+      "title": "Annotation",
+      "type": "object"
+    },
     "Beat": {
       "additionalProperties": false,
       "description": "A narrative beat. ``at`` is start/end/a 0–1 fraction/narration:substring.",
@@ -274,6 +298,14 @@
       "additionalProperties": false,
       "description": "One bounded visual layer inside a scene.\n\nOnly enumerations, numbers and short strings are accepted.  File paths,\nURLs, code and unbounded lists are rejected by construction.",
       "properties": {
+        "annotations": {
+          "items": {
+            "$ref": "#/$defs/Annotation"
+          },
+          "maxItems": 4,
+          "title": "Annotations",
+          "type": "array"
+        },
         "axis": {
           "default": "",
           "maxLength": 16,
@@ -326,6 +358,14 @@
           "minimum": 1,
           "title": "Emphasis",
           "type": "integer"
+        },
+        "highlight": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "title": "Highlight",
+          "type": "array"
         },
         "id": {
           "pattern": "^[a-z][a-z0-9_]{0,23}$",
@@ -468,6 +508,12 @@
           "title": "Camera",
           "type": "string"
         },
+        "chapter": {
+          "default": "",
+          "maxLength": 8,
+          "title": "Chapter",
+          "type": "string"
+        },
         "color": {
           "enum": [
             "cyan",
@@ -498,6 +544,12 @@
           "maxLength": 24,
           "minLength": 2,
           "title": "Heading",
+          "type": "string"
+        },
+        "hero": {
+          "default": "",
+          "maxLength": 24,
+          "title": "Hero",
           "type": "string"
         },
         "id": {
@@ -541,10 +593,28 @@
           "title": "Matrix",
           "type": "array"
         },
+        "metric": {
+          "default": "",
+          "maxLength": 16,
+          "title": "Metric",
+          "type": "string"
+        },
         "narration": {
           "maxLength": 500,
           "minLength": 15,
           "title": "Narration",
+          "type": "string"
+        },
+        "role": {
+          "default": "mechanism",
+          "enum": [
+            "hook",
+            "mechanism",
+            "example",
+            "turn",
+            "conclusion"
+          ],
+          "title": "Role",
           "type": "string"
         },
         "source_index": {
@@ -552,6 +622,12 @@
           "minimum": 0,
           "title": "Source Index",
           "type": "integer"
+        },
+        "takeaway": {
+          "default": "",
+          "maxLength": 30,
+          "title": "Takeaway",
+          "type": "string"
         },
         "transition": {
           "default": "fade",
