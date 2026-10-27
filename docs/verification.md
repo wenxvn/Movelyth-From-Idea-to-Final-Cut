@@ -14,10 +14,11 @@ movelyth check --film workspace/ab/film-004-v2.json   → passed=true，2 条节
 本机**没有 `codex` 可执行文件**，所以没有重跑模型。改用已审脚本做受控对照：
 
 - 输入：`workspace/VID-000004/film.json` + `research.json`（V1 交付时通过审片的脚本）。
-- 机械修复：`workspace/ab/make_film.py` 只重排 `l2` 两个重叠节点（65 单位）、
+- 机械修复：`tools/ab/make_film.py` 只重排 `l2` 两个重叠节点（65 单位）、
   补齐 `transition`/`camera`/`cues` 默认方向；文字、图层类型、时长逐字不变。
-- 运行：`MOVELYTH_CONFIG=workspace/ab/movelyth-ab.toml`，
+- 运行：`MOVELYTH_CONFIG=tools/ab/movelyth-ab.toml`，
   `movelyth create "…" --new --import-film workspace/ab/film-004-v2.json --import-research …`。
+  复现步骤见 `tools/ab/README.md`。
 - 审片角色：`provider = "mock"`（预设通过），因此 `质检报告.json` 的
   `provider` 是 `mock`；**这不是真实 Codex 审片，也没有 AI 看过新画面**。
   画面结论来自本机逐帧抽检（见 `docs/v2-evaluation/`）。

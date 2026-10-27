@@ -1,0 +1,33 @@
+[studio]
+name = "Movelyth — 幕绎 (A/B)"
+tagline = "From Idea to Final Cut."
+language = "zh-CN"
+long_seconds = 180
+short_seconds = 60
+long_min_seconds = 120
+long_max_seconds = 300
+short_min_seconds = 45
+short_max_seconds = 90
+fps = 30
+render_concurrency = 1
+voice = "zh-CN-YunxiNeural"
+voice_rate = "+0%"
+max_retries = 1
+director_split = true
+speech_replace = {}
+key_terms = []
+downgrade_axis_readings = true
+asr_enabled = false
+asr_model = "small"
+
+[agents]
+# 对照实验专用：脚本与研究由 --import-* 提供，本机没有 Codex CLI，
+# 因此审片角色使用预设响应（stub）。报告会标为 mock provider，不冒充真实审片。
+provider = "mock"
+mock_dir = "tools/ab/mock"
+timeout_seconds = 600
+model = ""
+
+[paths]
+workspace = "workspace"
+delivery = "delivery-ab"
