@@ -16,6 +16,8 @@ from .agents import create_provider
 from .assets import credit_lines, mark_used, stage_for_render
 from .assets import resolve as resolve_library
 from .audioqc import audio_qc
+from .brief import build_production_brief, topic_violations
+from .capability import capability_table, classify_route
 from .craft import composition_report, narrative_report, rhythm_report, sound_design_report
 from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
@@ -275,6 +277,8 @@ def manifest_valid(directory: Path, *, job: Path | None = None) -> bool:
 
 RENDERER_CAPABILITIES = {
     "schema_version": SCHEMA_VERSION,
+    "routes": {name: {"status": spec["status"], "description": spec["description"]}
+               for name, spec in capability_table()["routes"].items()},
     "layers": {
         "text": "短文本/注解，自动换行并按区域限制字数",
         "math": "数学文字与公式行（Unicode 上下标），不是符号求解器",
@@ -338,14 +342,25 @@ class Studio:
     def close(self):
         self.ledger.close()
 
-    def create(self, title: str, *, brief: str | None = None, new: bool = False) -> dict:
+    def create(self, title: str, *, brief: str | None = None, new: bool = False,
+               declared_capability: str | None = None) -> dict:
         title = title.strip()
         if not 2 <= len(title) <= 80:
             raise ValueError("标题须为 2–80 个字符")
         brief = normalize_brief(brief)
+        # The route gate runs before an episode is reserved: a topic that needs real
+        # footage must not leave a failed row behind, and must not reach a paid stage.
+        route = classify_route(title, brief)
+        if route["status"] == "unsupported":
+            raise ValueError(f"当前管线无法真实呈现该题目：{route['reason']}。"
+                             "可改成不需要实拍/录屏的角度，或先补充真实素材能力（S3-03/S3-07）")
         episode = self.ledger.reserve(title, intent_key(title, brief), new=new, brief=brief)
         folder = self.workspace / f"VID-{episode['id']:06d}"
         folder.mkdir(exist_ok=True)
+        atomic_json(folder / "request.json", {"title": title, "brief": brief,
+                                              "route": route,
+                                              "declared_capability": declared_capability,
+                                              "created_at": now()})
         return episode
 
     def stage(self, episode: dict, name: str, inputs, action, *, freeze_approved_plan: bool = False):
@@ -461,7 +476,7 @@ class Studio:
         if not supported:
             raise ValueError("候选都需要新增能力或素材，未自动生成；请查看 topic-plan/plan.json 或自行给出标题")
         chosen = supported[0]
-        episode = self.create(chosen["title"])
+        episode = self.create(chosen["title"], declared_capability=chosen.get("capability"))
         result = self.produce(episode["id"], preview_only=preview_only)
         return {"chosen": chosen, "episode": result,
                 "note": "一次调用只生成一条；不会自动定时运行"}
@@ -555,6 +570,30 @@ class Studio:
         source_excerpts = [{key: item.get(key) for key in ("url", "status", "title", "excerpt")}
                            for item in evidence["sources"]]
 
+        request_file = job / "request.json"
+        request = read_json(request_file) if request_file.is_file() else {}
+
+        def brief_action():
+            value = build_production_brief(
+                title=episode["title"], user_brief=brief, research=research, config=self.config,
+                declared_capability=request.get("declared_capability"),
+                declared_route=(request.get("route") or {}).get("route"))
+            if value.route_status == "unsupported":
+                raise RuntimeError("当前管线无法真实呈现该题目：" + value.route_reason)
+            path = job / "production-brief.json"
+            atomic_json(path, value.model_dump())
+            return value.model_dump(), [path]
+
+        production_brief = self.stage(episode, "brief",
+                                      {"title": episode["title"], "brief": brief,
+                                       "research": file_hash(job / "research.json"),
+                                       "evidence": evidence["summary"],
+                                       "request": request, "config": self.config["studio"]},
+                                      brief_action)
+        violations = topic_violations(production_brief, title=episode["title"], research=research)
+        if violations:
+            raise RuntimeError("production brief 与当前任务不一致：" + "；".join(violations))
+
         def script_action():
             nonlocal target_scenes, notes
             script_feedback = job / "script-feedback.json"
@@ -601,7 +640,8 @@ class Studio:
                 elif config.get("director_split", True):
                     film = self._director_split(provider, common, research_data, research, issues,
                                                 job, attempt, frozen, target_scenes, notes,
-                                                coverage=coverage, source_excerpts=source_excerpts)
+                                                coverage=coverage, source_excerpts=source_excerpts,
+                                                production_brief=production_brief)
                 else:
                     context = {**common, "research": research_data, "claim_coverage": coverage,
                                "source_evidence": source_excerpts, "review_issues": issues}
@@ -681,7 +721,8 @@ class Studio:
             raise RuntimeError("脚本审片未通过：" + "；".join(issues))
 
         film = self.stage(episode, "script", {"research": research_data,
-                          "evidence": evidence["summary"], "prompts": prompts,
+                          "evidence": evidence["summary"],
+                          "production_brief": fingerprint(production_brief), "prompts": prompts,
                           "brief": brief, "targets": [config["long_seconds"], config["short_seconds"]],
                           # Contract changes must invalidate an approved script: a cached film that
                           # no longer passes validation has to be regenerated, not silently shipped.
@@ -912,6 +953,7 @@ class Studio:
                                                      ["url", "status", "content_sha256", "retrieved_at"]
                                                      if k in source} for source in evidence["sources"]],
                                  "claim_coverage": {"summary": evidence["summary"], "claims": coverage},
+                                 "production_brief": production_brief,
                                  "creation_mode": ("imported-script" if import_film else
                                                    ("mock-provider" if getattr(provider, "name", "") == "mock"
                                                     else "title-driven-codex-agents")),
@@ -932,7 +974,8 @@ class Studio:
         return self.deliver(episode, job, film, research_data, timelines, library_ids)
 
     def _director_split(self, provider, common, research_data, research, issues, job, attempt,
-                        frozen, target_scenes, notes, coverage=None, source_excerpts=None) -> Film:
+                        frozen, target_scenes, notes, coverage=None, source_excerpts=None,
+                        production_brief=None) -> Film:
         """Generate each cut in its own call.
 
         A whole Film with 9+ composed scenes easily exceeds the provider's output
@@ -946,6 +989,7 @@ class Studio:
         for name, seconds in targets.items():
             context = {**common, "research": research_data, "review_issues": issues,
                        "claim_coverage": coverage or [], "source_evidence": source_excerpts or [],
+                       "production_brief": production_brief or {},
                        "cut": name, "target_seconds": seconds,
                        "cut_instruction": f"只输出 {name} 这一个 cut（schema 为 Cut），不要输出 Film。"}
             if frozen and notes:

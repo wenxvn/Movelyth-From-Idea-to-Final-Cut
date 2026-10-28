@@ -401,6 +401,53 @@ class Film(Contract):
     short: Cut
 
 
+class Budget(Contract):
+    """An estimate with explicit unknowns: a missing cost stays ``None``, never 0."""
+
+    model_calls: int = Field(ge=0, le=200)
+    tts_characters: int = Field(ge=0, le=200_000)
+    render_minutes: float = Field(ge=0, le=600)
+    estimated_cost: float | None = Field(default=None, ge=0, le=10_000)
+    currency: str = Field(default="", max_length=8)
+    note: str = Field(default="", max_length=200)
+
+
+class ProductionBrief(Contract):
+    """What this episode is for, and which route can actually deliver it.
+
+    Frozen for the task: a repair may change scenes, never the audience, the central
+    question or the route.
+    """
+
+    version: str = Field(default="1", max_length=8)
+    audience: str = Field(min_length=2, max_length=120)
+    prior_knowledge: str = Field(min_length=2, max_length=200)
+    question: str = Field(min_length=5, max_length=200)
+    central_explanation: str = Field(min_length=5, max_length=400)
+    boundaries: list[str] = Field(default_factory=list, max_length=8)
+    route: Literal["program-graphics", "licensed-media", "generated-media", "spatial-demo",
+                   "real-footage"]
+    route_status: Literal["supported", "needs_extension", "unsupported"]
+    effective_route: Literal["program-graphics", "licensed-media", "generated-media",
+                             "spatial-demo", "real-footage"]
+    route_reason: str = Field(min_length=2, max_length=400)
+    substitutions: list[str] = Field(default_factory=list, max_length=4)
+    orientations: list[Literal["landscape", "portrait"]] = Field(default_factory=lambda: ["landscape", "portrait"],
+                                                                 min_length=1, max_length=2)
+    long_seconds: int = Field(ge=20, le=900)
+    short_seconds: int = Field(ge=10, le=300)
+    style: Literal["minimal", "tech", "documentary"] = "tech"
+    budget: Budget
+    created_from: dict = Field(default_factory=dict)
+
+    @field_validator("boundaries")
+    @classmethod
+    def bounded_lines(cls, values: list[str]) -> list[str]:
+        if any(not value.strip() or len(value) > 240 for value in values):
+            raise ValueError("boundaries 每条需为 1–240 字")
+        return values
+
+
 class TopicCandidate(Contract):
     """A proposed topic for the optional "what should I make next" flow."""
 

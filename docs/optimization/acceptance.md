@@ -70,3 +70,20 @@
 
 **未验证**：真实公网来源抓取（本轮无网络抓取任务）、PDF/表格定位（S3-06）、真实模型对
 `importance`/`excerpt` 的采纳率（无模型端点）。
+
+## A5 · S1-05 制作 brief、题材与能力路由（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 269 passed | V1 |
+| 路由表 | 6 组标题 | 程序图形 supported；录屏/采访 unsupported；三维/生成图/历史影像 needs_extension | V1 |
+| 冲突 | “三维演示：用录屏展示真实建模过程” | 取更严格者：unsupported | V1 |
+| create 前置拒绝 | 录屏题目 | `ValueError`“无法真实呈现”，ledger 不新增任务行，无模型调用 | V1（M19） |
+| 冻结请求 | 三维题目 `create` | `request.json` 记录 route/status/declared_capability | V1 |
+| brief 字段 | 离线 pipeline | `production-brief.json`：受众（brief 指定或“未指定”）、先前知识、问题、中心解释、边界、画幅、时长、风格、预算、route/route_status/effective_route/substitutions | V1 |
+| 预算未知 | 默认配置 | `estimated_cost: null`、`currency: ""`，不按 0 计 | V1 |
+| 示意替代 | 三维题目成片 | `route_status: needs_extension`、`effective_route: program-graphics`、substitutions 注明“标注示意”，质检报告同步记录 | V1（离线 pipeline） |
+| 换题保护 | `topic_violations` | 研究问题与冻结 brief 不一致时报告违规 | V1 |
+| 能力表进入提示词 | `RENDERER_CAPABILITIES.routes` | 规划/编导提示词能看到各 route 的真实 status | V1 |
+
+**未验证**：真实模型对 `production_brief` 的采纳（无端点）；`needs_extension` 题材的真实成片观感。

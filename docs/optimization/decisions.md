@@ -95,3 +95,22 @@
 - 否：让研究模型“自己搜索”（兼容文本端点没有工具，prompt 写搜索不会产生检索能力，只会产生虚构来源）；
   用语义相似度判断节选支持（无法区分“大致相关”和“原文没有这句话”）。
 - 证据：`tests/test_claim_coverage.py`（13 项，含阶段顺序与阻断路径）。
+
+## D7 · 能力路由用确定性信号，不用模型自报（S1-05）
+
+- 问题：`suggest/daily` 有 capability 判断，但 `create` 没有；用户直接给标题时，需要实拍/录屏的题目
+  也会一路跑到渲染，最后只能靠“画得像”糊过去。
+- 选择：
+  1. `capability.py` 登记 5 条 route 与真实 status（program-graphics supported；licensed-media /
+     generated-media / spatial-demo needs_extension；real-footage unsupported），并给出证据位置。
+  2. `classify_route()` 用标题/brief 的关键信号做**确定性**判定，取最严格结果；`create()` 在预留任务前
+     拒绝 unsupported 题目（不留下失败行、不产生模型调用）。
+  3. `brief` 阶段在 research/evidence 之后冻结 `ProductionBrief`：受众、先前知识、问题、中心解释、
+     边界、画幅、时长、风格、预算、route/route_status/effective_route/substitutions。
+  4. needs_extension 题目可继续，但 `effective_route` 记为 program-graphics 且 substitutions 注明
+     “标注示意，不声称已实现”；unsupported 在 brief 阶段再次拦截（防止 planner 声明被绕过）。
+  5. 受众只在 brief 明确写出时采用；没写就写“未指定”，不虚构人设。费用未知保持 `null`。
+  6. `topic_violations()` 在 brief 阶段与 repair 后校验问题/标题未变，防止“修着修着换题”。
+- 否：让模型在 `create` 前多调一次做路由（无端点时不可用、且把最贵的判断交给最不可控的部分）；
+  把 needs_extension 直接当 supported（能力声明失真）。
+- 证据：`tests/test_capability_route.py`（18 项，含 M19）。
