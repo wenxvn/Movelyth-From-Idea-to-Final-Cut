@@ -43,8 +43,8 @@
 
 | 编号 | 状态 | 依赖 | 证据 | 下一步 |
 | --- | --- | --- | --- | --- |
-| S1-01 基线/CI/工具/时区 | in_progress | 开工检查 | 本文件 §0–§1；`docs/optimization/acceptance.md` A1 | 完成 ffprobe/时区/doctor 修复与 CI 顺序 |
-| S1-02 Review 一致性/轴读数/交付策略 | todo | S1-01 | — | 建立 CheckResult/ReleaseDecision |
+| S1-01 基线/CI/工具/时区 | verified（本地；远程 CI 未跑） | 开工检查 | A1；`tests/test_doctor.py`、`tests/test_util.py`、`.github/workflows/ci.yml` | 推送后补远程 Windows/Linux 结果 |
+| S1-02 Review 一致性/轴读数/交付策略 | verified（V1；真实审片模型未接入） | S1-01 | A2；`policy.py`、`charts.py`、`tests/test_release_policy.py`、`tests/test_release_gate.py`、`tests/test_charts.py`、D3/D4 | S1-04 补来源检查后合并进决定 |
 | S1-03 组成表与 revision 完整性 | todo | S1-02 | — | 组成清单 + 原子交付 |
 | S1-04 来源前移与主张覆盖 | todo | S1-02 | — | 证据快照与覆盖检查 |
 | S1-05 brief/题材/能力路由 | todo | S1-04 | — | create 复用能力登记 |

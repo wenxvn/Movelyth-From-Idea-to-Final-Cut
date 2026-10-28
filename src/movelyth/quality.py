@@ -316,52 +316,6 @@ def encoded_stills(video: Path, cut: dict, fps: int, directory: Path, *, portrai
     return images
 
 
-AXIS_READING_PATTERN = re.compile(
-    r"刻度|坐标轴|纵轴|横轴|axis|ticks?|y-?axis|x-?axis", re.IGNORECASE)
-
-
-def downgrade_axis_readings(review, *, enabled: bool = True) -> dict:
-    """Separate reviewer findings that are really guesses about axis tick labels.
-
-    Chart ticks are generated deterministically from the data range and covered by
-    Python tests; a vision model reading ~25 px labels on a contact sheet gets them
-    wrong often enough that two runs on the same stills disagree with each other.
-    Those findings are kept but downgraded to warnings so they inform a human
-    without forcing a re-render.  A finding that also reports something structural
-    (blank area, overlap, wrong shape) is *not* downgraded.
-    """
-    structural = re.compile(r"空白|遮挡|溢出|裁切|重叠|缺字|不可读|过暗|太小|颜色|布局|位置错|未显示")
-    kept, moved = [], []
-    for issue in review.issues:
-        if enabled and AXIS_READING_PATTERN.search(issue) and not structural.search(issue):
-            moved.append(issue)
-        else:
-            kept.append(issue)
-    findings_kept, findings_moved = [], []
-    for finding in review.findings:
-        detail = finding.detail
-        if (enabled and finding.category == "visual_mismatch"
-                and AXIS_READING_PATTERN.search(detail) and not structural.search(detail)):
-            findings_moved.append(finding)
-        else:
-            findings_kept.append(finding)
-    if not moved and not findings_moved:
-        return {"review": review, "downgraded": [], "applied": False}
-    warnings = list(review.warnings) + [
-        f"已降级为参考（视觉模型读不准坐标刻度，刻度由程序按数据范围等分生成）：{text[:200]}"
-        for text in moved]
-    warnings += [
-        f"已降级为参考（同上，{finding.scene_id or '未定位'}）：{finding.detail[:200]}"
-        for finding in findings_moved]
-    downgraded = review.model_copy(update={
-        # The original `passed=False` was caused by these findings; once they are
-        # warnings, an otherwise clean review is a pass.
-        "passed": not kept and not findings_kept,
-        "issues": kept, "findings": findings_kept, "warnings": warnings[:20]})
-    return {"review": downgraded, "downgraded": moved + [f.detail for f in findings_moved],
-            "applied": True}
-
-
 class ScriptIssues(ValueError):
     """Script contract failures, itemized so the director can fix each one.
 

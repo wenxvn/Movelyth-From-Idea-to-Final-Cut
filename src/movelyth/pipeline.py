@@ -21,12 +21,20 @@ from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
 from .metrics import Metrics
 from .models import SCHEMA_VERSION, Cut, Film, Research, Review, TopicPlan
+from .policy import (
+    POLICY_VERSION,
+    audio_checks,
+    decide,
+    layout_checks,
+    review_checks,
+    scene_ticks,
+    technical_checks,
+)
 from .publish import audit_summary, credits, publishing_copy
 from .quality import (
     LOUDNESS_TARGET,
     ScriptIssues,
     contact_sheet,
-    downgrade_axis_readings,
     duration_policy,
     encoded_stills,
     motion_report,
@@ -52,6 +60,31 @@ def settings(root: Path) -> dict:
     if not path.is_file():
         raise ValueError(f"缺少配置文件：{path}")
     return tomllib.loads(path.read_text(encoding="utf-8"))
+
+
+AXIS_POLICIES = {"deterministic", "strict"}
+
+
+def axis_reading_policy(config: dict) -> str:
+    """How a reviewer finding about axis ticks is treated.
+
+    ``deterministic`` (default) downgrades only findings whose claimed numbers match
+    the tick labels the renderer actually generated.  ``strict`` keeps every axis
+    reading as a blocker.  The pre-v2 boolean ``downgrade_axis_readings`` is still
+    read as an alias so an existing ``movelyth.toml`` keeps working, but a keyword
+    match alone no longer downgrades anything.
+    """
+    value = config.get("axis_reading_policy")
+    if value is not None:
+        if value not in AXIS_POLICIES:
+            raise ValueError(f"axis_reading_policy 只能是 {'/'.join(sorted(AXIS_POLICIES))}，收到 {value!r}")
+        return str(value)
+    legacy = config.get("downgrade_axis_readings")
+    if legacy is None:
+        return "deterministic"
+    if not isinstance(legacy, bool):
+        raise ValueError("downgrade_axis_readings 已由 axis_reading_policy 取代，取值需为 true/false")
+    return "deterministic" if legacy else "strict"
 
 
 def normalize_brief(text: str | None) -> str | None:
@@ -633,9 +666,6 @@ class Studio:
                                               fps=config["fps"], seconds=timelines[name]["seconds"],
                                               policy=duration_policy(config, name),
                                               loudness_target=LOUDNESS_TARGET["integrated_lufs"])
-                if not reports[name]["passed"]:
-                    atomic_json(job / "quality-failed.json", reports)
-                    raise RuntimeError(f"{name} 成片检查未通过：{reports[name]['checks']}")
                 motion_reports[name] = motion_report(video, timelines[name]["scenes"], config["fps"],
                                                      portrait=name == "short")
                 reports[name]["motion"] = motion_reports[name]
@@ -668,17 +698,38 @@ class Studio:
                                   "duration_policy": {k: duration_policy(config, k) for k in ["long", "short"]},
                                   "image_order": ["long contact sheet", "short contact sheet"]},
                                   Review, job / "agents" / "visual-review", images=images)
-            guard = downgrade_axis_readings(
-                visual_raw, enabled=bool(config.get("downgrade_axis_readings", True)))
-            visual = guard["review"]
+            ticks: dict[str, list[str]] = {}
+            for name in ["long", "short"]:
+                ticks.update(scene_ticks(timelines[name]["scenes"]))
+            visual, review_findings, review_notes = review_checks(
+                visual_raw, ticks_by_scene=ticks, axis_policy=axis_reading_policy(config))
             atomic_json(job / "visual-review.json",
-                        {**visual_raw.model_dump(), "after_axis_guard": visual.model_dump(),
-                         "downgraded": guard["downgraded"]})
-            if not visual.passed or visual.issues:
-                atomic_json(feedback_file, {"issues": visual.issues,
-                                           "findings": [finding.model_dump() for finding in visual.findings],
-                                           "at": now(), "prior_film_hash": fingerprint(film)})
-                raise VisualReviewError("实际画面审片未通过：" + "；".join(visual.issues))
+                        {"raw": visual_raw.model_dump(), "normalized": visual.model_dump(),
+                         "axis_policy": axis_reading_policy(config),
+                         "notes": review_notes, "policy_version": POLICY_VERSION})
+            checks = []
+            for name in ["long", "short"]:
+                checks.extend(technical_checks(reports[name], cut=name))
+                checks.extend(audio_checks(audio_reports[name], cut=name))
+                checks.extend(layout_checks(timelines[name], cut=name))
+            checks.extend(review_findings)
+            decision = decide(checks, inputs={
+                "episode": f"VID-{episode['id']:06d}", "revision": episode["revision"],
+                "film": fingerprint(film), "policy": POLICY_VERSION,
+                "reviewer": getattr(provider, "name", "unknown"),
+                "schema_version": SCHEMA_VERSION})
+            atomic_json(job / "release-decision.json", decision.model_dump())
+            if decision.decision != "ready":
+                atomic_json(job / "quality-failed.json", {"reports": reports, "decision": decision.model_dump()})
+                if decision.decision == "blocked":
+                    atomic_json(feedback_file, {
+                        "issues": [check.observation for check in decision.blocking],
+                        "findings": [finding.model_dump() for finding in visual.findings],
+                        "at": now(), "prior_film_hash": fingerprint(film)})
+                    raise RuntimeError("成片检查未通过：" + "；".join(
+                        check.check_id for check in decision.blocking))
+                raise VisualReviewError("需要复核：" + "；".join(
+                    f"{check.check_id}: {check.observation}" for check in decision.review))
             report = job / "quality.json"
             atomic_json(report, {"technical": reports, "audio": audio_reports,
                                  "pacing": pacing, "rhythm": rhythm,
@@ -687,7 +738,8 @@ class Studio:
                                  "script_review": read_json(job / "script-review.json"),
                                  "script_warnings": warnings,
                                  "visual_review": visual.model_dump(), "checked_at": now(),
-                                 "axis_readings_downgraded": guard["downgraded"],
+                                 "axis_reading_notes": review_notes,
+                                 "release_decision": decision.model_dump(),
                                  "source_fetches": [{k: source[k] for k in
                                                      ["url", "status", "content_sha256", "retrieved_at"]
                                                      if k in source} for source in evidence],

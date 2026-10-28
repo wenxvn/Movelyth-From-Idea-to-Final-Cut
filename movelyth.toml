@@ -20,10 +20,14 @@ speech_replace = {}
 # 可选：关键术语，用 | 分隔可接受写法（如 "Qwen|千问"、"熵|商"）。
 # 仅用于配音质检核对：ASR 转写里找不到时记为待复听，不影响制作。
 key_terms = []
-# 审片模型读不准图表坐标刻度（刻度由程序按数据范围等分生成，有测试覆盖）。
-# true：把纯刻度读数类 finding 降级为 warning，避免无谓重渲染；false：按原样阻断。
-# 涉及空白/遮挡/缺字等结构性问题的 finding 不受影响。
-downgrade_axis_readings = true
+# 审片模型对图表刻度的读数如何处理。刻度由程序按数据范围 1-2-5 等分生成，
+# python 端 charts.py 与渲染器同源并有 parity 测试。
+# deterministic（默认）：只有 finding 里的数字能与实际生成的刻度标签对上时，
+#   才降级为可追溯 warning；涉及数据/单位/轴结构或结构性缺陷的 finding 一律阻断。
+# strict：任何轴读数 finding 都按原样阻断。
+# 旧键 downgrade_axis_readings 仍可读（true→deterministic，false→strict），
+# 但"仅凭出现刻度二字就降级"的旧行为已撤销。
+axis_reading_policy = "deterministic"
 # 可选本地 ASR 质检（需自行安装 faster-whisper）。未安装时报告为未检查，不影响制作。
 asr_enabled = false
 asr_model = "small"
