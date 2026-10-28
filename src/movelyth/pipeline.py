@@ -20,6 +20,13 @@ from .assets import resolve as resolve_library
 from .audioqc import audio_qc
 from .brief import build_production_brief, topic_violations
 from .budget import BudgetExceeded, BudgetLedger, Cost, RunRecord, Usage, provider_snapshot, usage_since
+from .cache import (
+    TRANSITION_POLICY,
+    assembly_report,
+    changed_scenes,
+    scene_keys,
+    verify_assembly,
+)
 from .capability import capability_table, classify_route
 from .craft import composition_report, narrative_report, rhythm_report, sound_design_report
 from .ledger import Ledger
@@ -316,7 +323,7 @@ def manifest_report(directory: Path, *, job: Path | None = None) -> dict:
 
 
 def probe_media(path) -> dict | None:
-    """Duration and audio presence of a real file; ``None`` when it cannot be read."""
+    """Duration, audio and stream shape of a real file; ``None`` when unreadable."""
     from .media import ffprobe
 
     try:
@@ -325,10 +332,16 @@ def probe_media(path) -> dict | None:
     except (OSError, RuntimeError, ValueError):
         return None
     streams = data.get("streams") or []
+    video = next((stream for stream in streams if stream.get("codec_type") == "video"), {})
+    audio = next((stream for stream in streams if stream.get("codec_type") == "audio"), {})
+    numerator, denominator = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/"))
     return {"duration": float((data.get("format") or {}).get("duration") or 0),
-            "has_audio": any(stream.get("codec_type") == "audio" for stream in streams),
-            "width": next((stream.get("width") for stream in streams
-                           if stream.get("codec_type") == "video"), None)}
+            "has_audio": bool(audio),
+            "width": video.get("width"),
+            "height": video.get("height"),
+            "fps": (numerator / denominator) if denominator else None,
+            "codec": video.get("codec_name"),
+            "channels": audio.get("channels")}
 
 
 def manifest_valid(directory: Path, *, job: Path | None = None) -> bool:
@@ -932,7 +945,20 @@ class Studio:
                 paths.extend(generated)
             out = job / "timelines.json"
             atomic_json(out, data)
-            return data, list(set(paths + [out]))
+            # Scene keys make a single-scene change observable: the next run can say
+            # exactly which scenes (and their neighbours) were rebuilt.
+            environment = {"fps": config["fps"], "voice": config["voice"],
+                           "voice_rate": config["voice_rate"], "theme": "theme.ts",
+                           "fonts": sorted({"Microsoft YaHei"}), "policy": POLICY_VERSION}
+            keys = {name: scene_keys(data[name], environment=environment) for name in ["long", "short"]}
+            previous = read_json(job / "scene-keys.json") if (job / "scene-keys.json").is_file() else {}
+            report = {name: {"changed": changed_scenes(previous.get(name, {}), keys[name])}
+                      for name in ["long", "short"]} if previous else {}
+            atomic_json(job / "scene-keys.json", keys)
+            atomic_json(job / "scene-changes.json", {"changed": report,
+                                                     "environment": environment,
+                                                     "at": now()})
+            return data, list(set(paths + [out, job / "scene-keys.json"]))
 
         timelines = self.stage(episode, "sound", {"implementation": file_hash(Path(__file__).with_name("media.py")),
                                "sound": file_hash(Path(__file__).with_name("sound.py")),
@@ -1089,6 +1115,13 @@ class Studio:
                                                config=config)
                 reports[name]["asr_checked"] = audio_reports[name]["asr"]["status"] == "completed"
                 reports[name]["animatic"] = renders[name].get("animatic")
+                assembly = assembly_report(renders[name], timelines[name])
+                if not assembly["passed"]:
+                    raise RuntimeError(f"{name} 组装检查未通过：" + "；".join(assembly["problems"]))
+                reports[name]["assembly"] = assembly
+                reports[name]["assembly_encoded"] = verify_assembly(
+                    video, expected_frames=renders[name]["frames"], fps=config["fps"],
+                    scenes=timelines[name]["scenes"], probe=probe_media)
                 image = job / f"contact-{name}.jpg"
                 actual_stills = encoded_stills(video, timelines[name], config["fps"], job / "encoded-stills" / name,
                                                portrait=name == "short")
@@ -1174,6 +1207,9 @@ class Studio:
                                  "animatic": animatic_report,
                                  "layout_precheck": precheck,
                                  "sampling_plan": sampling_plan(timelines, config["fps"]),
+                                 "transition_policy": TRANSITION_POLICY,
+                                 "scene_changes": (read_json(job / "scene-changes.json")
+                                                   if (job / "scene-changes.json").is_file() else {}),
                                  "creation_mode": ("imported-script" if import_film else
                                                    ("mock-provider" if getattr(provider, "name", "") == "mock"
                                                     else "title-driven-codex-agents")),

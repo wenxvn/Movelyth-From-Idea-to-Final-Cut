@@ -223,3 +223,21 @@
 - 否：按 finding 文本直接整片重写（会反复破坏已通过的内容）；只按轮次计数不看缺陷类型（排版与事实
   共用预算，先耗尽者挡住后者）。
 - 证据：`tests/test_repair_routing.py`（18 项）。
+
+## D15 · 转场用叠加而非扣除，缓存键含邻镜（S3-02）
+
+- 问题：如果改用 `TransitionSeries`，重叠帧会缩短总时长——60+60 帧重叠 15 帧只剩 105 帧，
+  而旁白是按 120 帧编排的，后面全片错位。另一侧，单镜缓存如果只看本镜内容，邻镜的转场、
+  J-cut、共享对象变化会让缓存命中过期结果。
+- 选择：
+  1. `TRANSITION_POLICY` 明确 `mode=overlay`：转场叠加在相邻镜头各自完整帧数之上，
+     `composition.frames` 必须等于 `sum(scene.frames)`；组装检查会拒绝被扣除的时间轴。
+  2. `scene_key()` 覆盖内容 + 环境（fps/voice/theme/fonts/policy）+ **前后邻镜**
+     （转场类型、shared subject_id、末条字幕），邻镜变化会失效本镜。
+  3. `changed_scenes()` 把变更镜头扩展到其邻镜，写入 `scene-changes.json`，让“改了哪一镜、
+     重做了哪些镜”可解释。
+  4. `verify_cached_file()` 用 hash 判断缓存有效性，半文件/篡改不命中；配音缓存已有
+     `timing_matches_audio` 自检。
+  5. 编码后再核对：时长、fps、音轨、声道、接点黑帧（`verify_assembly`）。
+- 否：逐镜渲染成独立 mp4 再拼接（会引入二次编码与接点丢帧，且当前 Remotion 单次渲染已稳定）。
+- 证据：`tests/test_cache_assembly.py`（15 项，含真实编码探针）。
