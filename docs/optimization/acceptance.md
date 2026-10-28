@@ -137,3 +137,22 @@
 | 能力暴露 | `RENDERER_CAPABILITIES.recipes`、director.md | 编导提示词列出 6 个配方与必需绑定 | V1 |
 
 **未验证**：真实模型选择配方的分布与采纳率；清爽/纸面两套风格的媒体对照（S2-08 未启用）。
+
+## A9 · S2-09 布局预检、整片草片与编码核对（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 321 passed | V1 |
+| 布局 dry-run | `precheck` 阶段（渲染前） | `layout-precheck.json`：每镜问题/警告、`sampling_plan`、`passed` | V1 |
+| 字幕过快/闪现 | 0.3 s 塞 22 字 | 预检阻断，不产生 final.mp4；报告写明原因 | V1 |
+| 空白字幕页 | 空白 text | 报“空白字幕页” | V1 |
+| 未登记素材 | `data_ref="not_registered"` | 报“未引用的素材未登记”；内置 `svd_12` 不误报 | V1 |
+| 静止段 | 6 s 镜头无动作/事件/字幕变化 | 无 `hold_reason` 时警告；写了则不再警告 | V1 |
+| 无效配方 | 场景声明 `flow-expand` 但无 diagram | 预检报“不适用” | V1 |
+| 采样计划 | 8 s 镜头 | 含 opening/ending/scene-midpoint，`(cut, seconds)` 去重 | V1 |
+| 整片草片渲染 | 真实 render.mjs，2 镜 180 帧，`animaticScale=0.25` | `animatic.mp4` 480×270、6.000 s、180 帧（Chrome + Remotion 4.0.538） | V2 |
+| 草片带真实混音 | ffmpeg 复制视频流 + AAC 96k 混音 | `probe_media` 返回 `duration=2.0, has_audio=true, width=480` | V2 |
+| 草片/成片一致 | 帧数、时长、音轨 | 缺草片、帧数不一致、无音轨都判失败；一致时通过（并注明“不等于已连续看听”） | V1 |
+| 记录 | 离线成片 | `质检报告.json` 含 `animatic`/`layout_precheck`/`sampling_plan`；`render-spec.json` 含 `animaticScale` | V1 |
+
+**未验证**：真实长片（180 s）草片与成片的完整看听（V5）；草片渲染耗时与节省的正式渲染成本未统计。

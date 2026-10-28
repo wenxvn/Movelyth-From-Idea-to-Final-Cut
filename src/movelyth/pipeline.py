@@ -2,6 +2,7 @@
 
 import copy
 import csv
+import json
 import os
 import re
 import shutil
@@ -13,6 +14,7 @@ from pathlib import Path
 
 from . import __version__
 from .agents import create_provider
+from .animatic import compare_animatic, layout_precheck, sampling_plan
 from .assets import credit_lines, mark_used, stage_for_render
 from .assets import resolve as resolve_library
 from .audioqc import audio_qc
@@ -26,6 +28,7 @@ from .metrics import Metrics
 from .models import SCHEMA_VERSION, Cut, Film, Research, Review, TopicPlan
 from .policy import (
     POLICY_VERSION,
+    CheckResult,
     audio_checks,
     claim_usage_checks,
     decide,
@@ -308,6 +311,22 @@ def manifest_report(directory: Path, *, job: Path | None = None) -> dict:
                 elif file_hash(target) != entry.get("hash"):
                     reasons.append(f"{cut}.{key} 在交付后被重新生成（工作区文件已变化）")
     return {"valid": not reasons, "reasons": reasons, "unverified": unverified}
+
+
+def probe_media(path) -> dict | None:
+    """Duration and audio presence of a real file; ``None`` when it cannot be read."""
+    from .media import ffprobe
+
+    try:
+        data = json.loads(run([ffprobe(), "-v", "error", "-show_streams", "-show_format",
+                               "-of", "json", str(path)], timeout=60).stdout)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    streams = data.get("streams") or []
+    return {"duration": float((data.get("format") or {}).get("duration") or 0),
+            "has_audio": any(stream.get("codec_type") == "audio" for stream in streams),
+            "width": next((stream.get("width") for stream in streams
+                           if stream.get("codec_type") == "video"), None)}
 
 
 def manifest_valid(directory: Path, *, job: Path | None = None) -> bool:
@@ -928,6 +947,24 @@ class Studio:
             return {"id": episode["id"], "status": "previewed", "storyboard": preview["storyboard"],
                     "reused": False}
 
+        def precheck_action():
+            report = layout_precheck(timelines, config, library_ids=library_ids)
+            plan = sampling_plan(timelines, config["fps"])
+            path = job / "layout-precheck.json"
+            atomic_json(path, {**report, "sampling_plan": plan,
+                               "note": "布局 dry-run 只证明可预见的布局/字幕/动作问题；"
+                                       "不代替整片观看与实听"})
+            if not report["passed"]:
+                raise RuntimeError("布局预检未通过：" + "；".join(report["problems"][:5]))
+            return {"passed": True, "checked_scenes": report["checked_scenes"],
+                    "warnings": len(report["warnings"]), "samples": len(plan)}, [path]
+
+        precheck = self.stage(episode, "precheck",
+                              {"timelines": timelines, "assets": assets.get("layers"),
+                               "implementation": file_hash(Path(__file__).with_name("animatic.py")),
+                               "recipes": file_hash(Path(__file__).with_name("recipes.py"))},
+                              precheck_action)
+
         def render_action():
             cuts = []
             for name, composition in [("long", "Landscape"), ("short", "Portrait")]:
@@ -937,15 +974,32 @@ class Studio:
             spec = job / "render-spec.json"
             atomic_json(spec, {"cuts": cuts, "assets": str(job / "assets"), "browser": browser(),
                                "concurrency": config["render_concurrency"], "result": str(result),
-                               "version": renderer_version})
+                               "version": renderer_version,
+                               # A full-length low-res animatic is rendered before the
+                               # final encode, so whole-film problems are cheap to see.
+                               "animaticScale": 0.35})
             for cut in cuts:
                 self.ledger.record_assets(episode["id"], cut["name"], cut["props"]["scenes"], renderer_version)
             run([shutil.which("node") or "node", str(self.root / "studio" / "render.mjs"), str(spec)],
                 cwd=self.root / "studio", timeout=7200, log=job / "render.log")
             data = read_json(result)
+            # The renderer draws a silent picture; the animatic gets the real mix so it
+            # can be watched with the actual voice, pauses and sound events.
+            for name in ["long", "short"]:
+                animatic = data.get(name, {}).get("animatic")
+                mix = timelines[name].get("mix")
+                if not animatic or not mix:
+                    continue
+                muxed = Path(animatic).with_name("animatic-with-audio.mp4")
+                run([ffmpeg(), "-y", "-v", "error", "-i", str(animatic), "-i", str(mix),
+                     "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "96k",
+                     "-shortest", str(muxed)], timeout=600, log=job / f"animatic-{name}.log")
+                data[name]["animatic"] = str(muxed)
             outputs = [spec, result]
             for cut in data.values():
                 outputs.extend(Path(p) for p in [cut["video"], cut["cover"], *cut["stills"]])
+                if cut.get("animatic"):
+                    outputs.append(Path(cut["animatic"]))
             return data, outputs
 
         renders = self.stage(episode, "render", {"timelines": timelines, "assets": assets,
@@ -978,6 +1032,7 @@ class Studio:
                                                "".join(scene["narration"] for scene in timelines[name]["scenes"]),
                                                config=config)
                 reports[name]["asr_checked"] = audio_reports[name]["asr"]["status"] == "completed"
+                reports[name]["animatic"] = renders[name].get("animatic")
                 image = job / f"contact-{name}.jpg"
                 actual_stills = encoded_stills(video, timelines[name], config["fps"], job / "encoded-stills" / name,
                                                portrait=name == "short")
@@ -1011,6 +1066,12 @@ class Studio:
                 checks.extend(layout_checks(timelines[name], cut=name))
             checks.extend(source_checks(coverage))
             checks.extend(claim_usage_checks(film, coverage))
+            animatic_report = compare_animatic(renders, renders, timelines, config["fps"],
+                                               probe=probe_media)
+            if not animatic_report["passed"]:
+                checks.append(CheckResult(check_id="animatic.mismatch", source="technical",
+                                          status="fail", severity="major", required=True,
+                                          observation="；".join(animatic_report["problems"][:3])))
             checks.extend(review_findings)
             decision = decide(checks, inputs={
                 "episode": f"VID-{episode['id']:06d}", "revision": episode["revision"],
@@ -1046,6 +1107,9 @@ class Studio:
                                  "production_brief": production_brief,
                                  "recipes": {name: [recipes_choose(scene) for scene in timelines[name]["scenes"]]
                                              for name in ["long", "short"]},
+                                 "animatic": animatic_report,
+                                 "layout_precheck": precheck,
+                                 "sampling_plan": sampling_plan(timelines, config["fps"]),
                                  "creation_mode": ("imported-script" if import_film else
                                                    ("mock-provider" if getattr(provider, "name", "") == "mock"
                                                     else "title-driven-codex-agents")),

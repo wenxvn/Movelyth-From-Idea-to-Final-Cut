@@ -73,6 +73,18 @@ try {
       await fs.writeFile(spec.result, JSON.stringify(result, null, 2));
       continue;
     }
+    let animatic;
+    if (spec.animaticScale) {
+      // Full-length, low-resolution animatic with the real voice, captions, pauses,
+      // sound events and transitions — not a teaser of the opening seconds.
+      animatic = path.join(cut.output, 'animatic.mp4');
+      console.log(JSON.stringify({event: 'animatic_start', cut: cut.name, frames: composition.durationInFrames}));
+      await renderMedia({...common, composition, codec: 'h264', outputLocation: animatic,
+        scale: spec.animaticScale, crf: 30, x264Preset: 'veryfast', pixelFormat: 'yuv420p',
+        concurrency: spec.concurrency, disableSharedMemoryCapture: true,
+        mediaCacheSizeInBytes: 128 * 1024 * 1024, offthreadVideoCacheSizeInBytes: 128 * 1024 * 1024,
+        offthreadVideoThreads: 1});
+    }
     console.log(JSON.stringify({event: 'render_start', cut: cut.name, frames: composition.durationInFrames}));
     let last = -1;
     await renderMedia({...common, composition, codec: 'h264', outputLocation: video,
@@ -87,8 +99,8 @@ try {
       },
       onProgress: ({progress}) => {const bucket = Math.floor(progress * 10); if (bucket !== last) {console.log(JSON.stringify({event: 'progress', cut: cut.name, percent: bucket * 10})); last = bucket;}}});
     const hashes = {};
-    for (const filename of [video, cover, ...stills]) hashes[filename] = await fileDigest(filename);
-    result[cut.name] = {video, cover, stills, frames: composition.durationInFrames, width: composition.width, height: composition.height, fps: composition.fps, fingerprint, hashes};
+    for (const filename of [video, cover, animatic, ...stills].filter(Boolean)) hashes[filename] = await fileDigest(filename);
+    result[cut.name] = {video, cover, animatic, stills, frames: composition.durationInFrames, width: composition.width, height: composition.height, fps: composition.fps, fingerprint, hashes};
     await fs.writeFile(spec.result, JSON.stringify(result, null, 2));
   }
 } finally {

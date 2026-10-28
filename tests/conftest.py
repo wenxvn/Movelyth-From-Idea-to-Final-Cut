@@ -38,7 +38,10 @@ def fake_render_run(command, *, cwd=None, timeout=600, log=None):
                 still = out / f"scene-{index + 1:02d}.jpg"
                 still.write_bytes(b"jpg")
                 stills.append(str(still))
+            animatic = out / "animatic.mp4"
+            animatic.write_bytes(b"animatic")
             entry = {"video": str(silent), "cover": str(cover), "stills": stills,
+                     "animatic": str(animatic),
                      "frames": sum(scene["frames"] for scene in cut["props"]["scenes"]),
                      "width": 1920 if cut["name"] == "long" else 1080,
                      "height": 1080 if cut["name"] == "long" else 1920, "fps": 30,
@@ -65,7 +68,9 @@ def fake_prepare_cut(cut, config, cache, output, *, portrait):
     scenes = []
     for raw in cut["scenes"]:
         scenes.append({**raw, "frames": frames,
-                       "captions": [{"start": 0.2, "end": 1.0, "text": raw["narration"][:12]}],
+                       "captions": [{"start": 0.2,
+                                     "end": round(0.2 + max(1.4, len(raw["narration"][:12]) / 6), 2),
+                                     "text": raw["narration"][:12]}],
                        "layers": raw.get("layers") or [layer()], "actions_resolved": [],
                        "caption_timing": "tts-word-boundaries", "layout_warnings": []})
     return {"title": cut["title"], "scenes": scenes, "frames": frames * len(scenes),
@@ -117,6 +122,10 @@ def offline_pipeline(tmp_path, monkeypatch):
         return result
 
     monkeypatch.setattr("movelyth.pipeline.encoded_stills", fake_stills)
+    # The offline animatic is a stub, so it cannot be probed; the audio requirement is
+    # still enforced (has_audio=False would fail), the duration check is skipped.
+    monkeypatch.setattr("movelyth.pipeline.probe_media",
+                        lambda path: {"duration": None, "has_audio": True, "width": 480})
     monkeypatch.setattr("movelyth.pipeline.contact_sheet", lambda stills, output, portrait: output.write_bytes(b"jpg"))
     monkeypatch.setattr("movelyth.pipeline.audio_qc", lambda voice, mix, script, config: {
         "asr": {"status": "disabled"}, "transcript_check": {"status": "not-run"},

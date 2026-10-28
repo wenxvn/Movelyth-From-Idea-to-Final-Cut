@@ -158,3 +158,20 @@
   4. 配方与要求同时进入 `RENDERER_CAPABILITIES.recipes` 与 director 提示词，编导只从已实现集合中选择。
 - 否：把每个配方做成新的 LayerKind（渲染端会膨胀且不可组合）；只写提示词不写检查（无法阻止未实现配方）。
 - 证据：`tests/test_recipes.py`（10 项）。
+
+## D11 · 先草片后成片，草片必须带真实声音（S2-09）
+
+- 问题：旧 `preview` 只渲染 12 秒低清片段与代表帧，片尾与累积问题到最终编码才暴露；草片若无声，
+  “带真实配音的整片”就只是说法。
+- 选择：
+  1. 渲染前新增 `precheck` 阶段：字幕阅读速度/闪现/空白页、动作极值、未登记素材、无效配方、
+     长静止段是否写 `hold_reason`；有阻塞问题直接停止，不进入渲染。
+  2. `render.mjs` 在最终编码前先渲染整条时间轴的 `animatic.mp4`（`animaticScale=0.35`，crf 30）。
+  3. 渲染端只画画面，管线再用 ffmpeg 把该 cut 的真实混音 mux 进草片（copy 视频 + AAC 96k），
+     所以草片听到的就是成片的声音。
+  4. `compare_animatic()` 用 ffprobe 实测草片：必须有音轨、时长与时间轴一致、帧数与成片一致；
+     不一致记为 `animatic.mismatch` 阻断。结论明确写“一致不等于已连续看听”。
+  5. `sampling_plan()` 给每个抽帧点写理由（opening/event/motion-extreme/caption-change/ending），
+     避免只看每镜完成帧。
+- 否：只靠最终编码后抽帧（问题发现太晚）；草片不带声音（无法听出漏读、爆点、音乐压人声）。
+- 证据：`tests/test_animatic.py`（11 项）、真实草片渲染与混音探针（A9）。
