@@ -30,6 +30,14 @@ export type SemanticEvent = {
   purpose: string;
   target: string;
 };
+export type Sketch = {
+  id: string;
+  target: string;
+  kind: 'circle' | 'bracket' | 'underline' | 'highlight' | 'box';
+  seed: number;
+  start: string;
+  end: string;
+};
 export type CameraKeyframe = {
   at: number;
   mode: 'overview' | 'focus' | 'follow' | 'reframe';
@@ -142,6 +150,7 @@ export type Scene = {
   events?: SemanticEvent[];
   events_resolved?: ResolvedEvent[];
   camera_plan?: CameraKeyframe[];
+  sketches?: Sketch[];
   recipe?: string;
   function?: string;
   parameters?: Record<string, number>;

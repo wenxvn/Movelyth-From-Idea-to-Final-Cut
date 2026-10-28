@@ -329,3 +329,17 @@
 - 否：实现通用 morph 库（Remotion 无内置；圆角变化不是几何形变）；让模型直接给目标坐标做任意形变
   （无法保证不自交、不可审查）。
 - 证据：`tests/test_continuity.py`（12 项，含真实帧对照）。
+
+## D21 · 手绘圈注自己做：几何由 seed 决定，只有笔画生长随时间变化（S2-08）
+
+- 问题：`@remotion/rough-notation` 是 CSS 动画，逐帧随机/抖动会让同一帧两次渲染不同，
+  也会让静止文字在阅读时轻微抖动；它还需要新增一个必须与全部 Remotion 包同版本的依赖。
+- 选择：
+  1. 自研 `Sketch`（circle/bracket/underline/highlight/box）+ `path_points(box, kind, seed)`：
+     几何是 (框, 类型, seed) 的纯函数，抖动上限 3px，**不含时间**。
+  2. 唯一随时间变化的量是 `reveal(progress, start, end)`（stroke-dashoffset）。
+  3. 标注画在内容相机变换**之外**的覆盖层，因此不会随内容缩放/旋转，也不会推动数据。
+  4. Python 与 TSX 各实现一次，用 studio 自带的 esbuild 打包真实 TSX 做逐点 parity 测试；
+     LCG 在 JS 侧用 `Math.imul` 保证 32 位乘法精度与 Python 一致。
+- 否：直接引入 rough-notation（CSS 动画 + 版本锁定成本）；用 SVG filter 做粗糙化（每帧重算，性能与确定性都差）。
+- 证据：`tests/test_sketch.py`（14 项，含两次渲染逐字节一致）。

@@ -775,6 +775,14 @@
           "title": "Schema Version",
           "type": "integer"
         },
+        "sketches": {
+          "items": {
+            "$ref": "#/$defs/Sketch"
+          },
+          "maxItems": 4,
+          "title": "Sketches",
+          "type": "array"
+        },
         "source_index": {
           "maximum": 5,
           "minimum": 0,
@@ -930,6 +938,53 @@
         "values"
       ],
       "title": "Series",
+      "type": "object"
+    },
+    "Sketch": {
+      "additionalProperties": false,
+      "description": "One hand-drawn annotation over one layer (geometry lives in movelyth.sketch).",
+      "properties": {
+        "end": {
+          "default": "0.6",
+          "maxLength": 48,
+          "title": "End",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,15}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "default": "circle",
+          "maxLength": 16,
+          "title": "Kind",
+          "type": "string"
+        },
+        "seed": {
+          "default": 7,
+          "maximum": 999,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "start": {
+          "default": "0.1",
+          "maxLength": 48,
+          "title": "Start",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[a-z][a-z0-9_]{0,23}$",
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "target"
+      ],
+      "title": "Sketch",
       "type": "object"
     }
   },

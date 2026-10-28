@@ -381,8 +381,14 @@ def validate_script(film, research, long_seconds: int, short_seconds: int) -> li
         from .continuity import continuity_report, morph_problems
         from .parameters import ParameterError, validate_scene_parameters
         from .recipes import recipe_warnings, validate_scene_recipe
+        from .sketch import sketch_problems
 
         problems.extend(morph_problems(cut.scenes))
+        from .scenedsl import regions as layout_regions
+
+        boxes = layout_regions("portrait" if name == "short" else "landscape", "diagram")
+        for scene in cut.scenes:
+            problems.extend(sketch_problems(scene, boxes=boxes))
         report = continuity_report(cut.scenes)
         if report["problems"]:
             recipe_notes.extend(f"{name} 连续性：{problem}" for problem in report["problems"])

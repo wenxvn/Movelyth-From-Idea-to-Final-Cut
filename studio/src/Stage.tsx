@@ -12,6 +12,7 @@ import {ChartLayer} from './components/ChartLayer';
 import {DiagramLayer} from './components/DiagramLayer';
 import {TimelineLayer} from './components/TimelineLayer';
 import {ImageLayer} from './components/ImageLayer';
+import {SketchOverlay} from './components/SketchOverlay';
 import {ProceduralLayer} from './components/ProceduralLayer';
 
 export type Box = {x: number; y: number; w: number; h: number};
@@ -157,6 +158,12 @@ export const SceneStage: React.FC<{
           }}/>}
         </div>;
       })}
+      {/* Annotations are an overlay: they never move, scale or rotate with the content,
+          so an arrow cannot displace the number it points at. */}
+      {scene.sketches?.length ? <SketchOverlay sketches={scene.sketches}
+        boxes={boxes} layerRegions={Object.fromEntries(scene.layers.map((layer) => [layer.id, layer.region]))}
+        progress={progress} color={accent[scene.color] || theme.text}
+        width={width} height={height}/> : null}
     </AbsoluteFill>
   </AbsoluteFill>;
 };

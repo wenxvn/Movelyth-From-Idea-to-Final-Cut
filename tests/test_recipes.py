@@ -6,6 +6,7 @@ import json
 import pytest
 
 from movelyth.agents import MockProvider
+from movelyth.models import SCHEMA_VERSION
 from movelyth.pipeline import RENDERER_CAPABILITIES
 from movelyth.recipes import (
     RECIPES,
@@ -26,7 +27,7 @@ def chart(*, recipe=None, hero="", annotations=None, series=None, claim_ids=None
         layer_kwargs["annotations"] = annotations
     if series is not None:
         layer_kwargs["series"] = series
-    overrides = {}
+    overrides = {"schema_version": SCHEMA_VERSION}
     if recipe:
         overrides["recipe"] = recipe
     if hero:

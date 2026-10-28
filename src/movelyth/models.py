@@ -367,6 +367,28 @@ class SemanticEvent(Contract):
     target: str = Field(default="", max_length=24)
 
 
+SKETCH_KINDS = ("circle", "bracket", "underline", "highlight", "box")
+KINDS = SKETCH_KINDS
+
+
+class Sketch(Contract):
+    """One hand-drawn annotation over one layer (geometry lives in movelyth.sketch)."""
+
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,15}$")
+    target: str = Field(pattern=r"^[a-z][a-z0-9_]{0,23}$")
+    kind: str = Field(default="circle", max_length=16)
+    seed: int = Field(default=7, ge=0, le=999)
+    start: str = Field(default="0.1", max_length=48)
+    end: str = Field(default="0.6", max_length=48)
+
+    @field_validator("kind")
+    @classmethod
+    def known_kind(cls, value: str) -> str:
+        if value not in SKETCH_KINDS:
+            raise ValueError(f"sketch.kind 只能是 {'/'.join(SKETCH_KINDS)}")
+        return value
+
+
 class Scene(Contract):
     # The version this scene was written for.  A v1 scene is migrated by adding the
     # number only; v2-only fields under v1 are rejected instead of reinterpreted.
@@ -414,6 +436,9 @@ class Scene(Contract):
     # v2: the shot recipe this scene is built from (see movelyth.recipes).  Empty
     # means "infer the first applicable recipe"; an unimplemented id is rejected.
     recipe: str = Field(default="", max_length=32)
+    # v2: hand-drawn annotations.  Geometry is seeded (time-independent), only the
+    # visible stroke grows, so a still frame never jitters.
+    sketches: list[Sketch] = Field(default_factory=list, max_length=4)
     # v2: a controlled parameter function and its bounded parameters (see
     # movelyth.parameters).  The computed values are the only source for the drawn
     # geometry, the series and the numbers shown on screen.
@@ -486,7 +511,8 @@ class Scene(Contract):
         return self
 
 
-V2_SCENE_FIELDS = {"events", "claim_ids", "hold_reason", "transition_reason"}
+V2_SCENE_FIELDS = {"events", "claim_ids", "hold_reason", "transition_reason",
+                   "sketches", "recipe", "function", "parameters"}
 V2_LAYER_FIELDS = {"subject_id", "state_before", "state_after", "visual_explanation"}
 
 
