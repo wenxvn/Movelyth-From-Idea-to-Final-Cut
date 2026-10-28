@@ -49,6 +49,8 @@ from .quality import (
     validate_script,
     verify_video,
 )
+from .recipes import catalog as recipes_catalog
+from .recipes import choose as recipes_choose
 from .scenedsl import pacing_report, resolve_data_layers, validate_cut_timeline
 from .util import atomic_json, file_hash, fingerprint, now, read_json, run
 
@@ -316,6 +318,9 @@ RENDERER_CAPABILITIES = {
     "schema_version": SCHEMA_VERSION,
     "routes": {name: {"status": spec["status"], "description": spec["description"]}
                for name, spec in capability_table()["routes"].items()},
+    "recipes": {name: {"purpose": spec["purpose"], "requires": spec["requires"],
+                       "events": spec["events"], "limits": spec["limits"]}
+                for name, spec in recipes_catalog()["recipes"].items()},
     "layers": {
         "text": "短文本/注解，自动换行并按区域限制字数",
         "math": "数学文字与公式行（Unicode 上下标），不是符号求解器",
@@ -1039,6 +1044,8 @@ class Studio:
                                                      if k in source} for source in evidence["sources"]],
                                  "claim_coverage": {"summary": evidence["summary"], "claims": coverage},
                                  "production_brief": production_brief,
+                                 "recipes": {name: [recipes_choose(scene) for scene in timelines[name]["scenes"]]
+                                             for name in ["long", "short"]},
                                  "creation_mode": ("imported-script" if import_film else
                                                    ("mock-provider" if getattr(provider, "name", "") == "mock"
                                                     else "title-driven-codex-agents")),

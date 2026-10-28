@@ -128,6 +128,7 @@ export type Scene = {
   transition_reason?: string;
   events?: SemanticEvent[];
   events_resolved?: ResolvedEvent[];
+  recipe?: string;
   schema_version?: number;
 };
 

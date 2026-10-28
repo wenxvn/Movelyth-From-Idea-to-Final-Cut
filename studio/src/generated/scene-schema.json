@@ -720,6 +720,12 @@
           "title": "Narration",
           "type": "string"
         },
+        "recipe": {
+          "default": "",
+          "maxLength": 32,
+          "title": "Recipe",
+          "type": "string"
+        },
         "role": {
           "default": "mechanism",
           "enum": [

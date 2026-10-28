@@ -367,6 +367,7 @@ def validate_script(film, research, long_seconds: int, short_seconds: int) -> li
     from .scenedsl import pacing_estimate, scene_signature, validate_cut_dsl
 
     problems: list[str] = []
+    recipe_notes: list[str] = []
     for name, target in [("long", long_seconds), ("short", short_seconds)]:
         cut = getattr(film, name)
         characters = sum(len(scene.narration) for scene in cut.scenes)
@@ -377,9 +378,15 @@ def validate_script(film, research, long_seconds: int, short_seconds: int) -> li
         if any(s.source_index >= len(research.sources) for s in cut.scenes):
             problems.append(f"{name} 有镜头的 source_index 引用了不存在的来源")
         problems.extend(validate_cut_dsl(cut, vertical=name == "short"))
+        from .recipes import recipe_warnings, validate_scene_recipe
+
+        for scene in cut.scenes:
+            problems.extend(validate_scene_recipe(scene))
+            recipe_notes.extend(recipe_warnings(scene))
     if problems:
         raise ScriptIssues(problems)
     errors, warnings = check_film(film)
+    warnings.extend(recipe_notes)
     if errors:
         raise ScriptIssues(errors, headline="旁白与画面不一致")
     # Rhythm is a craft problem, not a contract violation: report it before TTS so

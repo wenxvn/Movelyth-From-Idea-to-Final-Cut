@@ -399,6 +399,9 @@ class Scene(Contract):
     # camera move or a sound can be bound to "the moment this is said" instead of a
     # hand-measured second.
     events: list[SemanticEvent] = Field(default_factory=list, max_length=8)
+    # v2: the shot recipe this scene is built from (see movelyth.recipes).  Empty
+    # means "infer the first applicable recipe"; an unimplemented id is rejected.
+    recipe: str = Field(default="", max_length=32)
 
     @field_validator("labels")
     @classmethod

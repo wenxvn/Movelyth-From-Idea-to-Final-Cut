@@ -122,3 +122,18 @@
 | 配置严格性 | 拼错 `studio.long_second` | `ValueError` 指明键名，不再静默用默认值 | V1 |
 
 **未验证**：真实模型 token 用量与真实费用（无端点/无价格表）；wall_seconds 与 render_minutes 的硬超时未在真实渲染上触发。
+
+## A8 · S2-01 镜头配方与统一风格（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 310 passed | V1 |
+| 配方登记 | `recipes.RECIPES` | 6 个：chart-focus / same-scale-compare / parameter-process / flow-expand / paper-evidence / conclusion-callback，每个都有用途、必需绑定、事件、画幅、限制与检查项 | V1 |
+| 适用性 | 图表无注释 / 有注释；同单位 / 混单位 series；vectors；diagram+steps；text+source_note；text+claim_ids | 各自正确判定适用或不适用 | V1 |
+| 未实现配方 | `recipe="magic-transition"` | 脚本契约在渲染前拒绝，写入 `script-feedback.json`，不产生 final.mp4 | V1 |
+| 不适用的已登记配方 | chart 场景声明 `flow-expand` | 拒绝并说明缺少的绑定 | V1 |
+| 配方检查 | 注释 x 离数据点过远、对照单位不一致、hero 不存在、纸面缺 source_note | 各自报告 | V1 |
+| 记录 | 离线成片 | `质检报告.json` 的 `recipes` 按镜记录实际使用的配方 | V1 |
+| 能力暴露 | `RENDERER_CAPABILITIES.recipes`、director.md | 编导提示词列出 6 个配方与必需绑定 | V1 |
+
+**未验证**：真实模型选择配方的分布与采纳率；清爽/纸面两套风格的媒体对照（S2-08 未启用）。
