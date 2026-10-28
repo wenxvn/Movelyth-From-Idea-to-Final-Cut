@@ -183,6 +183,7 @@ def renderer_contract() -> dict:
         "transition_kinds": list(TransitionKind.__args__),
         "camera_kinds": list(CameraKind.__args__),
         "cue_kinds": list(CueKind.__args__),
+        "event_kinds": ["reveal", "transform", "compare", "conclude", "emphasis", "pause", "transition"],
         "type_scale": {"display": 132, "heading": 110, "body": 46, "caption": 66, "label": 38},
     }
 
@@ -525,6 +526,70 @@ def layout_warnings(scene: Scene, *, vertical: bool) -> list[str]:
     return warnings
 
 
+def _nth_occurrence(haystack: str, needle: str, occurrence: int) -> int:
+    """Index of the n-th (1-based) occurrence, or -1. Repeated phrases need this."""
+    if not needle:
+        return -1
+    index, found = -1, 0
+    while True:
+        index = haystack.find(needle, index + 1)
+        if index < 0:
+            return -1
+        found += 1
+        if found == occurrence:
+            return index
+
+
+def resolve_events(scene: Scene, duration: float, boundaries: list[dict] | None = None) -> list[dict]:
+    """Resolve named semantic events onto real scene time.
+
+    Events are the shared vocabulary for camera moves, sounds and repairs: binding
+    them to ``narration:`` anchors (with an occurrence or character range) means a
+    changed speech rate or a term replacement moves the event with the audio instead
+    of leaving it at a hand-measured second.
+    """
+    at, mode = char_timing(scene.narration, boundaries or [], max(1e-6, duration))
+    known = {layer.id for layer in scene.layers}
+    known |= {layer.subject_id for layer in scene.layers if layer.subject_id}
+    resolved: list[dict] = []
+    last_by_target: dict[str, float] = {}
+    for event in scene.events:
+        if event.target and event.target not in known:
+            raise ValueError(f"镜头 {scene.id} 的事件 {event.id} 引用了不存在的目标 {event.target}")
+        anchor = event.anchor
+        if anchor.kind == "start":
+            base = 0.0
+        elif anchor.kind == "end":
+            base = duration
+        elif anchor.kind == "fraction":
+            base = anchor.fraction * duration
+        else:
+            if anchor.char_start is not None:
+                index = anchor.char_start
+            else:
+                index = _nth_occurrence(scene.narration, anchor.text, anchor.occurrence)
+                if index < 0:
+                    raise ValueError(f"镜头 {scene.id} 的事件 {event.id} 找不到第 {anchor.occurrence} 次"
+                                     f"出现的旁白片段“{anchor.text}”")
+            base = at(index)
+        moment = base + event.offset_seconds
+        if not math.isfinite(moment):
+            raise ValueError(f"镜头 {scene.id} 的事件 {event.id} 时间不是有限数")
+        if moment < -1e-9 or moment > duration + 1e-9:
+            raise ValueError(f"镜头 {scene.id} 的事件 {event.id} 落在镜头外（{moment:.3f}s / {duration:.3f}s）")
+        moment = max(0.0, min(duration, moment))
+        if event.target:
+            previous = last_by_target.get(event.target)
+            if previous is not None and moment < previous - 1e-9:
+                raise ValueError(f"镜头 {scene.id} 的事件 {event.id} 相对同一目标 {event.target} 倒序")
+            last_by_target[event.target] = moment
+        resolved.append({"id": event.id, "kind": event.kind, "at": round(moment, 3),
+                         "fraction": round(moment / duration, 4) if duration else 0.0,
+                         "target": event.target, "purpose": event.purpose,
+                         "anchor": anchor.kind, "timing": mode})
+    return resolved
+
+
 def resolve_beats(scene: Scene, duration: float, boundaries: list[dict] | None = None) -> list[dict]:
     at, _mode = char_timing(scene.narration, boundaries or [], max(1e-6, duration))
     resolved = []
@@ -570,6 +635,7 @@ def normalize_scene(scene: Scene, *, duration: float, boundaries: list[dict] | N
         "schema_version": SCHEMA_VERSION,
         "layers": [layer.model_dump() for layer in layers],
         "actions_resolved": actions,
+        "events_resolved": resolve_events(Scene.model_validate(scene.model_dump()), duration, boundaries),
         "beat_times": beats,
         "cues_resolved": cues,
         "beat_timing": timing_mode,
@@ -599,6 +665,13 @@ def validate_cut_timeline(cut: dict, fps: int) -> list[str]:
         for action in scene.get("actions_resolved", []):
             if not 0 <= action["from"] < action["to"] <= 1.0:
                 problems.append(f"{scene['id']}: 动画区间越界")
+        seen_events = set()
+        for event in scene.get("events_resolved", []):
+            if event["id"] in seen_events:
+                problems.append(f"{scene['id']}: 事件 id 重复 {event['id']}")
+            seen_events.add(event["id"])
+            if not 0 <= event["at"] <= seconds + 1e-6:
+                problems.append(f"{scene['id']}: 事件 {event['id']} 落在镜头外")
         total += frames
     if total <= 0:
         problems.append("总帧数为 0")

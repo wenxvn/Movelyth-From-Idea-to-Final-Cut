@@ -130,3 +130,44 @@ V2 的 12 列栅格仍保留：`immersive` 是标题在上、主画面占满整�
 - `schema_version` 仍为 1；读取端按字段默认值兼容，旧 revision 不会被就地改写。
 - 布局矩形变了，因此**旧脚本的视觉会变**（更大的画面、更高的标题）。这是本轮的目标，
   不是兼容性回归：语义、图层、时间轴、字幕文本都不变。
+## 7. v2：版本化契约、对象身份与语义事件（S1-06）
+
+`schema_version` 升到 **2**。v1 脚本继续可读，但迁移只补版本号，不补造任何历史证据。
+
+| 新增 | 位置 | 约束 |
+| --- | --- | --- |
+| `schema_version` | Scene / Cut | 1 或 2；高于实现版本直接拒绝 |
+| `subject_id` | Layer | 小写标识符；跨镜表示“同一个东西”，与 `layer.id`（本镜实例）分开 |
+| `state_before` / `state_after` | Layer | ≤40 字；声明状态必须同时给 `subject_id` |
+| `visual_explanation` | Layer | ≤120 字，说明这层画面在解释什么 |
+| `claim_ids` | Scene | 只能引用 `c1`、`c2` 这样的主张编号 |
+| `hold_reason` / `transition_reason` | Scene | 静止阅读与换场理由，用于解释“为什么不动” |
+| `events` | Scene | ≤8 个命名事件；id 同镜唯一 |
+| `events_resolved` | 规范化输出 | 每个事件的绝对秒数、0–1 比例、锚点类型与时间来源 |
+
+事件锚点（`EventAnchor`）：
+
+| kind | 字段 | 说明 |
+| --- | --- | --- |
+| `start` / `end` | — | 镜头首尾 |
+| `fraction` | `fraction` 0–1 | 镜头内比例 |
+| `narration` | `text` + `occurrence`，或 `char_start`/`char_end` | 绑定到真实配音词语边界 |
+
+校验（`resolve_events`）：
+
+- `narration` 片段找不到第 N 次出现 → 报错，**不会**静默绑定到第一次。
+- 事件时间落在镜头外、目标图层/subject 不存在、同一目标的事件倒序、id 重复 → 报错。
+- 事件时间来自 TTS 边界时 `timing="tts-word-boundaries"`；只有比例估计时
+  `timing="estimated-character-timing"`，不被当成精确时间。
+
+统一时钟（`clock.py`）：
+
+- `seconds_to_frames` 用 1e-4 帧容差向上取整（镜头不能截断自己的音频）；
+- `scene_spans()` 给每个镜头半开样本区间 `[start_sample, end_sample)`，相邻镜头首尾相接；
+- 全片样本数 = 各镜样本数之和，跨镜不累积漂移。
+
+兼容性：
+
+- v1 脚本（无上述字段）按默认值渲染；`Cut`/`Film` 校验时把场景版本升到 2，仅补版本号。
+- v1 版本号下出现 v2 字段会被拒绝（避免“旧版本号悄悄换含义”）。
+- 真实渲染 smoke（`pytest -m slow`）用 v1 风格 props 通过，证明旧脚本仍能渲染。

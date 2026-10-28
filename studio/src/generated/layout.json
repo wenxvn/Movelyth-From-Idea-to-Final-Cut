@@ -33,6 +33,15 @@
     "riser",
     "chime"
   ],
+  "event_kinds": [
+    "reveal",
+    "transform",
+    "compare",
+    "conclude",
+    "emphasis",
+    "pause",
+    "transition"
+  ],
   "footer_bands": {
     "landscape": {
       "bottom": 1062,
@@ -558,7 +567,7 @@
     "turn",
     "conclusion"
   ],
-  "schema_version": 1,
+  "schema_version": 2,
   "transition_kinds": [
     "cut",
     "fade",

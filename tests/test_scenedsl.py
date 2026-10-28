@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from movelyth.consistency import check_scene
-from movelyth.models import Action, Film, Layer, Scene, VisualKind
+from movelyth.models import SCHEMA_VERSION, Action, Film, Layer, Scene, VisualKind
 from movelyth.quality import validate_script
 from movelyth.scenedsl import (
     normalize_scene,
@@ -26,7 +26,7 @@ def test_legacy_scene_without_layers_still_renders_as_procedural():
     assert [item["type"] for item in normalized["layers"]] == ["procedural"]
     assert normalized["layers"][0]["procedural"] == "matrix"
     assert normalized["actions_resolved"] == []
-    assert normalized["schema_version"] == 1
+    assert normalized["schema_version"] == SCHEMA_VERSION
 
 
 def test_narration_beats_and_actions_resolve_to_real_tts_time():

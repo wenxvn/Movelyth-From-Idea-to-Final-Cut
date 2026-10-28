@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 VisualKind = Literal["matrix", "vectors", "projection", "wave", "network", "image_layers", "orbit"]
 LayerKind = Literal["text", "shape", "math", "chart", "diagram", "timeline", "image", "procedural"]
@@ -201,6 +201,13 @@ class Layer(Contract):
     # An x interval that deserves emphasis (the "overshoot" region, the feasible
     # range).  Two finite numbers; ignored by non-chart layers.
     highlight: list[float] = Field(default_factory=list, max_length=2)
+    # Semantic identity (v2).  ``subject_id`` follows the *thing* across scenes;
+    # ``id`` only identifies this layer instance, and the same subject may be a card
+    # in one scene and a point on a chart in the next.
+    subject_id: str = Field(default="", max_length=24)
+    state_before: str = Field(default="", max_length=40)
+    state_after: str = Field(default="", max_length=40)
+    visual_explanation: str = Field(default="", max_length=120)
 
     @field_validator("highlight")
     @classmethod
@@ -234,6 +241,19 @@ class Layer(Contract):
         if value and value not in set(VisualKind.__args__):
             raise ValueError("procedural 必须是已知的程序动画类型")
         return value
+
+    @field_validator("subject_id")
+    @classmethod
+    def safe_subject_id(cls, value: str) -> str:
+        if value and not __import__("re").fullmatch(r"[a-z][a-z0-9_]{0,23}", value):
+            raise ValueError("subject_id 只能是小写标识符")
+        return value
+
+    @model_validator(mode="after")
+    def state_needs_a_subject(self):
+        if (self.state_before or self.state_after) and not self.subject_id:
+            raise ValueError("声明了前后状态就必须给 subject_id，否则无法跨镜追踪同一对象")
+        return self
 
     @model_validator(mode="after")
     def type_specific_bounds(self):
@@ -301,7 +321,44 @@ class Cue(Contract):
         return Beat.bounded_time_reference(value)
 
 
+class EventAnchor(Contract):
+    """Where a semantic event sits: scene start/end, a fraction, or a phrase.
+
+    Repeated phrases are disambiguated with ``occurrence`` (1-based) or an explicit
+    character range, so "3" in "3 与 3 的平均" never binds to the wrong one.
+    """
+
+    kind: Literal["start", "end", "fraction", "narration"]
+    fraction: float = Field(default=0.0, ge=0, le=1)
+    text: str = Field(default="", max_length=48)
+    occurrence: int = Field(default=1, ge=1, le=9)
+    char_start: int | None = Field(default=None, ge=0, le=500)
+    char_end: int | None = Field(default=None, ge=0, le=500)
+
+    @model_validator(mode="after")
+    def anchor_is_usable(self):
+        if self.kind == "narration" and not self.text and self.char_start is None:
+            raise ValueError("narration 锚点需要 text 或 char_start")
+        if self.char_start is not None and self.char_end is not None and self.char_end <= self.char_start:
+            raise ValueError("char_end 必须大于 char_start")
+        return self
+
+
+class SemanticEvent(Contract):
+    """A named moment in a scene that other stages can bind to."""
+
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,23}$")
+    kind: Literal["reveal", "transform", "compare", "conclude", "emphasis", "pause", "transition"]
+    anchor: EventAnchor
+    offset_seconds: float = Field(default=0.0, ge=-5, le=5)
+    purpose: str = Field(default="", max_length=60)
+    target: str = Field(default="", max_length=24)
+
+
 class Scene(Contract):
+    # The version this scene was written for.  A v1 scene is migrated by adding the
+    # number only; v2-only fields under v1 are rejected instead of reinterpreted.
+    schema_version: int = Field(default=SCHEMA_VERSION, ge=1, le=SCHEMA_VERSION)
     id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
     heading: str = Field(min_length=2, max_length=24)
     narration: str = Field(min_length=15, max_length=500)
@@ -334,12 +391,35 @@ class Scene(Contract):
     # The layer that should read as the hero.  Empty means "first drawing layer in
     # main", which is what every existing script already relies on visually.
     hero: str = Field(default="", max_length=24)
+    # v2: which claims this scene carries, and why it holds or changes.
+    claim_ids: list[str] = Field(default_factory=list, max_length=4)
+    hold_reason: str = Field(default="", max_length=60)
+    transition_reason: str = Field(default="", max_length=60)
+    # v2: named semantic events.  They resolve against real TTS boundaries, so a
+    # camera move or a sound can be bound to "the moment this is said" instead of a
+    # hand-measured second.
+    events: list[SemanticEvent] = Field(default_factory=list, max_length=8)
 
     @field_validator("labels")
     @classmethod
     def label_lengths(cls, values: list[str]) -> list[str]:
         if any(not v.strip() or len(v) > 22 for v in values):
             raise ValueError("每个画面标签需为 1–22 字")
+        return values
+
+    @field_validator("claim_ids")
+    @classmethod
+    def claim_id_format(cls, values: list[str]) -> list[str]:
+        if any(not __import__("re").fullmatch(r"c[0-9]{1,2}", value) for value in values):
+            raise ValueError("claim_ids 只能引用 c1、c2 这样的主张编号")
+        return values
+
+    @field_validator("events")
+    @classmethod
+    def unique_event_ids(cls, values: list[SemanticEvent]) -> list[SemanticEvent]:
+        identifiers = [event.id for event in values]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("同一镜头的事件 id 不能重复")
         return values
 
     @field_validator("emphasis")
@@ -368,7 +448,46 @@ class Scene(Contract):
         return self
 
 
+V2_SCENE_FIELDS = {"events", "claim_ids", "hold_reason", "transition_reason"}
+V2_LAYER_FIELDS = {"subject_id", "state_before", "state_after", "visual_explanation"}
+
+
+def migrate_scene(data: dict) -> dict:
+    """Accept a v1 scene as v1, and refuse to read v2 fields under the v1 version.
+
+    Migration only adds the version number: it never invents claims, events or
+    states, and it never reinterprets an old field with new meaning.
+    """
+    if not isinstance(data, dict):
+        return data
+    version = int(data.get("schema_version") or 1)
+    if version > SCHEMA_VERSION:
+        raise ValueError(f"脚本 schema_version={version} 高于当前实现 {SCHEMA_VERSION}")
+    if version >= 2:
+        return data
+    offending = sorted(V2_SCENE_FIELDS & set(data))
+    for layer in data.get("layers") or []:
+        if isinstance(layer, dict):
+            offending.extend(sorted(V2_LAYER_FIELDS & set(layer)))
+    if offending:
+        raise ValueError("schema_version=1 的脚本不能包含 v2 字段：" + "、".join(sorted(set(offending)))
+                         + "；请把 schema_version 升到 2 或移除这些字段")
+    return {**data, "schema_version": SCHEMA_VERSION}
+
+
+def migrate_cut(data: dict) -> dict:
+    if not isinstance(data, dict):
+        return data
+    scenes = [migrate_scene(scene) for scene in data.get("scenes") or []]
+    return {**data, "scenes": scenes}
+
+
 class Cut(Contract):
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate(cls, data):
+        return migrate_cut(data)
+
     title: str = Field(min_length=2, max_length=50)
     description: str = Field(min_length=20, max_length=1200)
     tags: list[str] = Field(min_length=2, max_length=8)
@@ -395,6 +514,14 @@ class Cut(Contract):
 
 
 class Film(Contract):
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate(cls, data):
+        if not isinstance(data, dict):
+            return data
+        return {**data, "long": migrate_cut(data.get("long") or {}),
+                "short": migrate_cut(data.get("short") or {})}
+
     title: str = Field(min_length=2, max_length=80)
     thesis: str = Field(min_length=8, max_length=300)
     long: Cut

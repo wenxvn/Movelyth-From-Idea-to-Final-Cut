@@ -5,7 +5,7 @@ import pytest
 
 from movelyth.agents import MockProvider
 from movelyth.ledger import Ledger
-from movelyth.models import Film
+from movelyth.models import SCHEMA_VERSION, Film
 from movelyth.pipeline import Studio, manifest_valid, normalize_brief
 from tests.conftest import make_studio
 from tests.factories import film, layer, research_payload, review_payload
@@ -126,7 +126,7 @@ def test_full_offline_pipeline_delivers_manifest_and_quality_report(offline_pipe
         assert quality["audio"]["long"]["asr"]["status"] == "disabled"
         assert quality["human_review"] == {"watched_full_video": False, "listened_audio": False}
         provenance = json.loads((destination / "制作溯源.json").read_text(encoding="utf-8"))
-        assert provenance["provider"] == "mock" and provenance["schema_version"] == 1
+        assert provenance["provider"] == "mock" and provenance["schema_version"] == SCHEMA_VERSION
         assert (destination / "字幕_B站_横版.srt").is_file()
         # Dry voice and mix travel with the package so the user can audition audio alone.
         for label in ("原声", "混音"):

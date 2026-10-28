@@ -182,8 +182,8 @@
           "type": "array"
         },
         "schema_version": {
-          "default": 1,
-          "maximum": 1,
+          "default": 2,
+          "maximum": 2,
           "minimum": 1,
           "title": "Schema Version",
           "type": "integer"
@@ -292,6 +292,75 @@
         "y"
       ],
       "title": "DiagramNode",
+      "type": "object"
+    },
+    "EventAnchor": {
+      "additionalProperties": false,
+      "description": "Where a semantic event sits: scene start/end, a fraction, or a phrase.\n\nRepeated phrases are disambiguated with ``occurrence`` (1-based) or an explicit\ncharacter range, so \"3\" in \"3 与 3 的平均\" never binds to the wrong one.",
+      "properties": {
+        "char_end": {
+          "anyOf": [
+            {
+              "maximum": 500,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Char End"
+        },
+        "char_start": {
+          "anyOf": [
+            {
+              "maximum": 500,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Char Start"
+        },
+        "fraction": {
+          "default": 0.0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fraction",
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "start",
+            "end",
+            "fraction",
+            "narration"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "occurrence": {
+          "default": 1,
+          "maximum": 9,
+          "minimum": 1,
+          "title": "Occurrence",
+          "type": "integer"
+        },
+        "text": {
+          "default": "",
+          "maxLength": 48,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "EventAnchor",
       "type": "object"
     },
     "Layer": {
@@ -435,6 +504,18 @@
           "title": "Source Note",
           "type": "string"
         },
+        "state_after": {
+          "default": "",
+          "maxLength": 40,
+          "title": "State After",
+          "type": "string"
+        },
+        "state_before": {
+          "default": "",
+          "maxLength": 40,
+          "title": "State Before",
+          "type": "string"
+        },
         "steps": {
           "items": {
             "type": "string"
@@ -442,6 +523,12 @@
           "maxItems": 6,
           "title": "Steps",
           "type": "array"
+        },
+        "subject_id": {
+          "default": "",
+          "maxLength": 24,
+          "title": "Subject Id",
+          "type": "string"
         },
         "text": {
           "default": "",
@@ -467,6 +554,12 @@
           "default": "",
           "maxLength": 8,
           "title": "Unit",
+          "type": "string"
+        },
+        "visual_explanation": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Visual Explanation",
           "type": "string"
         }
       },
@@ -514,6 +607,14 @@
           "title": "Chapter",
           "type": "string"
         },
+        "claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Claim Ids",
+          "type": "array"
+        },
         "color": {
           "enum": [
             "cyan",
@@ -540,6 +641,14 @@
           "title": "Emphasis",
           "type": "array"
         },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/SemanticEvent"
+          },
+          "maxItems": 8,
+          "title": "Events",
+          "type": "array"
+        },
         "heading": {
           "maxLength": 24,
           "minLength": 2,
@@ -550,6 +659,12 @@
           "default": "",
           "maxLength": 24,
           "title": "Hero",
+          "type": "string"
+        },
+        "hold_reason": {
+          "default": "",
+          "maxLength": 60,
+          "title": "Hold Reason",
           "type": "string"
         },
         "id": {
@@ -617,6 +732,13 @@
           "title": "Role",
           "type": "string"
         },
+        "schema_version": {
+          "default": 2,
+          "maximum": 2,
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
         "source_index": {
           "maximum": 5,
           "minimum": 0,
@@ -640,6 +762,12 @@
             "zoom"
           ],
           "title": "Transition",
+          "type": "string"
+        },
+        "transition_reason": {
+          "default": "",
+          "maxLength": 60,
+          "title": "Transition Reason",
           "type": "string"
         },
         "visual": {
@@ -673,6 +801,59 @@
         "source_index"
       ],
       "title": "Scene",
+      "type": "object"
+    },
+    "SemanticEvent": {
+      "additionalProperties": false,
+      "description": "A named moment in a scene that other stages can bind to.",
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/EventAnchor"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,23}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "reveal",
+            "transform",
+            "compare",
+            "conclude",
+            "emphasis",
+            "pause",
+            "transition"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "offset_seconds": {
+          "default": 0.0,
+          "maximum": 5,
+          "minimum": -5,
+          "title": "Offset Seconds",
+          "type": "number"
+        },
+        "purpose": {
+          "default": "",
+          "maxLength": 60,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "target": {
+          "default": "",
+          "maxLength": 24,
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "anchor"
+      ],
+      "title": "SemanticEvent",
       "type": "object"
     },
     "Series": {

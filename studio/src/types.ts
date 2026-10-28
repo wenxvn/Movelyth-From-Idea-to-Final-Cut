@@ -11,6 +11,35 @@ export type TransitionKind = 'cut' | 'fade' | 'slide' | 'wipe' | 'dip' | 'zoom';
 export type CameraKind = 'none' | 'push' | 'pull' | 'pan_left' | 'pan_right';
 export type CueKind = 'whoosh' | 'tick' | 'impact' | 'riser' | 'chime';
 export type SceneRole = 'hook' | 'mechanism' | 'example' | 'turn' | 'conclusion';
+export type EventKind = 'reveal' | 'transform' | 'compare' | 'conclude' | 'emphasis' | 'pause' | 'transition';
+
+/** A named moment other stages bind to; resolved from real TTS boundaries. */
+export type EventAnchor = {
+  kind: 'start' | 'end' | 'fraction' | 'narration';
+  fraction: number;
+  text: string;
+  occurrence: number;
+  char_start: number | null;
+  char_end: number | null;
+};
+export type SemanticEvent = {
+  id: string;
+  kind: EventKind;
+  anchor: EventAnchor;
+  offset_seconds: number;
+  purpose: string;
+  target: string;
+};
+export type ResolvedEvent = {
+  id: string;
+  kind: EventKind;
+  at: number;
+  fraction: number;
+  target: string;
+  purpose: string;
+  anchor: string;
+  timing: string;
+};
 
 export type Annotation = {x: number; text: string};
 
@@ -40,6 +69,11 @@ export type Layer = {
   connect: boolean;
   annotations: Annotation[];
   highlight: number[];
+  // v2 semantic identity: the subject survives across scenes, the layer id does not.
+  subject_id?: string;
+  state_before?: string;
+  state_after?: string;
+  visual_explanation?: string;
 };
 
 export type ResolvedAction = {
@@ -89,6 +123,12 @@ export type Scene = {
   takeaway?: string;
   metric?: string;
   hero?: string;
+  claim_ids?: string[];
+  hold_reason?: string;
+  transition_reason?: string;
+  events?: SemanticEvent[];
+  events_resolved?: ResolvedEvent[];
+  schema_version?: number;
 };
 
 export type MovieProps = {
