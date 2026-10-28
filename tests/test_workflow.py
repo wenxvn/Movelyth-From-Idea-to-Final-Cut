@@ -116,7 +116,9 @@ def test_delivery_hash_and_path_traversal(tmp_path):
     artifact = tmp_path / "video.mp4"
     artifact.write_bytes(b"test content")
     atomic_json(tmp_path / "manifest.json", {"status": "ready", "files": {artifact.name: file_hash(artifact)}})
-    assert manifest_valid(tmp_path)
+    # A matching file hash is necessary but no longer sufficient: a package also
+    # needs its composition list and a ready release decision (S1-03).
+    assert not manifest_valid(tmp_path)
     artifact.write_bytes(b"changed")
     assert not manifest_valid(tmp_path)
     atomic_json(tmp_path / "manifest.json", {"status": "ready", "files": {"../outside": "abc"}})

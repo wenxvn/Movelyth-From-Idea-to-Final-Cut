@@ -125,19 +125,150 @@ def browser() -> str | None:
     return next((p for p in candidates if Path(p).is_file()), None)
 
 
-def manifest_valid(directory: Path) -> bool:
+COMPOSITION_FILE = "组成清单.json"
+DECISION_FILE = "交付决定.json"
+
+
+def job_relative(path, job: Path) -> str | None:
+    """Path relative to the episode workspace, or ``None`` when it lives elsewhere."""
+    if not path:
+        return None
+    try:
+        resolved = Path(path).resolve()
+    except OSError:
+        return None
+    try:
+        return resolved.relative_to(job.resolve()).as_posix()
+    except ValueError:
+        return None
+
+
+def build_composition(*, episode, job: Path, timelines: dict, quality: dict,
+                      decision: dict, renderer: str, settings_hash: str,
+                      delivered: dict[str, str]) -> dict:
+    """The one list that says which inputs, audio, captions and video belong together.
+
+    ``delivered`` maps package file name → sha256.  Everything else is recorded as a
+    hash plus a job-relative path, so the package never stores a developer absolute
+    path and the decision can be re-verified after delivery.
+    """
+    cuts = {}
+    for cut, timeline in timelines.items():
+        voice, mix = timeline.get("voice"), timeline.get("mix")
+        cuts[cut] = {
+            "seconds": timeline["seconds"],
+            "frames": timeline["frames"],
+            "timeline_hash": fingerprint({"scenes": timeline["scenes"],
+                                          "seconds": timeline["seconds"],
+                                          "frames": timeline["frames"]}),
+            "captions_hash": fingerprint([scene.get("captions", []) for scene in timeline["scenes"]]),
+            "voice": {"hash": file_hash(Path(voice)), "path": job_relative(voice, job)},
+            "mix": {"hash": file_hash(Path(mix)), "path": job_relative(mix, job)},
+            "render_fingerprint": read_json(job / "render-result.json")[cut]["fingerprint"],
+        }
+    return {
+        "episode": f"VID-{episode['id']:06d}",
+        "revision": episode["revision"],
+        "creation_mode": quality.get("creation_mode"),
+        "provider": quality.get("provider"),
+        "policy_version": decision.get("policy_version"),
+        "schema_version": SCHEMA_VERSION,
+        "renderer": renderer,
+        "settings_hash": settings_hash,
+        "inputs": {
+            "research": file_hash(job / "research.json"),
+            "film": file_hash(job / "film.json"),
+            "quality": file_hash(job / "quality.json"),
+            "decision": file_hash(job / "release-decision.json"),
+        },
+        "cuts": cuts,
+        "delivered": dict(delivered),
+    }
+
+
+def manifest_report(directory: Path, *, job: Path | None = None) -> dict:
+    """Full validation of a delivered package: files, composition and decision.
+
+    ``manifest_valid`` used to mean "the listed files still hash the same".  That is
+    necessary but not sufficient: a package also has to belong to *this* revision,
+    carry a ready release decision and have its audio/captions in the composition.
+    When ``job`` is given, the workspace audio is compared too, so a regenerated mix
+    cannot keep an older delivery marked ready.
+    """
+    reasons: list[str] = []
+    unverified: list[str] = []
+    root = directory.resolve()
     try:
         data = read_json(directory / "manifest.json")
-        entries = data["files"]
-        if not entries or data.get("status") != "ready":
-            return False
-        for name, digest in entries.items():
-            target = (directory / name).resolve()
-            if not target.is_relative_to(directory.resolve()) or not target.is_file() or file_hash(target) != digest:
-                return False
-        return True
-    except (OSError, KeyError, ValueError):
-        return False
+    except (OSError, ValueError):
+        return {"valid": False, "reasons": ["缺少或无法解析 manifest.json"], "unverified": []}
+    if data.get("status") != "ready":
+        reasons.append(f"manifest 状态为 {data.get('status')!r}")
+    entries = data.get("files") or {}
+    if not entries:
+        reasons.append("manifest 未登记任何文件")
+    for name, digest in entries.items():
+        target = (directory / name).resolve()
+        if not target.is_relative_to(root) or not target.is_file():
+            reasons.append(f"缺少文件 {name}")
+        elif file_hash(target) != digest:
+            reasons.append(f"文件已改动 {name}")
+    composition = {}
+    try:
+        composition = read_json(directory / COMPOSITION_FILE)
+    except (OSError, ValueError):
+        reasons.append(f"缺少或无法解析 {COMPOSITION_FILE}")
+    else:
+        if not data.get("composition_hash"):
+            reasons.append("manifest 未登记组成指纹")
+        elif fingerprint(composition) != data["composition_hash"]:
+            reasons.append("组成清单与 manifest 登记的指纹不一致")
+        for name, digest in (composition.get("delivered") or {}).items():
+            target = directory / name
+            if not target.is_file():
+                reasons.append(f"组成清单登记的文件缺失 {name}")
+            elif file_hash(target) != digest:
+                reasons.append(f"组成清单登记的文件已改动 {name}")
+        if composition.get("episode") and composition["episode"] != data.get("id"):
+            reasons.append("组成清单的编号与 manifest 不一致")
+        if composition.get("revision") != data.get("revision"):
+            reasons.append("组成清单的版本与 manifest 不一致")
+    decision = {}
+    try:
+        decision = read_json(directory / DECISION_FILE)
+    except (OSError, ValueError):
+        reasons.append(f"缺少或无法解析 {DECISION_FILE}")
+    else:
+        if decision.get("decision") != "ready":
+            reasons.append(f"交付决定为 {decision.get('decision')!r}，不是 ready")
+        if decision.get("policy_version") != POLICY_VERSION:
+            reasons.append("交付决定使用的策略版本与当前实现不同")
+        inputs = decision.get("inputs") or {}
+        if inputs.get("episode") and inputs["episode"] != data.get("id"):
+            reasons.append("交付决定属于其他任务")
+        if inputs.get("revision") is not None and inputs["revision"] != data.get("revision"):
+            reasons.append("交付决定属于其他 revision")
+        if composition.get("inputs", {}).get("decision") and entries.get(DECISION_FILE):
+            if file_hash(directory / DECISION_FILE) != composition["inputs"]["decision"]:
+                reasons.append("交付决定与组成清单登记的版本不一致")
+    if job is not None and composition:
+        for cut, info in (composition.get("cuts") or {}).items():
+            for key in ("voice", "mix"):
+                entry = info.get(key) or {}
+                relative = entry.get("path")
+                if not relative:
+                    unverified.append(f"{cut}.{key} 没有工作区路径")
+                    continue
+                target = job / relative
+                if not target.is_file():
+                    unverified.append(f"{cut}.{key} 的工作区文件已不在，无法复核")
+                elif file_hash(target) != entry.get("hash"):
+                    reasons.append(f"{cut}.{key} 在交付后被重新生成（工作区文件已变化）")
+    return {"valid": not reasons, "reasons": reasons, "unverified": unverified}
+
+
+def manifest_valid(directory: Path, *, job: Path | None = None) -> bool:
+    return manifest_report(directory, job=job)["valid"]
 
 
 RENDERER_CAPABILITIES = {
@@ -262,10 +393,15 @@ class Studio:
                 reuse_script: bool = False) -> dict:
         episode = self.ledger.get(episode_id)
         if episode["status"] == "ready" and not preview_only and not target_scenes:
-            if episode["delivery"] and manifest_valid(Path(episode["delivery"])):
+            job = self.workspace / f"VID-{episode_id:06d}"
+            report = (manifest_report(Path(episode["delivery"]), job=job)
+                      if episode["delivery"] else {"valid": False, "reasons": ["没有交付目录"]})
+            if report["valid"]:
                 self.export_index()
-                return {"id": episode_id, "status": "ready", "delivery": episode["delivery"], "reused": True}
-            raise RuntimeError("已交付文件缺失或发生变化，未覆盖它；请检查目录或用 --new 创建新任务")
+                return {"id": episode_id, "status": "ready", "delivery": episode["delivery"],
+                        "reused": True, "unverified": report["unverified"]}
+            raise RuntimeError("已交付文件缺失或发生变化，未覆盖它；请检查目录或用 --new 创建新任务。原因："
+                               + "；".join(report["reasons"]))
         if import_film and not import_research:
             raise ValueError("导入脚本时同时需要 --import-research，不能省略来源")
         job = self.workspace / f"VID-{episode_id:06d}"
@@ -898,6 +1034,10 @@ class Studio:
                 raise RuntimeError(f"交付目标已存在且未通过校验，保留原文件：{destination}")
         else:
             staging = self.delivery / ".staging" / name / f"r{episode['revision']:03d}"
+            # An interrupted earlier attempt must not be finished off by copying new
+            # files over old ones: leftovers would enter the manifest as if checked.
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
             staging.mkdir(parents=True, exist_ok=True)
             code = f"VID-{episode['id']:06d}"
             for cut, platform in [("long", "B站_横版"), ("short", "抖音_竖版")]:
@@ -948,14 +1088,28 @@ class Studio:
                          "library_assets": {asset_id: file_hash(resolve_library(self.workspace, asset_id))
                                             for asset_id in library_ids},
                          "script_hash": file_hash(job / "film.json"), "research_hash": file_hash(job / "research.json")})
+            # Bind every input, audio stem, caption track and rendered video to this
+            # revision, and copy the decision that authorised the delivery.
+            shutil.copy2(job / "release-decision.json", staging / DECISION_FILE)
+            delivered = {path.name: file_hash(path) for path in sorted(staging.iterdir()) if path.is_file()}
+            composition = build_composition(
+                episode=episode, job=job, timelines=timelines, quality=quality,
+                decision=read_json(job / "release-decision.json"),
+                renderer=read_json(job / "render-spec.json")["version"],
+                settings_hash=fingerprint(self.config), delivered=delivered)
+            atomic_json(staging / COMPOSITION_FILE, composition)
             files = {p.name: file_hash(p) for p in staging.iterdir() if p.is_file() and p.name != "manifest.json"}
             atomic_json(staging / "manifest.json", {"id": code, "title": episode["title"],
                          "revision": episode["revision"], "status": "ready", "published": False,
                          "created_at": now(), "files": files, "version": __version__,
                          "schema_version": SCHEMA_VERSION,
+                         "composition_hash": fingerprint(composition),
+                         "decision": {"value": composition["policy_version"],
+                                      "policy_version": composition["policy_version"]},
                          "durations": {k: v["seconds"] for k, v in timelines.items()}})
-            if not manifest_valid(staging):
-                raise RuntimeError("交付暂存目录 hash 检查未通过")
+            report = manifest_report(staging, job=job)
+            if not report["valid"]:
+                raise RuntimeError("交付暂存目录校验未通过：" + "；".join(report["reasons"]))
             destination.parent.mkdir(parents=True, exist_ok=True)
             staging.rename(destination)
         self.ledger.status(episode["id"], "ready", delivery=str(destination))

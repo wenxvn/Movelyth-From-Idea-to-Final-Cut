@@ -59,3 +59,13 @@ def test_title_candidates_are_bounded():
     payload["long"]["title_candidates"] = [f"候选{i}" for i in range(5)]
     with pytest.raises(ValidationError):
         Film.model_validate(payload)
+
+def test_publishing_copy_carries_a_disclosure_draft_but_keeps_the_declaration_manual():
+    from movelyth.publish import ai_disclosure
+
+    movie, research = models()
+    text = publishing_copy(movie, research)
+    assert "## AI 说明（复制到平台的 AI 声明）" in text
+    assert "AI 语音合成" in text
+    assert "仍需你本人勾选确认" in text
+    assert "不代表已经完成声明" in ai_disclosure()

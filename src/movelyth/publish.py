@@ -22,6 +22,21 @@ def credits(research: Research, *, external_media: bool = False) -> str:
         "\n制作：Movelyth — 幕绎 / Remotion。来源链接不代表取得第三方素材转载许可。\n")
 
 
+AI_DISCLOSURE = (
+    "本片为 AI 辅助制作：脚本与分镜由语言模型生成并经独立审片检查，旁白为 AI 语音合成（Edge TTS），"
+    "配乐与音效为程序合成，画面为程序动画与受控图表。"
+)
+
+def ai_disclosure() -> str:
+    """Ready-to-paste platform disclosure text.
+
+    Platforms require the uploader to tick their own AI-declaration box; this text
+    is a draft for that box, never a claim that the declaration was completed.
+    """
+    return (AI_DISCLOSURE + "\n上传时的平台 AI 声明仍需你本人勾选确认；"
+            "本文件不代替平台声明，也不代表已经完成声明。")
+
+
 def publishing_copy(film: Film, research: Research, *, external_media: bool = False) -> str:
     """Per-platform section with the chosen title, candidates, description and tags."""
     blocks = []
@@ -38,6 +53,7 @@ def publishing_copy(film: Film, research: Research, *, external_media: bool = Fa
         block.extend([f"**简介**：{cut.description}", "",
                       "**标签**：" + " ".join("#" + tag.lstrip("#") for tag in cut.tags), ""])
         blocks.append("\n".join(block))
+    blocks.append("## AI 说明（复制到平台的 AI 声明）\n\n" + ai_disclosure() + "\n")
     return "\n".join(blocks) + "\n## 来源与署名\n" + credits(research, external_media=external_media)
 
 

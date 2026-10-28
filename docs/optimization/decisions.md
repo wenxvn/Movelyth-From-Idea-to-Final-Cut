@@ -58,3 +58,21 @@
   | 布局软警告 / 比例估计字幕时间 | minor | 否 |
 - 否：单一总分/加权分数。总分会让一个 critical 缺陷被十个 pass 抵消。
 - 证据：`tests/test_release_policy.py`、`tests/test_release_gate.py`（含 M01 注入）。
+
+## D5 · 交付包由组成清单与决定共同授权（S1-03）
+
+- 问题：旧 `manifest_valid()` 只校验“列出的文件 hash 未变”。只要文件没动，旧 revision 的审查、
+  缺人声的混音、或换了声音却没进最终视频的包都可能继续算 ready。
+- 选择：
+  1. 交付时生成 `组成清单.json`：episode/revision/creation_mode/policy/schema/renderer/settings_hash、
+     研究/脚本/质检/决定 hash、每 cut 的时长/帧数/时间轴 hash/字幕 hash/人声/mix/render 指纹、
+     以及包内每个文件名的 hash（`delivered`）。
+  2. `manifest.json` 记录 `composition_hash = fingerprint(组成清单)`。
+  3. `交付决定.json` 随包交付；校验时要求 `decision == ready`、策略版本一致、决定输入里的
+     episode/revision 与本包一致、决定文件 hash 与组成清单登记的一致。
+  4. 给 `job` 时额外比对工作区 `audio/<cut>/narration.wav|mix.wav`：交付后重新生成过音频即判失效
+     （文件已不在则记为 `unverified`，不误判失效）。
+  5. 暂存目录先删除再重建，完成后原子 `rename`；不留下“看起来完整”的半包。
+- 否：把组成信息只写进 `制作溯源.json`（那是给人看的说明，不是可校验契约）；把绝对路径写进包
+  （换机器即失效，且泄露开发路径）。
+- 证据：`tests/test_composition.py`（6 项，含 M12 注入）、`tests/test_workflow.py`。

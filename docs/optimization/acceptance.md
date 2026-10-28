@@ -36,3 +36,19 @@
 | 旧配置兼容 | `downgrade_axis_readings=true/false` | 分别等价 `deterministic/strict`；非法值报错 | V1 |
 
 **未验证**：真实视觉模型的 finding 分布（本机无模型端点）；因此“降级率”与“误降级率”暂无实测数字。
+
+## A3 · S1-03 组成表与 revision 交付完整性（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 238 passed | V1 |
+| 组成清单 | 离线 pipeline 交付 | `组成清单.json` 含 episode/revision/creation_mode/policy/schema/renderer/settings_hash、研究/脚本/质检/决定 hash、每 cut 的 seconds/frames/timeline_hash/captions_hash/voice/mix/render_fingerprint | V1 |
+| 路径卫生 | 读取 `组成清单.json` 原文 | 不含工作区绝对路径与反斜杠（voice/mix 为 `audio/<cut>/*.wav` 相对路径） | V1 |
+| M12 篡改视频 | 改写 `*_横版.mp4` | `manifest_report` 报“文件已改动”；`produce` 抛“已交付文件缺失或发生变化”；用户文件未被覆盖 | V1 |
+| 旧 revision 决定 | 把 `交付决定.json` 的 `inputs.revision` 改成下一版 | 拒绝，原因含“其他 revision” | V1 |
+| 缺少决定 | 删除 `交付决定.json` | 拒绝，原因含“交付决定” | V1 |
+| 音频重生成 | 改写 `audio/long/mix.wav` | 拒绝，原因含“交付后被重新生成”（新声音未进入最终视频） | V1 |
+| 中断暂存 | 预置 `.staging/…/r001/遗留文件.txt` 再交付 | 暂存被清空重建；交付包不含遗留文件；`manifest.files` 不含它；暂存目录完成后不存在 | V1 |
+| 平台 AI 说明 | `发布文案.md` | 含 AI 说明草稿与“仍需你本人勾选确认”，不声称已完成平台声明 | V1 |
+
+**未验证**：真实编码后视频/音轨与组成清单的一致性（离线 pipeline 使用桩），在 S2-09 与 S3-02 补真实媒体证据。
