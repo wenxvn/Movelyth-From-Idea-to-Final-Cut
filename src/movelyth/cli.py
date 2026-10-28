@@ -218,6 +218,15 @@ def main(argv=None) -> int:
     asset_add.add_argument("--author", required=True)
     asset_add.add_argument("--license", required=True, help="授权依据，例如 自有素材 / CC BY 4.0")
     asset_add.add_argument("--scope", default="本片使用")
+    # Shot-matching metadata: without it a picture can only be found by file name.
+    asset_add.add_argument("--subject", default="", help="画面主体，例如“服务器机柜”")
+    asset_add.add_argument("--action", default="", help="画面动作，例如“插拔网线”")
+    asset_add.add_argument("--setting", default="", help="情境/时代，例如“机房 2010 年代”")
+    asset_add.add_argument("--tags", default="", help="逗号分隔的检索标签")
+    asset_add.add_argument("--focus", default="", help="焦点坐标 0–1，例如 0.5,0.4")
+    asset_add.add_argument("--subject-box", default="", help="主体框 0–1：x,y,w,h")
+    asset_add.add_argument("--authenticity", choices=["evidence", "atmosphere", "illustration"],
+                           default="illustration", help="evidence=真实证据；atmosphere=氛围；illustration=示意")
     sub.add_parser("asset-check", help="重新校验素材库（hash/授权/有效性）并标记失效项")
     sub.add_parser("schema", help="输出 Scene DSL v1 的 JSON Schema")
     sub.add_parser("components", help="输出可视化组件元数据（用途/必需字段/限制/横竖适配）")
@@ -311,8 +320,23 @@ def main(argv=None) -> int:
         elif args.command == "asset-add":
             from .assets import register
 
+            def numbers(text, count):
+                if not text:
+                    return None
+                parts = [float(part) for part in text.replace("，", ",").split(",")]
+                if len(parts) != count or any(not 0 <= value <= 1 for value in parts):
+                    raise SystemExit(f"需要 {count} 个 0–1 之间的数，收到：{text}")
+                return parts
+
+            focus = numbers(args.focus, 2)
+            box = numbers(args.subject_box, 4)
             entry = register(studio.workspace, args.file, asset_id=args.id, source=args.source,
-                             author=args.author, license=args.license, scope=args.scope)
+                             author=args.author, license=args.license, scope=args.scope,
+                             subject=args.subject, action=args.action, setting=args.setting,
+                             tags=[tag.strip() for tag in args.tags.replace("，", ",").split(",") if tag.strip()],
+                             focus=tuple(focus) if focus else None,
+                             subject_box=dict(zip("xywh", box, strict=True)) if box else None,
+                             authenticity=args.authenticity)
             emit({"registered": args.id, **entry,
                   "note": "已复制到 workspace/assets/files；脚本中用 image 图层 data_ref 引用该 id"})
         elif args.command == "asset-check":

@@ -322,6 +322,50 @@ def manifest_report(directory: Path, *, job: Path | None = None) -> dict:
     return {"valid": not reasons, "reasons": reasons, "unverified": unverified}
 
 
+def apply_asset_crops(scenes: list[dict], workspace: Path, *, orientation: str, job: Path) -> list[dict]:
+    """Attach the computed crop for every library image, and record the decision.
+
+    The crop keeps the asset's declared focus point and subject box; an asset whose
+    subject would be cut is left uncropped and recorded as a rejected decision, so the
+    picture is never silently decapitated.
+    """
+    from .assetplan import AssetRequest, choose, plan_crop, record_decision
+    from .assets import AssetError, load_library, resolve
+
+    library = load_library(workspace)["assets"]
+    for scene in scenes:
+        for layer in scene.get("layers") or []:
+            if layer.get("type") != "image":
+                continue
+            asset_id = str(layer.get("data_ref") or "")
+            entry = library.get(asset_id)
+            if not entry:
+                continue
+            request = AssetRequest(subject=str(entry.get("subject") or asset_id),
+                                   action=str(entry.get("action") or ""),
+                                   setting=str(entry.get("setting") or ""),
+                                   license_required=True,
+                                   authenticity=str(entry.get("authenticity") or "illustration"))
+            decision = choose(workspace, request, orientation=orientation)
+            try:
+                path = resolve(workspace, asset_id)
+            except AssetError as exc:
+                record_decision(job, {"scene": scene.get("id"), "asset": asset_id,
+                                      "orientation": orientation, "error": str(exc)})
+                continue
+            crop = plan_crop(path, orientation, focus=tuple(entry.get("focus") or (0.5, 0.5)),
+                             subject_box=entry.get("subject_box"))
+            if crop.get("ok") and crop.get("crop"):
+                layer["crop"] = crop["crop"]
+                layer["crop_source"] = crop["source"]
+            record_decision(job, {"scene": scene.get("id"), "asset": asset_id,
+                                  "orientation": orientation, "chosen": decision.get("chosen"),
+                                  "crop": crop, "reasons": decision.get("reasons")
+                                  or ([decision["reason"]] if decision.get("reason") else []),
+                                  "rejected": decision.get("rejected", [])[:6]})
+    return scenes
+
+
 def probe_media(path) -> dict | None:
     """Duration, audio and stream shape of a real file; ``None`` when unreadable."""
     from .media import ffprobe
@@ -984,6 +1028,9 @@ class Studio:
         def cut_props(name, composition):
             scenes = resolve_data_layers(copy.deepcopy(timelines[name]["scenes"]),
                                          job / "data", assets["layers"])
+            scenes = apply_asset_crops(scenes, self.workspace,
+                                       orientation="portrait" if name == "short" else "landscape",
+                                       job=job)
             return {"title": film[name]["title"], "episode": f"VID-{episode['id']:06d}",
                     "fps": config["fps"], "scenes": scenes,
                     "sources": research_data["sources"], "layers": assets["layers"], "cover": False,

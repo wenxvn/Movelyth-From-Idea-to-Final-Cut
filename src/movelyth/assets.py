@@ -60,7 +60,9 @@ def verify_entry(workspace: Path, asset_id: str, entry: dict) -> Path:
 
 
 def register(workspace: Path, source_file: Path, *, asset_id: str, source: str, author: str,
-             license: str, scope: str = "本片使用") -> dict:
+             license: str, scope: str = "本片使用", subject: str = "", action: str = "",
+             setting: str = "", tags: list[str] | None = None, focus: tuple[float, float] | None = None,
+             subject_box: dict | None = None, authenticity: str = "illustration") -> dict:
     """Copy a user-confirmed file into the controlled library and record provenance."""
     if not asset_id or not asset_id.replace("_", "").isalnum() or not asset_id[0].isalpha():
         raise AssetError("素材 id 只能是小写字母开头、字母/数字/下划线")
@@ -86,7 +88,17 @@ def register(workspace: Path, source_file: Path, *, asset_id: str, source: str, 
     shutil.copy2(source_file, target)
     entry = {"file": target.name, "sha256": file_hash(target), "source": source, "author": author,
              "license": license, "scope": scope, "added_at": now(),
-             "bytes": target.stat().st_size, "valid": True, "used_by_episodes": []}
+             "bytes": target.stat().st_size, "valid": True, "used_by_episodes": [],
+             # Optional shot-matching metadata: without it a picture can only be found
+             # by file name, and a keyword hit cannot be checked against the sentence.
+             "subject": str(subject or "").strip(), "action": str(action or "").strip(),
+             "setting": str(setting or "").strip(), "tags": [str(tag) for tag in (tags or [])][:8],
+             "authenticity": authenticity if authenticity in {"evidence", "atmosphere", "illustration"}
+             else "illustration"}
+    if focus:
+        entry["focus"] = [float(focus[0]), float(focus[1])]
+    if subject_box:
+        entry["subject_box"] = {key: float(subject_box[key]) for key in ("x", "y", "w", "h")}
     data["assets"][asset_id] = entry
     atomic_json(root / LIBRARY, data)
     return entry

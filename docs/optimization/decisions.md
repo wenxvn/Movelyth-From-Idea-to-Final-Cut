@@ -241,3 +241,20 @@
   5. 编码后再核对：时长、fps、音轨、声道、接点黑帧（`verify_assembly`）。
 - 否：逐镜渲染成独立 mp4 再拼接（会引入二次编码与接点丢帧，且当前 Remotion 单次渲染已稳定）。
 - 证据：`tests/test_cache_assembly.py`（15 项，含真实编码探针）。
+
+## D16 · 素材按“镜头需求”匹配，裁切由程序验证（S3-03）
+
+- 问题：旧素材库只能按 id 引用，`assets.py` 没有任何检索/匹配/裁切；一张图是否“对”完全靠人工。
+- 选择：
+  1. `AssetRequest` 描述镜头需求：主体、动作、情境、构图、时长、画幅、真实性（evidence/atmosphere/
+     illustration）、授权要求、禁止含义。
+  2. 素材登记增加可选元数据（subject/action/setting/tags/focus/subject_box/authenticity）；
+     没有元数据的素材仍可显式引用，但不能参与匹配。
+  3. `candidates()` 打分并给出理由；`rejected()` 处理硬拒绝（失效、授权缺失、禁止含义、证据要求）。
+  4. `choose()` 只接受 score ≥ 2 的候选：授权干净但无关的图**不当作替代素材**，宁可返回“没有可用素材”。
+  5. `plan_crop()` 按目标画幅计算裁切矩形，必须包含主体框；只有真正的裁切才会因“主体太小”被拒
+     （源图本身就是全画幅时不拒绝）。SVG 不猜尺寸，按 contain。
+  6. 管线在 `cut_props` 阶段把裁切写进 image 图层（`crop`/`crop_source`），渲染端据此 `object-fit: cover`
+     + `object-position`；决策写入 `asset-decisions.json`。
+- 否：联网抓图（E 部分未接入，需预算/许可/边界）；用关键词命中直接当匹配（同词不同义会把示意图当证据）。
+- 证据：`tests/test_asset_plan.py`（15 项，含真实 PNG 裁切与竖版拒绝）。

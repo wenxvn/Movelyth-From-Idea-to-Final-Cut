@@ -80,6 +80,8 @@ export type Layer = {
   highlight: number[];
   // v2 semantic identity: the subject survives across scenes, the layer id does not.
   subject_id?: string;
+  crop?: number[];
+  crop_source?: number[];
   state_before?: string;
   state_after?: string;
   visual_explanation?: string;

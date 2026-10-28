@@ -73,7 +73,7 @@
 | --- | --- | --- | --- |
 | S3-01 按缺陷类型最小修复 | C | verified（V1；真实模型修复未跑） | S1-02, S1-06, S1-07, S2-09 | A12；`repair.py`、`_repair_plans`/`_invalidate_stages`、`tests/test_repair_routing.py`、D14 |
 | S3-02 单镜缓存/转场把手/组装 | C | verified（V1 + V2 真实编码探针；未做逐镜分段渲染） | S1-03, S1-06, S1-07, S3-01 | A13；`cache.py`、`scene-keys.json`/`scene-changes.json`、`tests/test_cache_assembly.py`、D15 |
-| S3-03 资产需求/匹配/授权/裁切 | C（联网 E） | todo | S1-04/05, S2-01/04, S1-07 |
+| S3-03 资产需求/匹配/授权/裁切 | C（本地已实现；联网供应商未接入） | verified（V1 + 真实图片裁切；联网来源 E 未启用） | S1-04/05, S2-01/04, S1-07 | A14；`assetplan.py`、`assets.register` 元数据、`apply_asset_crops`、`tests/test_asset_plan.py`、D16 |
 | S3-04 代码/数据结构/公式模板 | E | todo | S1-05/06, S2-04/07/10 |
 | S3-05 素材视频/证据面板 | E | todo | S1-04/05, S2-01/04, S3-03 |
 | S3-06 PDF 可定位证据 | E | todo | S1-04, S1-07 |

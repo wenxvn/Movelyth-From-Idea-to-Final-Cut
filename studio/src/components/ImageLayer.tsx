@@ -12,9 +12,33 @@ export const resolveAsset = (layer: Layer, layers: string[]): string | undefined
 };
 
 /**
- * The image always fits inside its region box: `objectFit: contain` plus a
- * max-height keeps a wide photo from overflowing into the caption band.
+ * The image always fits inside its region box.  When Python computed a crop for the
+ * target aspect (`layer.crop`), the image is drawn with that crop instead of `contain`:
+ * the crop was verified to keep the subject, so it fills the frame without guessing.
  */
+const cropStyle = (layer: Layer): React.CSSProperties => {
+  const crop = layer.crop;
+  if (!crop || crop.length !== 4 || !crop[2] || !crop[3]) {
+    return {width: '100%', height: '100%', objectFit: 'contain'};
+  }
+  const [left, top, width, height] = crop;
+  return {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    // Scale the source so the crop rectangle fills the box, then shift it into place.
+    objectFit: 'cover',
+    objectPosition: `${((left + width / 2) / Math.max(1, cropSource(layer)[0])) * 100}% ` +
+      `${((top + height / 2) / Math.max(1, cropSource(layer)[1])) * 100}%`,
+  };
+};
+
+const cropSource = (layer: Layer): [number, number] => {
+  const source = layer.crop_source;
+  if (!source || source.length < 2) return [1, 1];
+  return [source[0], source[1]];
+};
+
 export const ImageLayer: React.FC<{layer: Layer; theme: Theme; layers: string[]; reveal: number}> =
 ({layer, theme, layers, reveal}) => {
   const name = resolveAsset(layer, layers);
@@ -29,7 +53,7 @@ export const ImageLayer: React.FC<{layer: Layer; theme: Theme; layers: string[];
     <div style={{position: 'relative', width: '100%', height: '100%', maxHeight: '100%',
       borderRadius: theme.radius, overflow: 'hidden', border: `2px solid ${color}66`,
       boxShadow: `0 18px 60px ${color}16`, background: theme.surface}}>
-      <Img src={staticFile(name)} style={{width: '100%', height: '100%', objectFit: 'contain'}}/>
+      <Img src={staticFile(name)} style={cropStyle(layer)}/>
       {layer.text && <div style={{position: 'absolute', bottom: 10, left: 12, color: '#fff4dd', fontSize: 20,
         background: '#07141cce', padding: '8px 14px', borderRadius: 8}}>{layer.text}</div>}
     </div>
