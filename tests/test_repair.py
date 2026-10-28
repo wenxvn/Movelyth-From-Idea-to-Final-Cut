@@ -1,14 +1,7 @@
-import shutil
-from pathlib import Path
-
 import pytest
 
-from movelyth.pipeline import Studio, VisualReviewError
-
-
-def make_studio(tmp_path):
-    shutil.copy2(Path(__file__).parents[1] / "movelyth.toml", tmp_path / "movelyth.toml")
-    return Studio(tmp_path)
+from movelyth.pipeline import VisualReviewError
+from tests.conftest import make_studio
 
 
 def test_visual_feedback_retries_are_bounded_and_release_lock(tmp_path, monkeypatch):

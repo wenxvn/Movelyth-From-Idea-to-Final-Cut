@@ -66,10 +66,6 @@ def implemented() -> dict[str, dict]:
     return {name: spec for name, spec in RECIPES.items()}
 
 
-def recipe_ids() -> list[str]:
-    return sorted(RECIPES)
-
-
 class _LayerView:
     """Read a layer from a Pydantic model or a plain dict with the same field names."""
 

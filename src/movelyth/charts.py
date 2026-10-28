@@ -60,18 +60,6 @@ def tick_labels(values: Iterable[float], target: int = 4) -> list[str]:
     return [format_tick(value, domain["step"]) for value in domain_ticks(domain)]
 
 
-def layer_values(layer) -> list[float]:
-    """Every y value a chart layer draws (annotations excluded: they snap to samples)."""
-    values: list[float] = []
-    for series in getattr(layer, "series", []) or []:
-        values.extend(float(value) for value in series.values)
-    return values
-
-
-def layer_tick_labels(layer) -> list[str]:
-    return tick_labels(layer_values(layer))
-
-
 def scene_tick_labels(scenes: Iterable[dict]) -> dict[str, list[str]]:
     """Computed y-axis labels per scene id, for scenes that contain chart layers."""
     labels: dict[str, list[str]] = {}

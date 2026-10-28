@@ -2,7 +2,6 @@
 
 import copy
 import csv
-import json
 import os
 import re
 import shutil
@@ -32,7 +31,7 @@ from .captions_qc import srt_matches_cues
 from .craft import composition_report, narrative_report, rhythm_report, sound_design_report
 from .fonts import availability as font_availability
 from .ledger import Ledger
-from .media import ffmpeg, image_layers, prepare_cut
+from .media import ffmpeg, image_layers, prepare_cut, probe_media
 from .metrics import Metrics
 from .models import SCHEMA_VERSION, Cut, Film, Finding, Research, Review, TopicPlan
 from .parameters import catalog as parameters_catalog
@@ -369,28 +368,6 @@ def apply_asset_crops(scenes: list[dict], workspace: Path, *, orientation: str, 
                                   or ([decision["reason"]] if decision.get("reason") else []),
                                   "rejected": decision.get("rejected", [])[:6]})
     return scenes
-
-
-def probe_media(path) -> dict | None:
-    """Duration, audio and stream shape of a real file; ``None`` when unreadable."""
-    from .media import ffprobe
-
-    try:
-        data = json.loads(run([ffprobe(), "-v", "error", "-show_streams", "-show_format",
-                               "-of", "json", str(path)], timeout=60).stdout)
-    except (OSError, RuntimeError, ValueError):
-        return None
-    streams = data.get("streams") or []
-    video = next((stream for stream in streams if stream.get("codec_type") == "video"), {})
-    audio = next((stream for stream in streams if stream.get("codec_type") == "audio"), {})
-    numerator, denominator = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/"))
-    return {"duration": float((data.get("format") or {}).get("duration") or 0),
-            "has_audio": bool(audio),
-            "width": video.get("width"),
-            "height": video.get("height"),
-            "fps": (numerator / denominator) if denominator else None,
-            "codec": video.get("codec_name"),
-            "channels": audio.get("channels")}
 
 
 def manifest_valid(directory: Path, *, job: Path | None = None) -> bool:

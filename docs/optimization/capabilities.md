@@ -31,11 +31,11 @@
 | 内容绑定相机（overview → focus → overview，横竖分别求解） | `camera.py`、`motion.cameraFromPlan` | A10 |
 | 受控参数函数（迭代/线性变换/投影），数字与几何同源 | `parameters.py` | A11 |
 | 缺陷路由的最小修复（9 类缺陷，各自失效范围与轮次） | `repair.py` | A12 |
-| 场景缓存键（含邻镜）、失效闭包、组装与编码核对 | `cache.py` | A13 |
+| 场景缓存键（含邻镜）、失效闭包、组装与编码核对（ffprobe 解析统一在 `media.probe_media`） | `cache.py`、`media.py` | A13 |
 | 素材请求/匹配/授权/裁切（本地库） | `assetplan.py` | A14 |
 | 语音设置、读法单位、独立内容核对（符号/量级不可折叠） | `speech.py`、`audioqc.content_check` | A15 |
-| 真实字体度量、缺字检测、字幕/SRT 同源、字幕带冲突 | `fonts.py`、`captions_qc.py` | A16 |
-| 可审计分轨、事件落点、尾音、抽吸、分轨平衡 | `mix.py` | A17 |
+| 真实字体度量、缺字检测、字幕/SRT 同源、字幕带冲突（字幕阈值只在 `captions_qc` 定义） | `fonts.py`、`captions_qc.py` | A16 |
+| 可审计分轨、事件落点、尾音、抽吸、分轨平衡（人声缺失在人声轨上判） | `mix.py`、`sound.soundtrack_stems` | A17 |
 | 同拓扑几何形变、共享对象连续性 | `continuity.py` | A18 |
 | 确定性手绘圈注（seed 决定几何，两次渲染逐字节一致） | `sketch.py`、`SketchOverlay.tsx` | A19 |
 | 故障矩阵 M01–M20 | `tests/test_fault_matrix.py` | A20 |

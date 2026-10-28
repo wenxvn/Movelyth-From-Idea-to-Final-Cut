@@ -1,5 +1,7 @@
 # V1 跨题材验收
 
+> **历史记录（V1 跨题材验收，2026-10-26）**：本文件记录当时的条件、结果与未完成项。当前状态与能力边界见 [optimization/execution.md](optimization/execution.md) 与 [optimization/capabilities.md](optimization/capabilities.md)，最新验证数字见 [verification.md](verification.md)。
+
 日期：2026-10-26。评估对象：`main` 上的 V1 实现。
 
 ## 0. 结论

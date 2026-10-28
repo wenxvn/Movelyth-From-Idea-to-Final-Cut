@@ -1,5 +1,7 @@
 # V1 执行记录
 
+> **历史记录（V1 执行，2026-10-26）**：本文件记录当时的条件、结果与未完成项。当前状态与能力边界见 [optimization/execution.md](optimization/execution.md) 与 [optimization/capabilities.md](optimization/capabilities.md)，最新验证数字见 [verification.md](verification.md)。
+
 按《Movelyth V1 规划与执行提纲》执行。**验证类型严格区分**：mock / 单元 / 静帧 / 片段 /
 真实长短版 / 人工完整观看。命令与结果的完整证据在 [验证记录](verification.md)，
 跨题材结论在 [V1 验收](v1-evaluation.md)，最终状态在 [V1 报告](v1-report.md)。

@@ -166,7 +166,7 @@ model = "deepseek-flash"
 `resume <id> --reuse-script`：它会复用已通过审片的 `film.json`（仍按当前契约重新校验），
 并在事件记录里写 `approved-script-reused`。每个阶段的耗时与缓存命中写入 `workspace/metrics.csv`。
 
-## 画面能力（Scene DSL v1）
+## 画面能力（Scene DSL v2）
 
 一个镜头可以由多个图层组合：`text`、`math`、`shape`、`chart`（折线/柱状/散点，真实数值或本地
 JSON 数据）、`diagram`（任意节点/连线/步骤）、`image`（仅受控本地素材）、`procedural`（原有七类
@@ -178,7 +178,7 @@ V3 在这之上加了三类**有默认值**的导演字段：`chapter`/`role`/`t
 （图表数据注释，自动吸附到真实样本）与 `highlight`（强调区间）。渲染器据此生成 Insight 卡、
 数据注释与 coverage beat；没有这些字段时退回从真实数据推导。
 
-细节与兼容规则见 [Scene DSL v1](docs/scene-dsl.md)。旧任务（只有 `visual`）仍按原样渲染。
+细节与兼容规则见 [Scene DSL](docs/scene-dsl.md)。旧任务（只有 `visual`，或 `schema_version = 1`）仍按原样渲染。
 
 ## 交付
 
@@ -194,16 +194,21 @@ delivery/
     字幕_抖音_竖版.srt
     原声_B站_横版.mp3 / 混音_B站_横版.mp3    # 不开视频也能单独试听配音与配乐
     原声_抖音_竖版.mp3 / 混音_抖音_竖版.mp3
-    发布文案.md          # 分平台：采用标题 / 备选标题 / 封面文案 / 简介 / 标签 / 来源
+    发布文案.md          # 分平台：采用标题 / 备选标题 / 封面文案 / 简介 / 标签 / 来源 + AI 说明草稿
     交付审计.md          # 机器检查、ASR/静音/混音状态、人工观看与实听是否执行
     素材来源与署名.md
+    组成清单.json        # 研究/脚本/时间轴/字幕/人声/混音的 hash 与渲染指纹
+    交付决定.json        # 授权这次交付的 ReleaseDecision（策略版本、阻断项、通过项）
     脚本.json / 研究记录.json / 质检报告.json / 制作溯源.json / manifest.json
 ```
 
-V1 起的完整交付包共 17 个文件（V1 之前的老包没有 `交付审计.md` 与 `分镜预览.json`，为 16 个）。
+当前完整交付包共 20 个文件（有预览时再加 `分镜预览.json`）。V1/V2/V3 时期的老包是 17 或 16 个，
+没有 `组成清单.json` 与 `交付决定.json`；老包不会被就地改写，重新交付会生成新 revision。
 
-通过检查才写入待上传。完整解码、音轨、画幅、帧率、时长、两遍响度归一与实测复核、黑屏、逐镜运动与整帧漂移之后，
-由独立 Agent 查看实际抽帧。审片拒绝会交回编导有限修复，程序问题或达到上限则保存为失败，
+通过检查才写入待上传：布局预检 → 整片低清草片（带真实混音）→ 完整解码、音轨、画幅、帧率、时长、
+两遍响度归一与实测复核、黑屏、逐镜运动与整帧漂移 → 混音分轨（人声/音乐/音效）与字幕一致性 →
+独立 Agent 查看实际抽帧。所有结果归一成一个交付决定：critical/major 失败就阻断，必需项未知就待复核。
+审片拒绝按缺陷类型只重做受影响的部分（排版不重配音、读法不动画面），程序问题或达到轮次上限则保存为失败，
 不会静默输出无声或不完整的上传包。
 
 上传由用户手动完成。`发布文案.md` 按平台分开，含采用标题、备选标题、封面文案、简介与标签，
@@ -212,7 +217,7 @@ V1 起的完整交付包共 17 个文件（V1 之前的老包没有 `交付审�
 发布后可以记录实际链接和数据；没有填的指标保持未知：
 
 ```powershell
-.\.venv\Scripts\python.exe -m movelyth feedback VID-000001 --platform bilibili --url "你的真实视频链接" --views 123 --likes 8 --completion-rate 0.45
+.\.venv\Scripts\python.exe -m movelyth feedback VID-000001 --platform bilibili --url "你的真实视频链接" --views 123 --likes 8 --completion-rate 0.45 --window 24h
 ```
 
 ## 能力与限制
@@ -248,9 +253,10 @@ V1 起的完整交付包共 17 个文件（V1 之前的老包没有 `交付审�
   如实标注人工观看/实听是否执行。
 - 技术检查和抽帧不能保证全片听感、发音、审美和所有领域事实。首次使用新主题/音色时建议上传前观看。
 - 本版自建总控，参考仓库的用途和实际依赖见 [第三方说明](docs/third-party.md)，机制见 [架构文档](docs/architecture.md)。
-- V1 的执行状态、真实证据与未完成项见 [V1 执行记录](docs/v1-execution.md) 与
-  [跨题材验收](docs/v1-evaluation.md)；V3 的方案、缺陷清单与同脚本 A/B 见
-  [V3 方案](docs/v3-plan.md) 与 [V3 对照评估](docs/v3-evaluation.md)。
+- 当前状态、能力边界与验证方式见 [docs/optimization/](docs/optimization/execution.md)（执行状态、
+  能力矩阵、决定记录、验收证据）与 [验证记录](docs/verification.md)。
+- V1/V2/V3 的历史记录见 [V1 执行](docs/v1-execution.md)、[V2 对照](docs/v2-evaluation.md)、
+  [V3 对照](docs/v3-evaluation.md)——其中的“未完成”清单只反映当时的条件。
 
 ## 开发验证
 
@@ -267,6 +273,7 @@ npm.cmd --prefix studio run typecheck
 .\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0,'src'); from pathlib import Path; from movelyth.scenedsl import write_renderer_contracts; write_renderer_contracts(Path('studio/src'))"
 ```
 
+依赖只用 `pip` 从 `pyproject.toml` 的范围解析（CI 同样如此），仓库不维护额外的锁文件；
 `workspace/`、`delivery/`、模型日志、语音缓存、凭据与依赖均不进入 Git。不要把已有 `ready`
 等同于用户已发布，也不要把导入脚本、mock provider 或渲染测试写成真实标题驱动的验收。
 

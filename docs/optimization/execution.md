@@ -1,6 +1,6 @@
 # 四阶段优化执行状态（第二版提纲）
 
-> 对象：`main` @ `5383447`（本地领先 `origin/main` 22237b5 一个提交，工作区干净）。
+> 对象：`main`（开工基线 `5383447`，当时 `origin/main` 为 `22237b5`）。
 > 本文件是**唯一任务状态**：编号、依赖、状态、证据索引与下一步动作。
 > 证据分层见 [verification.md](../verification.md) 与本文件 §2 的 V1–V5 约定。
 
@@ -8,12 +8,13 @@
 
 | 项 | 记录 |
 | --- | --- |
-| 仓库 | `D:\wenxvn(2)\视频\Movelyth`，分支 `main`，HEAD `5383447`，`origin/main` = `22237b5`（提纲核对基线） |
-| 工作区 | 干净（`git status --short` 空）；未提交用户修改无 |
+| 仓库 | 本仓库，分支 `main`；开工时 HEAD `5383447`，`origin/main` = `22237b5`（提纲核对基线） |
+| 工作区 | 开工时干净（`git status --short` 空），无未提交的用户修改 |
 | 文档 | 已读根 `AGENTS.md`、`README.md`、`docs/architecture.md`、`scene-dsl.md`、`verification.md`、`v2-evaluation.md`、`v3-plan.md`、`v3-evaluation.md` |
 | 环境 | 见 §1 环境能力表 |
-| 基线 | `pytest -q -m "not slow and not live"`：206 passed；`ruff check src tests`：通过；`npm --prefix studio run typecheck`：通过；`movelyth --help` / `schema` / `doctor`：可运行 |
-| 冻结对照输入 | `tests/fixtures/` 六题 fixture、`docs/v1-evaluation/`、`docs/v2-evaluation/`、`docs/v3-evaluation/` 代表帧；`delivery-ab/待上传/VID-000015_*/r011`（V3 成片） |
+| 基线（开工时） | `pytest -q -m "not slow and not live"`：206 passed；`ruff`、`tsc --noEmit` 通过；`--help`/`schema`/`doctor` 可运行 |
+| 当前 | 509 passed（+5 项真实渲染 slow）；数字只在本行与 [verification.md](../verification.md) 维护 |
+| 冻结对照输入 | `tests/fixtures/` 六题 fixture；`docs/v1-evaluation/`、`docs/v2-evaluation/`、`docs/v3-evaluation/` 代表帧（已提交）；V3 成片在本地 `delivery-ab/`（未提交） |
 | 核心生产配置 | 程序动画 + Edge TTS（联网）+ 本地 ASR 质检（未默认开启）；付费生成/大模型权重默认关闭 |
 | 模型后端 | **本机无可用真实模型端点**：`codex` 未安装，`DEEPSEEK_API_KEY`/`OPENAI_API_KEY` 均未设置（只检查存在性，不读取值）。→ 真实题目 V4 与真实编导/审片证据本轮阻塞，见 §3 |
 

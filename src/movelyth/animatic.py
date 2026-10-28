@@ -14,30 +14,12 @@ frame per scene.
 """
 from __future__ import annotations
 
+from .captions_qc import collision_report, cue_report, text_layer_report
 from .models import Scene
 from .scenedsl import regions
 
-MAX_CAPTION_CHARS_PER_SECOND = {"long": 9.0, "short": 8.0}
-MIN_CAPTION_SECONDS = 1.0
-MAX_CAPTION_LINES = 2
+# A long gap with no action, event or caption change needs a stated reason.
 HOLD_WITHOUT_REASON_SECONDS = 1.5
-CAMERA_SCALE_LIMIT = 1.12
-
-
-def _caption_metrics(scene: dict, cut: str) -> list[str]:
-    problems = []
-    for page in scene.get("captions") or []:
-        seconds = max(1e-3, float(page["end"]) - float(page["start"]))
-        characters = len(str(page.get("text") or ""))
-        rate = characters / seconds
-        if rate > MAX_CAPTION_CHARS_PER_SECOND[cut]:
-            problems.append(f"镜头 {scene['id']} 字幕过快：{rate:.1f} 字/秒（上限 "
-                            f"{MAX_CAPTION_CHARS_PER_SECOND[cut]}）")
-        if seconds < MIN_CAPTION_SECONDS:
-            problems.append(f"镜头 {scene['id']} 字幕闪现：{seconds:.2f}s 短于 {MIN_CAPTION_SECONDS}s")
-        if not str(page.get("text") or "").strip():
-            problems.append(f"镜头 {scene['id']} 有空白字幕页")
-    return problems
 
 
 def _action_extremes(scene: dict) -> list[str]:
@@ -80,16 +62,13 @@ def layout_precheck(timelines: dict, config: dict, assets: list[str] | None = No
         portrait = cut == "short"
         for raw in timeline.get("scenes") or []:
             scene = Scene.model_validate({key: raw[key] for key in Scene.model_fields if key in raw})
-            problems = _caption_metrics(raw, cut)
-            problems.extend(_action_extremes(raw))
+            problems = _action_extremes(raw)
             warnings = list(raw.get("layout_warnings") or []) + _holds(raw)
             camera = raw.get("camera", "none")
             if camera != "none":
                 boxes = regions("portrait" if portrait else "landscape", scene.layout)
                 if not boxes:
                     problems.append(f"镜头 {scene.id} 的布局 {scene.layout} 不存在")
-            from .captions_qc import collision_report, cue_report, text_layer_report
-
             caption_report = cue_report(raw, cut, orientation="portrait" if portrait else "landscape")
             problems.extend(caption_report["problems"])
             warnings.extend(caption_report["warnings"])

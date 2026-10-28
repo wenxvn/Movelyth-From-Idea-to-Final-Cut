@@ -2,6 +2,7 @@
 
 记录每次工作包完成时的**命令、输入、结果与媒体位置**。真实运行产物留在 git 忽略目录
 （`workspace/`、`delivery*/`），本文件只保存可复核的索引与结论。
+每节的测试项数会随提交变化，最新数字只在 [verification.md](../verification.md) 维护，本文件不再重复。
 
 验证层级：V1 离线逻辑 / V2 小型真实媒体 / V3 导入脚本制作 / V4 真实题目制作 / V5 实际看听。
 
@@ -9,7 +10,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `python -m pytest -q -m "not slow and not live"` | 215 passed, 1 deselected | V1 |
 | Ruff | `python -m ruff check src tests` | All checks passed | V1 |
 | TypeScript | `npm --prefix studio run typecheck` | 无错误 | V1 |
 | 契约同步 | `write_renderer_contracts` + `git diff -- studio/src/generated` | 无差异 | V1 |
@@ -25,7 +25,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 231 passed | V1 |
 | 刻度镜像 parity | `tests/test_charts.py` 用 node 执行 `ChartLayer.tsx` 的真实 `niceStep/niceDomain/format` 源码 | 8 组输入（含 0.0004–0.003 与常量序列）域/步长/标签完全一致 | V1 |
 | M01 一致性 | reviewer `passed=true` + factual finding | 规范化后 `passed=false`；pipeline 抛 `成片检查未通过`，交付目录无 mp4，ledger 非 ready | V1（离线 pipeline） |
 | M02 单位/轴错 | “纵轴刻度显示 0.76，但数据点标的是 5” | 不降级：`fail/major`，证据 `claim-about-data-or-units` | V1 |
@@ -41,7 +40,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 238 passed | V1 |
 | 组成清单 | 离线 pipeline 交付 | `组成清单.json` 含 episode/revision/creation_mode/policy/schema/renderer/settings_hash、研究/脚本/质检/决定 hash、每 cut 的 seconds/frames/timeline_hash/captions_hash/voice/mix/render_fingerprint | V1 |
 | 路径卫生 | 读取 `组成清单.json` 原文 | 不含工作区绝对路径与反斜杠（voice/mix 为 `audio/<cut>/*.wav` 相对路径） | V1 |
 | M12 篡改视频 | 改写 `*_横版.mp4` | `manifest_report` 报“文件已改动”；`produce` 抛“已交付文件缺失或发生变化”；用户文件未被覆盖 | V1 |
@@ -57,7 +55,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 251 passed | V1 |
 | 阶段顺序 | 离线 pipeline 记录调用顺序 | `evidence` 在 `director` 之前；编导 prompt 含 `claim_coverage` 与 `source_evidence` 正文节选 | V1 |
 | 节选定位 | `locate_excerpt` | 空白/大小写归一后可定位并返回字符区间；不在正文中返回 `None` | V1 |
 | 证据不成立 | 快照正文不含 claim 节选 | `claim-coverage.json` 为 `excerpt-missing`；交付决定 `blocked`（critical）；不进入渲染 | V1（离线 pipeline） |
@@ -75,7 +72,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 269 passed | V1 |
 | 路由表 | 6 组标题 | 程序图形 supported；录屏/采访 unsupported；三维/生成图/历史影像 needs_extension | V1 |
 | 冲突 | “三维演示：用录屏展示真实建模过程” | 取更严格者：unsupported | V1 |
 | create 前置拒绝 | 录屏题目 | `ValueError`“无法真实呈现”，ledger 不新增任务行，无模型调用 | V1（M19） |
@@ -92,7 +88,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 300 passed | V1 |
 | 真实渲染 | `pytest -q -m slow`（Chrome + Remotion 4.0.538） | 1 passed：v1 风格 props 仍能渲染出真实帧 | V2 |
 | TypeScript | `npm --prefix studio run typecheck` | 通过（types.ts 已加 v2 字段） | V1 |
 | 契约同步 | `write_renderer_contracts` + `git diff` | 已提交 layout.json（schema_version 2、event_kinds）与 scene-schema.json | V1 |
@@ -109,7 +104,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 300 passed | V1 |
 | 运行记录 | 离线 pipeline | `runs.jsonl` 每阶段一行：stage/status/started_at/ended_at/seconds/input_hash/calls/cache/usage/cost | V1 |
 | TTS 用量 | sound 阶段 | `tts_characters`、`tts_seconds` 与旁白文本/音频时长一致（>0） | V1 |
 | 渲染耗时 | render 阶段 | `render_seconds` 有值 | V1 |
@@ -127,7 +121,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 310 passed | V1 |
 | 配方登记 | `recipes.RECIPES` | 6 个：chart-focus / same-scale-compare / parameter-process / flow-expand / paper-evidence / conclusion-callback，每个都有用途、必需绑定、事件、画幅、限制与检查项 | V1 |
 | 适用性 | 图表无注释 / 有注释；同单位 / 混单位 series；vectors；diagram+steps；text+source_note；text+claim_ids | 各自正确判定适用或不适用 | V1 |
 | 未实现配方 | `recipe="magic-transition"` | 脚本契约在渲染前拒绝，写入 `script-feedback.json`，不产生 final.mp4 | V1 |
@@ -142,7 +135,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 321 passed | V1 |
 | 布局 dry-run | `precheck` 阶段（渲染前） | `layout-precheck.json`：每镜问题/警告、`sampling_plan`、`passed` | V1 |
 | 字幕过快/闪现 | 0.3 s 塞 22 字 | 预检阻断，不产生 final.mp4；报告写明原因 | V1 |
 | 空白字幕页 | 空白 text | 报“空白字幕页” | V1 |
@@ -161,7 +153,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 329 passed | V1 |
 | 焦点求解 | 1164×730 主体框 | 缩放 1.0–1.55；取景中心被夹在 `[0.5/s, 1-0.5/s]`，不露出画面外 | V1 |
 | 计划生成 | 8 s 镜头、30% 处 emphasis 指向 chart | 关键帧：overview(0) → focus(2.4, target=chart) → overview(7.3)；`reason` 可读 | V1 |
 | 无目标事件 | target 为空 | 不产生 focus（相机只指向真实对象） | V1 |
@@ -177,7 +168,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 344 passed | V1 |
 | 迭代函数 | x0=1, rate=0.5, steps=4 | 序列 1 / 0.5 / 0.25 / 0.125 / 0.0625，可复现 | V1 |
 | 线性变换 | a=1,b=0.5,c=0,d=2 | 四角坐标与行列式 2.0、面积倍数 2.0 同源 | V1 |
 | 投影 | (3,4) 投到 x 轴 | 投影点 (3,0)、残差 4.0 | V1 |
@@ -194,7 +184,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 362 passed | V1 |
 | 分类 | 9 组 finding 文本 | fact / data / pronunciation / mix / caption / layout / event / asset / review 各自正确 | V1 |
 | 信号冲突 | “音乐把结论压住了”“纵轴单位写成毫秒但数据是秒” | 按信号计分选 mix / data，不按首个关键词 | V1 |
 | 路由表 | 9 类缺陷 | 每类都有 operations / invalidates / rechecks / must_not；排版修复不得改 claims 或音频 | V1 |
@@ -213,7 +202,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 377 passed | V1 |
 | 失效闭包 | `invalidated_by(["research"|"script"|"render"|"policy"|"unknown"])` | 传递闭包正确；未知项不失效任何阶段 | V1 |
 | 场景键 | 同输入 / 改旁白 / 改 fps | 一致 / 不同 / 不同 | V1 |
 | 邻镜依赖 | 下一镜改 transition 或带 subject_id | 本镜键改变（转场把手与共享对象跨边界） | V1 |
@@ -233,7 +221,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 392 passed | V1 |
 | 匹配 | 请求“服务器机柜/插拔网线/机房” | 首选 server_rack（7.0 分），理由含主体/动作/情境/授权 | V1 |
 | 禁止含义 | `must_not=["流程图"]` | 示意素材被拒，理由记录在 rejected | V1 |
 | 证据要求 | `authenticity=evidence` | 示意素材被拒（“需要真实证据，但素材标注为示意”） | V1 |
@@ -254,7 +241,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 412 passed | V1 |
 | 旧配置兼容 | 无 `[speech]` 的配置 | 继承 studio.voice/rate/pitch/volume，行为不变 | V1 |
 | 局部覆盖 | `[speech]` 只写 voice/granularity | 其余沿用 studio | V1 |
 | 不支持的控制 | pitch 非默认 + supported_controls 不含 pitch | `ValueError`“不支持 pitch”，不静默忽略 | V1 |
@@ -276,7 +262,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 426 passed | V1 |
 | 真实字体 | `load_font("body", 66)` | Microsoft YaHei Regular（msyh.ttc）；display 用 msyhbd、serif 用 SimSun | V1 |
 | 真实宽度 | “损失” vs “损失下降很多” vs 96px | 宽度随文本与字号单调增加 | V1 |
 | 缺字检测 | “天气 ☃ 与 ☂” | 从 cmap 读出 ☃ ☂ 缺字（coverage=cmap）；无 fontTools 时降级为 unknown | V1 |
@@ -294,7 +279,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 442 passed | V1 |
 | 分轨 | `soundtrack_stems` | voice_dry / voice / music / arp / sfx / room / duck 各自可读，写入 `stems/*.wav` + `stems.json` | V1（真实 prepare_cut 路径，TTS 打桩） |
 | 人声缺失（M04） | 人声轨全零、音乐有能量 | 混音报告 `passed=false`，policy 判 critical 阻断 | V1 |
 | 事件落点 | sfx 在 2.0 s 有能量、3.5 s 没有 | 2.0 命中、3.5 报“事件处能量未高于基线” | V1 |
@@ -312,7 +296,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 454 passed | V1 |
 | 共享对象 | 同 subject_id、同色、不同图层类型 | 判为连续，列出出现在哪些镜头 | V1 |
 | 换色 | 同 subject_id 两镜颜色不同 | 报“换了颜色” | V1 |
 | 状态错位 | 上一镜 after=10、下一镜 before=7 | 报出具体状态不一致 | V1 |
@@ -330,7 +313,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 494 passed | V1 |
 | 五种笔触 | circle/underline/highlight/bracket/box | 每种 ≥24 个点，坐标在主体框 ±60px 内 | V1 |
 | 同 seed | 同输入两次 | 几何完全一致；换 seed 不同 | V1 |
 | 时间无关 | 4 个不同 progress | 路径几何不变，只有可见比例变化 | V1 |
@@ -386,7 +368,6 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 509 passed | V1 |
 | 版本绑定 | 观察记录 | 含 episode/revision/cut/platform/url/observed_at/window/metrics | V1 |
 | 未知不记 0 | `parse_metrics({"views":10,"likes":None,"completion_rate":""})` | 只保留 views | V1 |
 | 非法输入 | 未知指标名、负数、非法窗口 | 各自报错 | V1 |

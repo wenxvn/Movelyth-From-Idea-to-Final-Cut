@@ -1,5 +1,7 @@
 # V2 方案：从"能自动出片"到"像专业团队做的片"
 
+> **历史记录（V2 方案，2026-10-27）**：本文件记录当时的条件、结果与未完成项。当前状态与能力边界见 [optimization/execution.md](optimization/execution.md) 与 [optimization/capabilities.md](optimization/capabilities.md)，最新验证数字见 [verification.md](verification.md)。
+
 日期：2026-10-27。对象：`main` @ `1d18c59`（V1 已完成三题材双画幅验收）。
 本文档只记录**本轮审计发现的真实问题、证据位置和排序**；未实施的项目明确标注。
 

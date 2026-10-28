@@ -13,6 +13,7 @@ Two deliberate choices shape the sound of a Movelyth film:
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import os
 import re
@@ -26,11 +27,15 @@ import imageio_ffmpeg
 import numpy as np
 from PIL import Image, ImageDraw
 
+from .clock import frames_to_samples, seconds_to_frames, seconds_to_samples
 from .sound import design_sound_events
 from .textfit import caption_chunks
 from .util import atomic_json, file_hash, fingerprint, read_json, run
 
 SAMPLE_RATE = 24000
+# Extra room after the narration inside a scene: the last word needs air, and the
+# outgoing transition must not clip it.
+SCENE_TAIL = 0.85
 # Bump when the synthesis pipeline changes in a way that alters the audio, so the
 # voice cache does not serve audio made by the old implementation.
 TTS_VERSION = 3
@@ -81,6 +86,30 @@ def tool_version(binary: str) -> str | None:
         return None
     line = (result.stdout or "").splitlines()
     return line[0].strip() if line else None
+
+
+def probe_media(path) -> dict | None:
+    """Duration, audio and stream shape of a real file; ``None`` when unreadable.
+
+    The single ffprobe JSON reader: the animatic comparison, the assembly check and
+    ``verify_video`` all describe a file the same way.
+    """
+    try:
+        data = json.loads(run([ffprobe(), "-v", "error", "-show_streams", "-show_format",
+                               "-of", "json", str(path)], timeout=60).stdout)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    streams = data.get("streams") or []
+    video = next((stream for stream in streams if stream.get("codec_type") == "video"), {})
+    audio = next((stream for stream in streams if stream.get("codec_type") == "audio"), {})
+    numerator, denominator = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/"))
+    return {"duration": float((data.get("format") or {}).get("duration") or 0),
+            "has_audio": bool(audio),
+            "width": video.get("width"),
+            "height": video.get("height"),
+            "fps": (numerator / denominator) if denominator else None,
+            "codec": video.get("codec_name"),
+            "channels": audio.get("channels")}
 
 
 def write_wav(path: Path, audio: np.ndarray):
@@ -538,10 +567,12 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
             position += pause
         audio = np.concatenate(pieces) if pieces else np.zeros(SAMPLE_RATE // 4, dtype=np.float32)
         seconds = len(audio) / SAMPLE_RATE
-        frames = math.ceil((seconds + lead + 0.85) * fps)
-        samples = round(frames / fps * SAMPLE_RATE)
+        # One clock for every stage: seconds → frames → samples is defined in clock.py,
+        # so a scene's audio cannot drift from its frame count.
+        frames = seconds_to_frames(seconds + lead + SCENE_TAIL, fps)
+        samples = frames_to_samples(frames, fps, SAMPLE_RATE)
         chunk = np.zeros(samples, dtype=np.float32)
-        begin = round(lead * SAMPLE_RATE)
+        begin = seconds_to_samples(lead, SAMPLE_RATE)
         chunk[begin:begin + len(audio)] = audio
         # The caption shows the written narration; only the voice uses the replacement.
         pages, timing = captions(scene.narration, boundaries, seconds,

@@ -1,5 +1,7 @@
 # V1 交付报告
 
+> **历史记录（V1 交付，2026-10-26）**：本文件记录当时的条件、结果与未完成项。当前状态与能力边界见 [optimization/execution.md](optimization/execution.md) 与 [optimization/capabilities.md](optimization/capabilities.md)，最新验证数字见 [verification.md](verification.md)。
+
 > 按《Movelyth V1 规划与执行提纲》§9 组织。结论都对应可核验证据；没有证据的地方写"未验证"。
 
 ## 1. 执行摘要

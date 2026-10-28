@@ -19,7 +19,6 @@ from pathlib import Path
 import numpy as np
 
 from .media import SAMPLE_RATE, write_wav
-from .models import Contract
 from .util import atomic_json
 
 VOICE_FLOOR_DB = -45.0
@@ -188,14 +187,3 @@ def write_stems(stems: dict[str, np.ndarray], directory: Path) -> dict[str, str]
                                            "sample_rate": SAMPLE_RATE,
                                            "note": "voice_dry 是未处理的旁白；voice 是处理后的旁白"})
     return paths
-
-
-class StemRecord(Contract):
-    """Where a stem came from, so a mix can be reproduced."""
-
-    name: str
-    path: str = ""
-    sample_rate: int = SAMPLE_RATE
-    start_seconds: float = 0.0
-    gain_db: float = 0.0
-    processing: str = ""

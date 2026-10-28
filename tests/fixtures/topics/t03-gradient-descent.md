@@ -7,5 +7,5 @@
   `chart` 对照学习率过大/过小、`diagram` 更新流程 + `math` 更新公式。
 - 当前状态：**离线演示成片完成**（VID-000002 / 000003 / 000004），使用 mock 剧本；
   真实模型版本未执行。
-- 证据：`docs/v1-evaluation.md` §2、`delivery/v1-demo/待上传/VID-000002_…/r002/`（本机）。
+- 证据：`docs/v1-evaluation.md` §2（已提交的代表帧）；成片本身在本地 `delivery/`，未提交。
 - 注意：`consistency.py` 会拒绝"说下降却画上升"和"把示意曲线说成实测数据"。

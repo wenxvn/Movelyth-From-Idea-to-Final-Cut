@@ -1,7 +1,12 @@
 # 工作流与数据
 
-研究 Agent → 编导 Agent → 独立脚本审稿 → 受控 DSL 校验 → 本地声音/动画制作 → 技术检查 →
-音频机器检查 → 实际抽帧审片 → 编号交付。
+能力路由 → 研究 Agent → 来源抓取与主张核对 → 冻结 production brief → 编导 Agent →
+独立脚本审稿 → 受控 DSL 校验 → 配音/混音/素材 → 布局预检 → 渲染（含整片草片）→
+技术/音频/字幕/组装检查 → 统一交付决定 → 编号交付。
+
+阶段名与顺序（`movelyth status` 显示的就是这些）：`research` → `evidence` → `brief` →
+`script` → `sound` → `assets` → `precheck` → `render` → `check`。每个阶段记录输入 hash、
+输出 hash、用量与耗时（`runs.jsonl`、`budget.json`），命中缓存时同样留一行记录。
 
 每个 Agent 是一次独立上下文的模型调用（默认 Codex CLI），输出由 Pydantic schema 校验。
 角色默认串行运行，减少本机资源竞争；这不等同于多个模型供应商的并行集群。
@@ -9,7 +14,7 @@
 
 ## Scene DSL 与渲染
 
-编导输出的是版本化 Scene DSL（`schema_version = 1`）：一个镜头由 1–6 个图层组成，
+编导输出的是版本化 Scene DSL（当前 `schema_version = 2`）：一个镜头由 1–6 个图层组成，
 图层类型为 text/math/shape/chart/diagram/image/procedural，布局为 immersive/diagram/compare。
 `scenedsl.py` 是布局、保留区、节拍解析与校验的唯一来源，并生成
 `studio/src/generated/layout.json` 与 `scene-schema.json` 给渲染端，两侧不会各自漂移。
@@ -17,7 +22,16 @@
 渲染端 `Stage.tsx` 用注册表按图层类型分派到 `components/` 下的组件；动画原语只有 8 种，
 且只依赖 props 与 frame，因此可确定性复现。旧任务（只有 `visual` 字段）自动退化为单个
 procedural 图层。V2 在这一层加了四个有界的方向字段（转场、运镜、重点词、音效），
-并重做了栅格、图表与字幕，细节见 [Scene DSL](scene-dsl.md)。
+并重做了栅格、图表与字幕；v2 再加**镜头配方**（`recipe`，编导只能选已实现且适用的配方）、
+**语义事件**（`events`，绑定真实配音边界，重复短语用 occurrence/字符区间消歧）、
+**对象身份**（`subject_id` 与图层 `id` 分离）、**受控参数函数**（`function`/`parameters`，
+坐标与数字同源）与**手绘圈注**（`sketches`，几何只由 seed 决定）。细节见 [Scene DSL](scene-dsl.md)。
+
+模块分工（都在 `src/movelyth/`）：`policy.py` 把每份报告汇成交付决定；`brief.py`/`capability.py`
+决定这集能不能真实做；`sources.py` 抓取并核对主张；`recipes.py`/`parameters.py`/`camera.py`/
+`sketch.py`/`continuity.py` 是编导可选能力的契约与检查；`animatic.py` 做布局 dry-run 与整片草片；
+`cache.py` 管场景键与失效；`repair.py` 按缺陷类型路由修复；`budget.py` 管预算与账目；
+`mix.py`/`speech.py`/`captions_qc.py`/`fonts.py` 是声音与文字的可测部分；`report.py` 汇总一屏状态。
 
 ## 声音：从"讲解"到"声音设计"
 
@@ -107,9 +121,19 @@ illustrative / uncertain）。审稿角色核查脚本与来源的对应关系�
 
 ## 声画
 
-先按镜头、再按句子合成 Edge TTS，按音频真实样本数对齐帧数；字幕使用语音边界，
-匹配不到时标明估计时间模式。`beats`/`actions` 里的 `narration:片段` 会按真实词语边界换算成秒，
-关键画面能在对应词句处触发。同一套词边界还驱动字幕的逐词高亮与重点词着色。
+先按镜头、再按句子合成 Edge TTS，按音频真实样本数对齐帧数（秒→帧→样本只在 `clock.py` 定义，
+各镜半开区间首尾相接，不累积漂移）；字幕使用语音边界，匹配不到时标明估计时间模式。
+`beats`/`actions`/`events` 里的 `narration:片段` 会按真实词语边界换算成秒，
+关键画面能在对应词句处触发；重复短语用 `occurrence` 或字符区间消歧，找不到就报错。
+同一套词边界还驱动字幕的逐词高亮与重点词着色。
+
+语音参数在 `[speech]`（backend/voice/rate/pitch/volume/granularity/boundary_policy），
+缺省继承 `[studio]`，旧配置不变；后端不支持的控制项直接报错而不是静默忽略。
+每次合成记录真实采样数、音色、模型、边界来源与用量（`timelines.json` 的 `speech`）。
+
+混音落盘为可审计的分轨：`voice_dry`/`voice`/`music`/`arp`/`sfx`/`room`/`duck`
+（`audio/<cut>/stems/`）。**人声缺失在人声轨上判**，不会被音乐能量掩盖；
+事件落点、尾音截断、侧链抽吸与分轨平衡在编码前检查（`mix.py`）。
 
 程序配乐有三套预设（minimal/tech/documentary），按段落编排而非循环播放，
 并按真实旁白能量做带 lookahead 的平滑侧链压低；音效由 `cues` 驱动、本地合成。
@@ -129,23 +153,62 @@ V2 的质量报告另外包含 `pacing`（每镜真实时长、离散度、重�
 `sound_design`（每分钟音效数、类型分布、运镜分布、混音电平与动态范围）。运动检查从
 1 fps 均值改为 2 fps 中位数并统计静止采样占比：一次硬切不该让三分钟的静帧蒙混过关。
 
-脚本或视觉审片拒绝不会进入待上传。编导对脚本问题最多修复两次；视觉问题会把实际抽帧反馈
-交回编导，最多重做两轮。模型只能修改结构化内容，不能自动改渲染代码。达到次数上限或遇到
-程序故障时留下 failed；程序故障可在修复后恢复。
+所有检查都归一成 `CheckResult`（`pass/fail/unknown/not_applicable` × `critical/major/minor` ×
+是否必需），由 `policy.decide()` 汇成一个 `ReleaseDecision`：任一 critical/major 失败 → 阻断，
+必需项未知 → 待复核，其余才 `ready`。模型的 `passed=true` 不能覆盖事实缺陷；
+坐标刻度读数只有在能与程序生成的刻度逐值对上时才降级为 warning。
 
-交付先写 `.staging`，hash 核验后重命名至 `待上传`，最后更新数据库。已存在且损坏的交付包
-不会被覆盖。一个包 17 个文件：`manifest.json` 证明具体文件版本，`质检报告.json` 记录检查与限制，
-`制作溯源.json` 记录 schema 版本、provider、creation_mode、渲染指纹与音频检查状态，
-`发布文案.md` 按平台给出采用标题/备选标题/封面文案/简介/标签/来源，
-`交付审计.md` 汇总哪些机器检查通过、ASR 与人工验证是否真的执行，
-`原声_*.mp3` / `混音_*.mp3` 便于不打开视频单独试听。
+视觉审片被拒时按缺陷类型路由修复（`repair.py`）：排版只重做 render/check，读法只重做声音，
+事实缺陷回到证据与脚本；每类缺陷有自己的轮次上限，范围外的镜头逐字不变。
+模型只能修改结构化内容，不能自动改渲染代码。达到次数上限或遇到程序故障时留下 failed；
+程序故障可在修复后恢复。
+
+交付先写 `.staging`（先清空，避免把上次中断的残留当成本次产物），校验通过后原子重命名至
+`待上传`，最后更新数据库。已存在且损坏的交付包不会被覆盖。一个包 20 个文件（有预览时再加
+`分镜预览.json`）：
+
+| 文件 | 作用 |
+| --- | --- |
+| `manifest.json` | 登记包内每个文件的 hash、组成清单指纹与版本 |
+| `组成清单.json` | 研究/脚本/质检/决定的 hash、每 cut 的时间轴/字幕/人声/混音 hash 与渲染指纹 |
+| `交付决定.json` | 授权这次交付的 `ReleaseDecision`（策略版本、阻断项、通过项） |
+| `质检报告.json` | 技术/音频/混音/字幕/组装/审片结果与限制 |
+| `制作溯源.json` | schema 版本、provider、creation_mode、渲染指纹、素材 hash |
+| `发布文案.md` | 采用标题/备选标题/封面文案/简介/标签/来源 + AI 说明草稿 |
+| `交付审计.md` | 哪些机器检查通过、ASR 与人工验证是否真的执行 |
+| `素材来源与署名.md` | 来源链接与本地素材授权 |
+| `原声_*.mp3` / `混音_*.mp3` | 不打开视频也能试听 |
+
+改包内任一文件、换掉音频或拿旧 revision 的决定来用，`manifest_valid()` 都会判失效。
 
 ## 预览与成本
 
 `--preview` / `preview` 只渲染每镜代表帧、封面与 12 秒 0.5 倍分辨率片段，输出 `storyboard.json`，
 状态为 `previewed`，**不进入待上传**。它用于在昂贵渲染前检查构图、文字容量与画面是否贴题。
+
+正式渲染前还有两道更便宜的关卡：`precheck` 阶段做布局 dry-run（字幕阅读速度/闪现/空白页、
+动作极值、未登记素材、无效配方、长静止段是否写 `hold_reason`、真实字体宽度与缺字），
+渲染端再输出整条时间轴的低清草片（`animatic.mp4`），管线把该 cut 的真实混音 mux 进去，
+并用 ffprobe 核对草片有音轨、时长与帧数与时间轴一致。`sampling_plan` 为每个抽帧点写明理由
+（opening/event/motion-extreme/caption-change/ending），避免只看每镜完成帧。
 `storyboard.json` 现在也记录每镜的转场、运镜、重点词与音效，便于在预览阶段就发现
 "全片一种转场"或"没有音效"。
 
 revision 目前仍会重渲染整条 cut（Remotion 按 composition 整体渲染，逐镜拼接需要额外处理
-转场与音画对齐），但语音、研究和未变化的阶段会命中缓存。这是已知限制，不做脆弱的大重构。
+转场与音画对齐），但语音、研究和其他未变化的阶段会命中缓存；`scene-keys.json` 记录每镜的键
+（含前后邻镜与环境），`scene-changes.json` 说明这次重做涉及哪些镜头。这是已知限制，不做脆弱的大重构。
+
+## 预算与运行观测
+
+`[budget]` 冻结一次任务的调用数、token、TTS 字数/秒数、渲染分钟与墙钟上限；超限在**下一阶段开始前**
+抛 `BudgetExceeded`，不降低事实与关键检查标准。每阶段写一行 `runs.jsonl`（状态、耗时、输入 hash、
+调用数、用量、费用），并更新 `budget.json`。费用分 `estimate`/`actual`/`currency`/`price_version`，
+没有价格表时 `actual` 为 `null` 而不是 0。未知配置项与拼错的键会直接报错，不会被静默忽略。
+
+## 能力边界
+
+`capability.py` 登记五条题材路线并给出真实状态：程序图形 supported；授权素材/生成素材/空间演示
+needs_extension（需要新组件或外部资源）；真实录屏/实拍 unsupported，`create` 会前置拒绝，
+不留失败任务行、不产生模型调用。`brief.py` 把受众、问题、边界、画幅、时长、风格、预算与路线
+冻结成 `ProductionBrief`；needs_extension 的题目以程序图形替代时会记录 `substitutions`，
+不会声称已实现该能力。

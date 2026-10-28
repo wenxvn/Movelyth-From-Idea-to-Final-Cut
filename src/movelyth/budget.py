@@ -13,7 +13,7 @@ from pathlib import Path
 from pydantic import Field
 
 from .models import Contract
-from .util import atomic_json, now, read_json
+from .util import atomic_json, read_json
 
 COUNTERS = ("model_calls", "input_tokens", "output_tokens", "tts_characters",
             "tts_seconds", "render_minutes", "wall_seconds")
@@ -158,10 +158,6 @@ def usage_since(provider, before: dict) -> Usage:
                  output_tokens=number(delta.get("completion_tokens", delta.get("output_tokens"))))
 
 
-def usage_from_provider(provider) -> Usage:
-    return usage_since(provider, {"calls": 0, "usage": {}})
-
-
 class BudgetLedger:
     """The budget and run records for one episode, kept beside its workspace."""
 
@@ -195,8 +191,3 @@ class BudgetLedger:
                 "remaining": self.state.remaining(), "blocked_reason": self.state.blocked_reason,
                 "currency": self.state.currency, "price_version": self.state.price_version,
                 "note": "未知费用为 null；estimate 与 actual 分开记录"}
-
-
-def now_pair() -> tuple[str, str]:
-    stamp = now()
-    return stamp, stamp

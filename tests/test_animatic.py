@@ -39,12 +39,14 @@ def test_caption_reading_speed_and_flash_are_caught():
     slow = layout_precheck({"long": timeline(captions=[
         {"start": 0.2, "end": 0.6, "text": "这是一句非常非常长的字幕内容需要读很久"}])}, CONFIG)
     assert not slow["passed"]
-    assert any("字幕过快" in problem or "闪现" in problem for problem in slow["problems"])
+    # The wording comes from captions_qc, the single owner of caption thresholds.
+    assert any("字/秒" in problem for problem in slow["problems"])
+    assert any("只显示" in problem for problem in slow["problems"])
 
 
 def test_an_empty_caption_page_is_a_problem():
     report = layout_precheck({"long": timeline(captions=[{"start": 0.2, "end": 2.0, "text": " "}])}, CONFIG)
-    assert any("空白字幕" in problem for problem in report["problems"])
+    assert any("空白页" in problem for problem in report["problems"])
 
 
 def test_an_unregistered_asset_is_caught_but_builtin_images_are_not():

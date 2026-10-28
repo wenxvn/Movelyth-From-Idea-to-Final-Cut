@@ -1,5 +1,7 @@
 # V3 对照评估：同一份脚本，从“专业画面”到“专业讲述”
 
+> **历史记录（V3 对照评估，2026-10-27）**：本文件记录当时的条件、结果与未完成项。当前状态与能力边界见 [optimization/execution.md](optimization/execution.md) 与 [optimization/capabilities.md](optimization/capabilities.md)，最新验证数字见 [verification.md](verification.md)。
+
 日期：2026-10-27。对象：`main` + 本轮改动（未提交前的工作树）。
 对照：V2 `VID-000015`（同一脚本、V2 渲染与声音）vs V3 `VID-000025`（同一脚本 + V3 导演字段）。
 `VID-000022` / `VID-000023` / `VID-000024` / `VID-000025` 是同一套代码在修正版面细节后的连续重跑：

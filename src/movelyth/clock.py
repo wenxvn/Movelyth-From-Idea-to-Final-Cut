@@ -24,12 +24,6 @@ def seconds_to_frames(seconds: float, fps: int = DEFAULT_FPS) -> int:
     return max(1, math.ceil(seconds * fps - 1e-4))
 
 
-def frames_to_seconds(frames: int, fps: int = DEFAULT_FPS) -> float:
-    if frames < 0:
-        raise ValueError("帧数必须是非负整数")
-    return frames / fps
-
-
 def frames_to_samples(frames: int, fps: int = DEFAULT_FPS, sample_rate: int = 24000) -> int:
     """Samples for a whole number of frames; the scene boundary is a frame boundary."""
     return round(frames / fps * sample_rate)
@@ -69,7 +63,3 @@ def scene_spans(scene_frames: list[int], *, fps: int = DEFAULT_FPS,
 def frame_at(seconds: float, fps: int = DEFAULT_FPS) -> int:
     """Frame index containing ``seconds`` (floor), for event → frame mapping."""
     return max(0, math.floor(seconds * fps + EPSILON))
-
-
-def sample_at(seconds: float, sample_rate: int = 24000) -> int:
-    return max(0, round(seconds * sample_rate))

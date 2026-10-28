@@ -1,5 +1,7 @@
 # V3 方案：从“专业的画面”到“专业的讲述”
 
+> **历史记录（V3 方案，2026-10-27）**：本文件记录当时的条件、结果与未完成项。当前状态与能力边界见 [optimization/execution.md](optimization/execution.md) 与 [optimization/capabilities.md](optimization/capabilities.md)，最新验证数字见 [verification.md](verification.md)。
+
 > 实施状态见文末 §5；实测对照见 [v3-evaluation.md](v3-evaluation.md)。
 
 日期：2026-10-27。对象：`main` @ `22237b5`（V2 已交付同一脚本的 A/B）。

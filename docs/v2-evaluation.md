@@ -1,5 +1,7 @@
 # V2 对照评估：同一脚本，换一套渲染与声音
 
+> **历史记录（V2 对照评估，2026-10-27）**：本文件记录当时的条件、结果与未完成项。当前状态与能力边界见 [optimization/execution.md](optimization/execution.md) 与 [optimization/capabilities.md](optimization/capabilities.md)，最新验证数字见 [verification.md](verification.md)。
+
 日期：2026-10-27。对象：`main` + 本轮改动（未提交前的工作树）。
 
 ## 0. 结论

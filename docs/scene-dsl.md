@@ -1,9 +1,10 @@
-# Scene DSL v1.2：导演字段、讲述节拍、数据注释与声音
+# Scene DSL v2：配方、语义事件、对象身份与导演字段
 
-版本号仍是 `schema_version = 1`。V2/V3 只**新增有默认值的字段**，不改变已有字段的含义，
-所以 V1/V2 已审脚本可以原样渲染（V3 实测：`workspace/audit-v3/compat-long/`）。Python 契约在 `src/movelyth/models.py`，渲染端类型在
-`studio/src/types.ts`，布局常量在 `src/movelyth/scenedsl.py`，并由 `write_renderer_contracts()`
-生成 `studio/src/generated/layout.json` 与 `scene-schema.json`。
+当前版本号是 **`schema_version = 2`**（v2 新增字段见 §7）。V1/V2/V3 时期写下的脚本仍是
+`schema_version = 1`，读取端按字段默认值兼容，可以原样渲染；升级只补版本号，不补造历史证据。
+Python 契约在 `src/movelyth/models.py`，渲染端类型在 `studio/src/types.ts`，布局常量在
+`src/movelyth/scenedsl.py`，并由 `write_renderer_contracts()` 生成
+`studio/src/generated/layout.json` 与 `scene-schema.json`（两侧不会各自漂移，有测试）。
 
 ## 1. 新增的镜头字段
 
@@ -127,7 +128,7 @@ V2 的 12 列栅格仍保留：`immersive` 是标题在上、主画面占满整�
 - 旧脚本（无 `transition`/`camera`/`emphasis`/`cues`）按默认值渲染：`fade` + `push` + 无音效。
 - V2 脚本没有 `chapter`/`role`/`takeaway`/`metric`/`hero`：镜号旁只显示序号，Insight 卡退回
   从真实数据推导，主角退回 main 里的第一个图形层。已用 VID-000015 的 timelines 实测渲染。
-- `schema_version` 仍为 1；读取端按字段默认值兼容，旧 revision 不会被就地改写。
+- 当前 `schema_version` 为 2；v1 脚本按字段默认值兼容，旧 revision 不会被就地改写。
 - 布局矩形变了，因此**旧脚本的视觉会变**（更大的画面、更高的标题）。这是本轮的目标，
   不是兼容性回归：语义、图层、时间轴、字幕文本都不变。
 ## 7. v2：版本化契约、对象身份与语义事件（S1-06）

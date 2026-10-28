@@ -1,5 +1,7 @@
 # V1 基线（改动前）
 
+> **历史记录（V1 基线，2026-10-25）**：本文件记录当时的条件、结果与未完成项。当前状态与能力边界见 [optimization/execution.md](optimization/execution.md) 与 [optimization/capabilities.md](optimization/capabilities.md)，最新验证数字见 [verification.md](verification.md)。
+
 记录时间：2026-10-25。基线提交：`963b1aa2d05f7ab5025f67bf7af4fe3fd7defebe`
 （`main`，工作区干净，与 `origin/main` 一致）。
 

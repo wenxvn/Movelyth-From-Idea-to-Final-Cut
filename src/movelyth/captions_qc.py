@@ -31,29 +31,30 @@ def cue_report(scene: dict, cut: str, *, orientation: str) -> dict:
     for index, page in enumerate(pages):
         text = str(page.get("text") or "")
         seconds = max(1e-3, float(page["end"]) - float(page["start"]))
+        where = f"镜头 {scene.get('id')} 字幕第 {index + 1} 页"
         if not text.strip():
-            problems.append(f"{scene.get('id')} 第 {index + 1} 页字幕为空")
+            problems.append(f"{where}是空白页")
             continue
         rate = len(text) / seconds
         if rate > speed:
-            problems.append(f"{scene.get('id')} 第 {index + 1} 页 {rate:.1f} 字/秒 超过 {speed}")
+            problems.append(f"{where} {rate:.1f} 字/秒，超过 {speed} 字/秒上限")
         if seconds < minimum:
-            problems.append(f"{scene.get('id')} 第 {index + 1} 页只显示 {seconds:.2f}s")
+            problems.append(f"{where}只显示 {seconds:.2f}s，短于 {minimum}s")
         if float(page["start"]) < previous_end - 1e-6:
-            problems.append(f"{scene.get('id')} 第 {index + 1} 页与上一页交叠")
+            problems.append(f"{where}与上一页时间交叠")
         previous_end = float(page["end"])
         report = font_report(text, style="body", size=size)
         if report["missing"]:
-            problems.append(f"{scene.get('id')} 字幕缺字：{''.join(report['missing'][:5])}")
+            problems.append(f"{where}缺字：{''.join(report['missing'][:5])}")
         if report["width"] is None:
-            warnings.append(f"{scene.get('id')} 字体不可用，第 {index + 1} 页宽度未验证")
+            warnings.append(f"{where}的字体不可用，宽度未验证")
         else:
             ratio = round(report["width"] / max(1, band["w"]), 4)
             if ratio > MAX_WIDTH_RATIO:
-                problems.append(f"{scene.get('id')} 第 {index + 1} 页宽度占 {ratio:.0%}，超出安全区")
+                problems.append(f"{where}宽度占 {ratio:.0%}，超出安全区")
         lines = text.count("\n") + 1
         if lines > MAX_LINES:
-            problems.append(f"{scene.get('id')} 第 {index + 1} 页有 {lines} 行，超过 {MAX_LINES} 行")
+            problems.append(f"{where}有 {lines} 行，超过 {MAX_LINES} 行")
     return {"problems": problems, "warnings": warnings, "pages": len(pages)}
 
 
