@@ -643,7 +643,10 @@ def normalize_scene(scene: Scene, *, duration: float, boundaries: list[dict] | N
         "duration": round(duration, 3),
     })
     from .camera import camera_plan
+    from .parameters import evaluate
 
+    if scene.function:
+        data["computed"] = evaluate(scene.function, dict(scene.parameters))
     orientation = "portrait" if vertical else "landscape"
     data["camera_plan"] = camera_plan(data, orientation=orientation, duration=duration)
     return data

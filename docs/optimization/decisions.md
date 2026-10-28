@@ -192,3 +192,18 @@
   5. 字幕/页脚在相机变换之外绘制，不随内容缩放。
 - 否：让模型直接给相机坐标（无法验证是否指向真实对象）；用 `useFrame` 实时动画（不可 seek）。
 - 证据：`tests/test_camera.py`（8 项）、`tests/test_camera_render.py`（真实帧差 8.86）。
+
+## D13 · 参数只走注册函数，数字与几何同源（S2-05）
+
+- 问题：模型可以同时写“series=[0.9,0.7…]”和“标签：误差降到 0.4”，两者没有任何约束，
+  画面与旁白可能各说一套。
+- 选择：
+  1. `parameters.py` 只登记 3 个函数（iteration / linear-transform / projection），参数范围写死；
+     不做通用表达式执行器。
+  2. `Scene.function` + `parameters` 由程序计算，结果写入规范化场景的 `computed`。
+  3. `validate_scene_parameters()` 拒绝两类不一致：series/矩阵与计算结果不同；标签与注释里的
+     数字不在计算结果集合内（容差 1e-3 相对）。
+  4. 函数与参数进入 `RENDERER_CAPABILITIES.parameter_functions` 与编导提示词。
+- 否：允许模型自写 Python/TS 表达式（不可审查、不可复现）；只做“数值检查”而不约束几何
+  （曲线仍可能与数字不符）。
+- 证据：`tests/test_parameters.py`（15 项）。

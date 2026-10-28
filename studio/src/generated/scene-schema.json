@@ -649,6 +649,12 @@
           "title": "Events",
           "type": "array"
         },
+        "function": {
+          "default": "",
+          "maxLength": 32,
+          "title": "Function",
+          "type": "string"
+        },
         "heading": {
           "maxLength": 24,
           "minLength": 2,
@@ -719,6 +725,13 @@
           "minLength": 15,
           "title": "Narration",
           "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Parameters",
+          "type": "object"
         },
         "recipe": {
           "default": "",

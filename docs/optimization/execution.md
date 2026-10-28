@@ -59,7 +59,7 @@
 | S2-02 语音后端/读法/韵律/核对 | todo | S1-06, S1-07 |
 | S2-03 声音事件/分轨/混音 | todo | S2-02, S1-06 |
 | S2-04 字体/字幕/动态布局 | todo | S2-01, S2-02 |
-| S2-05 受控计算驱动的参数动画 | todo | S2-01, S1-06 |
+| S2-05 受控计算驱动的参数动画 | verified（V1；真实成片未跑） | S2-01, S1-06 | A11；`parameters.py`、`Scene.function/parameters`、`tests/test_parameters.py`、D13 |
 | S2-06 内容绑定焦点相机 | verified（V1 + V2 真实帧对照；跟随/重新取景未实现） | S2-04, S2-05 | A10；`camera.py`、`motion.cameraFromPlan`、`tests/test_camera.py`、`tests/test_camera_render.py`、D12 |
 | S2-07 真实形变/共享对象/公式 | todo | S2-05, S2-06, S1-06 |
 | S2-08 稳定纸面/圈注/材质 | todo | S2-01, S2-04 |

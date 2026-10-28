@@ -402,6 +402,11 @@ class Scene(Contract):
     # v2: the shot recipe this scene is built from (see movelyth.recipes).  Empty
     # means "infer the first applicable recipe"; an unimplemented id is rejected.
     recipe: str = Field(default="", max_length=32)
+    # v2: a controlled parameter function and its bounded parameters (see
+    # movelyth.parameters).  The computed values are the only source for the drawn
+    # geometry, the series and the numbers shown on screen.
+    function: str = Field(default="", max_length=32)
+    parameters: dict[str, float] = Field(default_factory=dict)
 
     @field_validator("labels")
     @classmethod
@@ -409,6 +414,24 @@ class Scene(Contract):
         if any(not v.strip() or len(v) > 22 for v in values):
             raise ValueError("每个画面标签需为 1–22 字")
         return values
+
+    @field_validator("parameters")
+    @classmethod
+    def bounded_parameters(cls, values: dict[str, float]) -> dict[str, float]:
+        if len(values) > 6:
+            raise ValueError("parameters 最多 6 个")
+        for key, value in values.items():
+            if not __import__("re").fullmatch(r"[a-z][a-z0-9_]{0,15}", key):
+                raise ValueError("parameters 的键只能是小写标识符")
+            if not math.isfinite(float(value)) or abs(float(value)) > 1_000_000:
+                raise ValueError("parameters 的值必须是有限数")
+        return values
+
+    @model_validator(mode="after")
+    def function_needs_parameters(self):
+        if self.function and not self.parameters:
+            raise ValueError("声明了 function 就必须给 parameters")
+        return self
 
     @field_validator("claim_ids")
     @classmethod

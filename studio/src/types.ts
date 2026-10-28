@@ -139,6 +139,9 @@ export type Scene = {
   events_resolved?: ResolvedEvent[];
   camera_plan?: CameraKeyframe[];
   recipe?: string;
+  function?: string;
+  parameters?: Record<string, number>;
+  computed?: {function: string; numbers: number[]; [key: string]: unknown};
   schema_version?: number;
 };
 

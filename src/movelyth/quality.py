@@ -378,10 +378,15 @@ def validate_script(film, research, long_seconds: int, short_seconds: int) -> li
         if any(s.source_index >= len(research.sources) for s in cut.scenes):
             problems.append(f"{name} 有镜头的 source_index 引用了不存在的来源")
         problems.extend(validate_cut_dsl(cut, vertical=name == "short"))
+        from .parameters import ParameterError, validate_scene_parameters
         from .recipes import recipe_warnings, validate_scene_recipe
 
         for scene in cut.scenes:
             problems.extend(validate_scene_recipe(scene))
+            try:
+                problems.extend(validate_scene_parameters(scene))
+            except ParameterError as exc:
+                problems.append(f"镜头 {scene.id}：{exc}")
             recipe_notes.extend(recipe_warnings(scene))
     if problems:
         raise ScriptIssues(problems)

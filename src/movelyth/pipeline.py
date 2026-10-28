@@ -26,6 +26,7 @@ from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
 from .metrics import Metrics
 from .models import SCHEMA_VERSION, Cut, Film, Research, Review, TopicPlan
+from .parameters import catalog as parameters_catalog
 from .policy import (
     POLICY_VERSION,
     CheckResult,
@@ -337,6 +338,9 @@ RENDERER_CAPABILITIES = {
     "schema_version": SCHEMA_VERSION,
     "routes": {name: {"status": spec["status"], "description": spec["description"]}
                for name, spec in capability_table()["routes"].items()},
+    "parameter_functions": {name: {"purpose": spec["purpose"], "params": spec["params"],
+                                   "requires": spec["requires"]}
+                            for name, spec in parameters_catalog()["functions"].items()},
     "recipes": {name: {"purpose": spec["purpose"], "requires": spec["requires"],
                        "events": spec["events"], "limits": spec["limits"]}
                 for name, spec in recipes_catalog()["recipes"].items()},
