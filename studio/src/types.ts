@@ -96,6 +96,8 @@ export type ResolvedAction = {
   dy: number;
   scale: number;
   degrees: number;
+  morph_mode?: 'crossfade' | 'geometry';
+  target_points?: number[];
 };
 
 /** One real TTS word boundary inside a caption page, for karaoke highlighting. */

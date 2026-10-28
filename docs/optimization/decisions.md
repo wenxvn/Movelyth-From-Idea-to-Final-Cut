@@ -313,3 +313,19 @@
 - 否：只用响度与峰值判断混音（-14 LUFS 的混音可以完全没有声音）；
   用混音能量判断人声（音乐会把静音填满）。
 - 证据：`tests/test_mix.py`（16 项，含真实 `prepare_cut` 分轨落盘）。
+
+## D20 · 形变只在同拓扑时成立，对象身份跨镜可查（S2-07）
+
+- 问题：v1/v2 的 `morph` 只是淡入淡出；参考项目里的“morph 示例”常是圆角变化，不是任意几何形变。
+  共享对象在跨镜时没有身份约束，换色/改叫法不会被发现。
+- 选择：
+  1. `Action.morph_mode`（默认 `crossfade` 保留旧语义）+ `target_points`；`morph_plan()` 只在
+     shape 图层、顶点数相同、2–32 个顶点时才判为 `geometry`，否则给出具体拒绝理由。
+  2. `resolve_actions` 把 morph_mode/target_points 带进 `actions_resolved`；
+     渲染端 `morphPointsFor()` 做顶点线性插值（smoothstep），关键帧可 seek、可重复。
+  3. `continuity_report()` 按 `subject_id` 汇总跨镜出现：颜色、叫法、before/after 状态必须连贯，
+     不连贯写为脚本警告（不阻断，避免误伤合理重命名）。
+  4. `formula_correspondence()` 只统计符号保留，明确“不检查等价性”。
+- 否：实现通用 morph 库（Remotion 无内置；圆角变化不是几何形变）；让模型直接给目标坐标做任意形变
+  （无法保证不自交、不可审查）。
+- 证据：`tests/test_continuity.py`（12 项，含真实帧对照）。

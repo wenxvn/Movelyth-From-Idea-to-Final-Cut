@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import {AbsoluteFill, useVideoConfig} from 'remotion';
-import type {Layer, Scene} from './types';
+import type {Layer, ResolvedAction, Scene} from './types';
 import type {Theme} from './theme';
 import {accent, accentDeep} from './theme';
 import {isFullBleed, regions} from './layouts';
@@ -29,6 +29,18 @@ type RenderProps = {
   beat: number;
   beats: Beat[];
   showAnnotations: boolean;
+  morphPoints?: number[];
+};
+
+const morphPointsFor = (layer: Layer, actions: ResolvedAction[], progress: number): number[] | undefined => {
+  const morph = actions.find((action) => action.target === layer.id && action.kind === 'morph'
+    && action.morph_mode === 'geometry' && (action.target_points?.length || 0) === layer.points.length);
+  if (!morph || !morph.target_points) return undefined;
+  const span = Math.max(1e-6, morph.to - morph.from);
+  const k = Math.max(0, Math.min(1, (progress - morph.from) / span));
+  const eased = k * k * (3 - 2 * k);
+  return layer.points.map((value, index) =>
+    value + (morph.target_points![index] - value) * eased);
 };
 
 const renderers: Record<Layer['type'], (props: RenderProps) => React.ReactNode> = {
@@ -36,7 +48,8 @@ const renderers: Record<Layer['type'], (props: RenderProps) => React.ReactNode> 
     <TextLayer layer={layer} theme={theme} vertical={vertical} reveal={reveal} box={box} math={false}/>,
   math: ({layer, theme, vertical, reveal, box}) =>
     <TextLayer layer={layer} theme={theme} vertical={vertical} reveal={reveal} box={box} math/>,
-  shape: ({layer, theme, reveal}) => <ShapeLayer layer={layer} theme={theme} reveal={reveal}/>,
+  shape: ({layer, theme, reveal, morphPoints}) =>
+    <ShapeLayer layer={layer} theme={theme} reveal={reveal} morphPoints={morphPoints}/>,
   chart: ({layer, theme, vertical, reveal, box, beat, beats, scene, showAnnotations}) =>
     <ChartLayer layer={layer} theme={theme} vertical={vertical} reveal={reveal} box={box}
       beat={beat} beats={beats} scene={scene} showAnnotations={showAnnotations}/>,
@@ -105,6 +118,9 @@ export const SceneStage: React.FC<{
     }}>
       {scene.layers.map((layer, index) => {
         const motion = motionFor(layer, scene.actions_resolved || [], progress, index, theme.motion);
+        // Geometry morph: interpolate this layer's own vertices towards the action's
+        // target for the duration of the action, then hold the target.
+        const morphPoints = morphPointsFor(layer, scene.actions_resolved || [], progress);
         const isHero = activeHero ? layer.id === activeHero : false;
         // Compare layouts have two competing pictures; the beat decides which one
         // is the subject, and the other one steps back without disappearing.
@@ -130,7 +146,7 @@ export const SceneStage: React.FC<{
               : undefined,
           display: 'flex', alignItems: 'stretch', justifyContent: 'stretch',
         }}>
-          {render ? render({layer, scene, theme, vertical, time, progress,
+          {render ? render({layer, scene, theme, vertical, time, progress, morphPoints,
                             reveal: motion.reveal, layers, box, beat, beats, showAnnotations}) : null}
           {/* A hairline accent on highlighted *visual* layers, drawn outside the SVG
               so it reads as a selection in the composition.  A text layer gets the

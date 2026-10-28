@@ -290,6 +290,18 @@ class Action(Contract):
     dy: float = Field(default=0, ge=-1, le=1)
     scale: float = Field(default=1, ge=0.2, le=3)
     degrees: float = Field(default=0, ge=-360, le=360)
+    # v2: a real geometry morph.  ``target_points`` must have the same vertex count as
+    # the layer's own points (same topology); otherwise the action is refused instead of
+    # pretending to morph.  ``crossfade`` keeps the pre-v2 fade behaviour.
+    morph_mode: Literal["crossfade", "geometry"] = "crossfade"
+    target_points: list[float] = Field(default_factory=list, max_length=64)
+
+    @field_validator("target_points")
+    @classmethod
+    def finite_target_points(cls, values: list[float]) -> list[float]:
+        if values and len(values) % 2:
+            raise ValueError("target_points 需要成对的 x,y 坐标")
+        return _finite(values, 1000, "形变目标坐标必须是绝对值不超过 1000 的有限数")
 
     @field_validator("start", "end")
     @classmethod

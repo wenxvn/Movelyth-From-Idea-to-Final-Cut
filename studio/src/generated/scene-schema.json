@@ -45,6 +45,15 @@
           "title": "Kind",
           "type": "string"
         },
+        "morph_mode": {
+          "default": "crossfade",
+          "enum": [
+            "crossfade",
+            "geometry"
+          ],
+          "title": "Morph Mode",
+          "type": "string"
+        },
         "scale": {
           "default": 1,
           "maximum": 3,
@@ -62,6 +71,14 @@
           "pattern": "^[a-z][a-z0-9_]{0,23}$",
           "title": "Target",
           "type": "string"
+        },
+        "target_points": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 64,
+          "title": "Target Points",
+          "type": "array"
         }
       },
       "required": [

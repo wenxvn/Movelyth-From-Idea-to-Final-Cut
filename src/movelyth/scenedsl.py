@@ -275,7 +275,11 @@ def resolve_actions(scene: Scene, duration: float, boundaries: list[dict] | None
                          "from": round(start / max(1e-6, duration), 4),
                          "to": round(min(1.0, start / max(1e-6, duration) + fraction), 4),
                          "dx": action.dx, "dy": action.dy, "scale": action.scale,
-                         "degrees": action.degrees})
+                         "degrees": action.degrees,
+                         # A geometry morph is only emitted when the topology matches;
+                         # otherwise the renderer keeps the crossfade behaviour.
+                         "morph_mode": action.morph_mode,
+                         "target_points": list(action.target_points)})
     return resolved, mode
 
 

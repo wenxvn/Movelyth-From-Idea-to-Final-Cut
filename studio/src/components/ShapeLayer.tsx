@@ -11,10 +11,13 @@ const pairs = (points: number[]): [number, number][] => {
   return result.length ? result : [[500, 320]];
 };
 
-export const ShapeLayer: React.FC<{layer: Layer; theme: Theme; reveal: number}> =
-({layer, theme, reveal}) => {
+export const ShapeLayer: React.FC<{layer: Layer; theme: Theme; reveal: number;
+  morphPoints?: number[]}> =
+({layer, theme, reveal, morphPoints}) => {
   const color = accent[layer.color] || theme.text;
-  const vertices = pairs(layer.points);
+  // A geometry morph replaces the vertices for the duration of the action; the layer's
+  // own points remain the start state, so a repeated frame is always identical.
+  const vertices = pairs(morphPoints && morphPoints.length ? morphPoints : layer.points);
   const [x1, y1] = vertices[0];
   const [x2, y2] = vertices[1] || vertices[0];
   const common = {stroke: color, strokeWidth: 5, fill: 'none', pathLength: 1, strokeDasharray: 1,
