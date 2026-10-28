@@ -114,3 +114,32 @@
 - 否：让模型在 `create` 前多调一次做路由（无端点时不可用、且把最贵的判断交给最不可控的部分）；
   把 needs_extension 直接当 supported（能力声明失真）。
 - 证据：`tests/test_capability_route.py`（18 项，含 M19）。
+
+## D8 · DSL v2：事件绑定语义，不绑定秒数（S1-06）
+
+- 问题：V1/V2 的动作只能写 `start`/`end`/比例/`narration:片段`，重复短语只能命中第一次；
+  同一对象跨镜没有身份，相机/声音/修复各自建时间轴。
+- 选择：
+  1. `schema_version=2`；`Layer.subject_id` 与 `layer.id` 分离，状态必须挂在 subject 上。
+  2. `Scene.events`（≤8，id 唯一）+ `EventAnchor`：`narration` 支持 `occurrence` 与 `char_start/char_end`。
+     `resolve_events()` 解析成绝对秒 + 比例 + `timing`；找不到第 N 次出现直接报错。
+  3. 事件越界、目标不存在、同目标倒序都报错；`validate_cut_timeline` 复核。
+  4. `clock.py` 统一定义秒→帧→样本，`scene_spans()` 给每镜半开样本区间，相邻首尾相接。
+  5. 迁移只加版本号；v1 下出现 v2 字段、或版本高于实现，都拒绝。
+- 否：把事件存成绝对秒（换语速就错位）；用 `layer.id` 当对象身份（跨镜复用即冲突）。
+- 证据：`tests/test_semantic_events.py`、`docs/scene-dsl.md` §7、`pytest -m slow` 真实渲染。
+
+## D9 · 预算前置与“未知费用不是 0”（S1-07）
+
+- 问题：旧 metrics 只记阶段耗时；没有调用上限，失败调用不留账，费用缺失会被当成 0。
+- 选择：
+  1. `[budget]` 分区：model_calls / tokens / tts / render_minutes / wall_seconds，任务开始前冻结；
+     超限在**下一阶段开始前**抛 `BudgetExceeded`，不降低事实与关键检查标准。
+  2. 每阶段写 `runs.jsonl`（RunRecord）并更新 `budget.json`；`calls`/tokens 用 provider 的累计值差分，
+     多调用阶段（如 long+short 两次编导）也能算清；失败阶段同样记录 usage 与 error_type。
+  3. `Cost.estimate` / `Cost.actual` / `currency` / `price_version` 分开；无价格表时 actual 为 null。
+  4. `usage` 里未测到的字段是 null（例如 mock 无 token），`counters()` 只累加已知项。
+  5. `validate_settings()` 拒绝未知分区与未知键，避免 `long_second` 拼错后静默用默认值。
+- 初始上限：40 次模型调用、1M 输入/400k 输出 token、12000 字 TTS、30 分钟渲染、2 小时墙钟；
+  这些是“先冻结再跑”的初值，不是平台配额。
+- 证据：`tests/test_budget.py`（14 项，含 M14/M15 部分）。

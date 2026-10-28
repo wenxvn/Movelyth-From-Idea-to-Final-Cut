@@ -48,8 +48,8 @@
 | S1-03 组成表与 revision 完整性 | verified（V1；真实媒体验收在 S2-09） | S1-02 | A3；`pipeline.py`（`build_composition`/`manifest_report`）、`tests/test_composition.py`、D5 | 交付包绑定当前 revision 与决定；S2-09 补编码后核对 |
 | S1-04 来源前移与主张覆盖 | verified（V1；真实公网抓取未跑） | S1-02 | A4；`sources.py`（`verify_claims`/`locate_excerpt`）、`policy.source_checks`/`claim_usage_checks`、`evidence` 阶段、`tests/test_claim_coverage.py`、D6 | 真实题目抓取与 PDF 留 S3-06 |
 | S1-05 brief/题材/能力路由 | verified（V1；真实模型路由未跑） | S1-04 | A5；`capability.py`、`brief.py`、`models.ProductionBrief`、`brief` 阶段、`tests/test_capability_route.py`、D7 | 真实题目路由统计留 S4-02 |
-| S1-06 版本化契约/对象身份/语义事件 | todo | S1-03, S1-05 | — | DSL v2 + 事件 |
-| S1-07 预算/运行观测/恢复 | todo | S1-03 | — | RunRecord + 预算门 |
+| S1-06 版本化契约/对象身份/语义事件 | verified（V1 + V2 smoke） | S1-03, S1-05 | A6；`models.py`（v2 + migrate）、`scenedsl.resolve_events`、`clock.py`、`studio/src/types.ts`、`tests/test_semantic_events.py`、D8 | 事件驱动相机/声音在 S2-06/03 消费 |
+| S1-07 预算/运行观测/恢复 | verified（V1） | S1-03 | A7；`budget.py`、`runs.jsonl`、`budget.json`、`validate_settings`、`tests/test_budget.py`、D9 | 真实模型用量与费用留 S2-10/S4-02 |
 
 ### S2 有解释力的完整成片（C）
 

@@ -91,7 +91,9 @@ class CodexAgents:
                 raise RuntimeError(f"{role} 超时；已终止本次子进程，日志：{directory}") from exc
         if proc.returncode or not output.exists():
             raise RuntimeError(f"{role} 未生成有效结果；查看 {directory / 'events.log'}")
+        self.call_count = getattr(self, "call_count", 0) + 1
         self.last_usage = self._usage(directory / "events.log")
+        self.usage_total = _add_usage(getattr(self, "usage_total", {}), self.last_usage)
         return contract.model_validate(read_json(output))
 
     @staticmethod
@@ -110,6 +112,15 @@ class CodexAgents:
         return usage
 
 
+def _add_usage(total: dict, usage: dict) -> dict:
+    """Accumulate token usage across calls; a missing field stays missing."""
+    result = dict(total or {})
+    for key, value in (usage or {}).items():
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            result[key] = result.get(key, 0) + value
+    return result
+
+
 class MockProvider:
     """Deterministic, offline provider used by tests and previews.
 
@@ -124,6 +135,7 @@ class MockProvider:
         self.responses = responses
         self.calls: list[str] = []
         self.last_usage: dict = {}
+        self.usage_total: dict = {}
 
     @classmethod
     def from_directory(cls, directory: Path) -> "MockProvider":
@@ -135,6 +147,7 @@ class MockProvider:
     def call(self, role: str, context: dict, contract: type[BaseModel], directory: Path,
              images: list[Path] | None = None, sanitize=None):
         self.calls.append(role)
+        self.call_count = getattr(self, "call_count", 0) + 1
         directory.mkdir(parents=True, exist_ok=True)
         atomic_json(directory / "schema.json", strict_schema(contract))
         (directory / "prompt.txt").write_text(

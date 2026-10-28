@@ -61,6 +61,20 @@ model = ""
 # inline_schema = true
 # 连通性检查：movelyth doctor 会探测；也可单独运行 movelyth probe
 
+[budget]
+# 一次任务的上限，用尽即停止后续阶段（不会降低事实与关键检查标准）。
+# 费用：未配置价格表时 estimated_cost/actual 都为 null，不按 0 记。
+model_calls = 40
+input_tokens = 1000000
+output_tokens = 400000
+tts_characters = 12000
+tts_seconds = 600
+render_minutes = 30
+wall_seconds = 7200
+currency = "CNY"
+# 价格版本：改动价格表时写清版本，便于解释历史账目。
+price_version = ""
+
 [paths]
 workspace = "workspace"
 delivery = "delivery"

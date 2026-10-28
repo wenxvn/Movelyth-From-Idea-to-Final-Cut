@@ -17,6 +17,7 @@ from .assets import credit_lines, mark_used, stage_for_render
 from .assets import resolve as resolve_library
 from .audioqc import audio_qc
 from .brief import build_production_brief, topic_violations
+from .budget import BudgetExceeded, BudgetLedger, Cost, RunRecord, Usage, provider_snapshot, usage_since
 from .capability import capability_table, classify_route
 from .craft import composition_report, narrative_report, rhythm_report, sound_design_report
 from .ledger import Ledger
@@ -58,12 +59,48 @@ class VisualReviewError(RuntimeError):
     """Recoverable editorial feedback, distinct from execution/tool failures."""
 
 
+ALLOWED_SETTINGS = {
+    "studio": {"name", "tagline", "language", "long_seconds", "short_seconds", "long_min_seconds",
+               "long_max_seconds", "short_min_seconds", "short_max_seconds", "fps",
+               "render_concurrency", "voice", "voice_rate", "voice_pitch", "voice_volume", "style",
+               "max_retries", "director_split", "speech_replace", "key_terms", "axis_reading_policy",
+               "downgrade_axis_readings", "asr_enabled", "asr_model"},
+    "agents": {"provider", "timeout_seconds", "model", "mock_dir", "base_url", "api_key_env",
+               "structured_output", "vision", "max_tokens", "temperature", "inline_schema", "thinking"},
+    "paths": {"workspace", "delivery"},
+    "budget": {"model_calls", "input_tokens", "output_tokens", "tts_characters", "tts_seconds",
+               "render_minutes", "wall_seconds", "currency", "price_version"},
+}
+
+
+def validate_settings(config: dict) -> dict:
+    """Reject unknown sections/keys instead of silently ignoring a typo.
+
+    A misspelled ``long_second`` used to be swallowed by the raw TOML dict and the
+    default silently applied, which is how a task ends up 180 s when the user asked
+    for 90 s.
+    """
+    unknown_sections = sorted(set(config) - set(ALLOWED_SETTINGS))
+    if unknown_sections:
+        raise ValueError("未知配置分区：" + "、".join(unknown_sections)
+                         + "；允许：" + "、".join(sorted(ALLOWED_SETTINGS)))
+    for section, allowed in ALLOWED_SETTINGS.items():
+        values = config.get(section) or {}
+        if not isinstance(values, dict):
+            raise ValueError(f"[{section}] 必须是键值表")
+        unknown = sorted(set(values) - allowed)
+        if unknown:
+            raise ValueError(f"未知配置项：{', '.join(f'{section}.{name}' for name in unknown)}"
+                             "；请检查拼写（未知项不会被静默忽略）")
+    return config
+
+
 def settings(root: Path) -> dict:
     override = os.getenv("MOVELYTH_CONFIG")
     path = Path(override) if override else root / "movelyth.toml"
     if not path.is_file():
         raise ValueError(f"缺少配置文件：{path}")
-    return tomllib.loads(path.read_text(encoding="utf-8"))
+    return validate_settings(tomllib.loads(path.read_text(encoding="utf-8")))
 
 
 AXIS_POLICIES = {"deterministic", "strict"}
@@ -367,6 +404,7 @@ class Studio:
         job = self.workspace / f"VID-{episode['id']:06d}"
         marker = job / "stages" / f"{name}.json"
         digest = fingerprint({"version": __version__, "inputs": inputs})
+        budget = BudgetLedger.load(job, self.config)
         if marker.exists():
             try:
                 cached = read_json(marker)
@@ -381,28 +419,75 @@ class Studio:
                                       {"approved_input_hash": cached["input_hash"], "current_input_hash": digest})
                 self.metrics.record(episode["id"], name, "cached", seconds=0.0, cache=True,
                                     outputs=[Path(p) for p in cached["outputs"]])
+                stamp = now()
+                budget.record(RunRecord(stage=name, status="cached", started_at=stamp, ended_at=stamp,
+                                        seconds=0.0, input_hash=digest, cache=True,
+                                        detail="命中阶段缓存，未产生调用与费用"))
+                budget.save()
                 print(f"[缓存] {name}", flush=True)
                 return cached["data"]
+        if budget.state.exhausted():
+            raise BudgetExceeded(budget.state.blocked_reason
+                                 or f"预算已用尽，停止在 {name} 之前：" + str(budget.state.used))
         self.ledger.status(episode["id"], name)
         self.ledger.event(episode["id"], name, "running", {"input_hash": digest})
         print(f"[开始] {name}", flush=True)
         started = self.metrics.timer()
+        started_at = now()
+        # Do not create a provider just to snapshot usage: a stage that never calls a
+        # model (a local step or a test action) must not require Codex to be installed.
+        provider = self.provider_override or getattr(self, "_provider_cache", None)
+        before = provider_snapshot(provider) if provider else {"calls": 0, "usage": {}}
         try:
             data, outputs = action()
             if not outputs or any(not p.is_file() for p in outputs):
                 raise RuntimeError(f"{name} 缺少阶段产物")
             atomic_json(marker, {"input_hash": digest, "outputs": {str(p): file_hash(p) for p in outputs},
                                  "data": data, "finished_at": now()})
+            elapsed = self.metrics.timer() - started
+            usage = self._stage_usage(name, data, provider, before, elapsed)
+            budget.state.settle(usage.counters())
+            budget.record(RunRecord(stage=name, status="passed", started_at=started_at, ended_at=now(),
+                                    seconds=round(elapsed, 2), input_hash=digest,
+                                    calls=usage.model_calls, usage=usage,
+                                    cost=Cost(currency=budget.state.currency,
+                                              price_version=budget.state.price_version,
+                                              note="未配置价格表：实际金额为 null")))
+            budget.save()
             self.ledger.event(episode["id"], name, "passed", {"outputs": len(outputs)})
-            self.metrics.record(episode["id"], name, "passed", seconds=self.metrics.timer() - started,
-                                cache=False, outputs=outputs)
+            self.metrics.record(episode["id"], name, "passed", seconds=elapsed, cache=False, outputs=outputs)
             print(f"[完成] {name}", flush=True)
             return data
         except BaseException as exc:
+            elapsed = self.metrics.timer() - started
+            usage = usage_since(provider, before) if provider else Usage()
+            budget.state.settle(usage.counters())
+            budget.record(RunRecord(stage=name, status="failed", started_at=started_at, ended_at=now(),
+                                    seconds=round(elapsed, 2), input_hash=digest,
+                                    calls=usage.model_calls, error_type=type(exc).__name__,
+                                    detail=str(exc)[:300], usage=usage,
+                                    cost=Cost(currency=budget.state.currency,
+                                              price_version=budget.state.price_version)))
+            budget.save()
             self.ledger.event(episode["id"], name, "failed", {"type": type(exc).__name__, "message": str(exc)})
-            self.metrics.record(episode["id"], name, "failed", seconds=self.metrics.timer() - started,
+            self.metrics.record(episode["id"], name, "failed", seconds=elapsed,
                                 cache=False, detail=f"{type(exc).__name__}: {exc}")
             raise
+
+    def _stage_usage(self, name: str, data, provider, before: dict, elapsed: float) -> Usage:
+        """Stage-specific usage on top of the provider tokens (TTS, render time)."""
+        usage = usage_since(provider, before) if provider else Usage()
+        if name == "sound" and isinstance(data, dict):
+            characters, seconds = 0, 0.0
+            for cut in ("long", "short"):
+                timeline = data.get(cut) or {}
+                for scene in timeline.get("scenes") or []:
+                    characters += len(scene.get("spoken_narration") or scene.get("narration") or "")
+                seconds += float(timeline.get("seconds") or 0)
+            return usage.model_copy(update={"tts_characters": characters, "tts_seconds": round(seconds, 2)})
+        if name == "render":
+            return usage.model_copy(update={"render_seconds": round(elapsed, 2)})
+        return usage
 
     def produce(self, episode_id: int, *, plan_only: bool = False, preview_only: bool = False,
                 import_film: Path | None = None, import_research: Path | None = None,

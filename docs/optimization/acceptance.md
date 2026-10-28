@@ -87,3 +87,38 @@
 | 能力表进入提示词 | `RENDERER_CAPABILITIES.routes` | 规划/编导提示词能看到各 route 的真实 status | V1 |
 
 **未验证**：真实模型对 `production_brief` 的采纳（无端点）；`needs_extension` 题材的真实成片观感。
+
+## A6 · S1-06 版本化契约、对象身份与语义事件（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 300 passed | V1 |
+| 真实渲染 | `pytest -q -m slow`（Chrome + Remotion 4.0.538） | 1 passed：v1 风格 props 仍能渲染出真实帧 | V2 |
+| TypeScript | `npm --prefix studio run typecheck` | 通过（types.ts 已加 v2 字段） | V1 |
+| 契约同步 | `write_renderer_contracts` + `git diff` | 已提交 layout.json（schema_version 2、event_kinds）与 scene-schema.json | V1 |
+| 重复短语 | 旁白“3 与 3 的平均还是 3”，事件取第 1/2 次 | 解析到不同时间；取第 3 次报错“找不到第 3 次” | V1 |
+| 字符区间 | `char_start` 锚点 | 解析成功且落在镜头内 | V1 |
+| 越界/倒序/目标 | 事件越界、同目标倒序、目标不存在、id 重复 | 各自报错，不静默修正 | V1 |
+| 身份 | 同 `subject_id` 的卡片与点 | 两个 layer id 不同、subject 相同；只写状态不写 subject 被拒 | V1 |
+| 迁移 | v1 场景、v1 + v2 字段、未来版本 | v1 只补版本号；v1+v2 字段拒绝；v>2 拒绝 | V1 |
+| 时钟 | 5 镜 37/45/52/40/61 帧 | 样本区间首尾相接；总样本 = 各镜之和 | V1 |
+
+**未验证**：v2 事件在真实成片中的驱动效果（相机/声音尚未消费事件，S2-03/06）；真实模型的 events 采纳率。
+
+## A7 · S1-07 预算、运行观测与恢复（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 300 passed | V1 |
+| 运行记录 | 离线 pipeline | `runs.jsonl` 每阶段一行：stage/status/started_at/ended_at/seconds/input_hash/calls/cache/usage/cost | V1 |
+| TTS 用量 | sound 阶段 | `tts_characters`、`tts_seconds` 与旁白文本/音频时长一致（>0） | V1 |
+| 渲染耗时 | render 阶段 | `render_seconds` 有值 | V1 |
+| 费用未知 | 默认配置 | `cost.actual = null`、`cost.estimate = null`、`currency = "CNY"`、`price_version = ""` | V1 |
+| 预算耗尽 | `model_calls = 0` | 首个阶段前抛 `BudgetExceeded`；`provider.calls == []`；无 research.json；ledger 记 failed | V1（M14） |
+| 预留/结算 | `BudgetState` 单测 | 二次 reserve 超额即报错；settle 清空预留 | V1 |
+| 失败仍记账 | 注入阶段异常 | RunRecord `failed` + `error_type` + `detail` | V1 |
+| 缓存不花费 | 同输入二次 stage | 第二条记录 `cached`、calls=0、动作只执行一次 | V1 |
+| 恢复 | 重新 `BudgetLedger.load` | used 与落盘一致，remaining 正确 | V1（M15 部分） |
+| 配置严格性 | 拼错 `studio.long_second` | `ValueError` 指明键名，不再静默用默认值 | V1 |
+
+**未验证**：真实模型 token 用量与真实费用（无端点/无价格表）；wall_seconds 与 render_minutes 的硬超时未在真实渲染上触发。

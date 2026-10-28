@@ -36,6 +36,14 @@ IMAGE_SUFFIX_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image
                      ".webp": "image/webp", ".gif": "image/gif"}
 
 
+def _add_usage(total: dict, usage: dict) -> dict:
+    result = dict(total or {})
+    for key, value in (usage or {}).items():
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            result[key] = result.get(key, 0) + value
+    return result
+
+
 class ProviderError(RuntimeError):
     """A call that failed in a way the caller must not paper over."""
 
@@ -309,7 +317,9 @@ class OpenAICompatibleAgents:
                     raise ProviderError(f"{role} 调用失败：{last_error}")
                 try:
                     text, finish, usage = self._content(payload)
+                    self.call_count = getattr(self, "call_count", 0) + 1
                     self.last_usage = usage
+                    self.usage_total = _add_usage(getattr(self, "usage_total", {}), usage)
                     record["usage"] = usage
                     record["finish_reason"] = finish
                     if finish == "length":
