@@ -330,7 +330,7 @@
 
 | 项 | 命令 / 输入 | 结果 | 层级 |
 | --- | --- | --- | --- |
-| 离线测试 | `pytest -q -m "not slow and not live"` | 468 passed | V1 |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 494 passed | V1 |
 | 五种笔触 | circle/underline/highlight/bracket/box | 每种 ≥24 个点，坐标在主体框 ±60px 内 | V1 |
 | 同 seed | 同输入两次 | 几何完全一致；换 seed 不同 | V1 |
 | 时间无关 | 4 个不同 progress | 路径几何不变，只有可见比例变化 | V1 |

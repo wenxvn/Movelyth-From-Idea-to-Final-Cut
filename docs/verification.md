@@ -241,3 +241,25 @@ mock provider 契约、真实渲染静帧互不相同、预览不入交付、局
   短版 4 镜 266 字；横版 209.9 s / 竖版 62.8 s，11 项技术检查与抽帧审片通过；
   首轮审片曾拒绝（矩阵排版与"两列"讲解不符），修正后重渲染复核通过。
 - 验证边界：未执行 ASR、未人工实听、未完整观看；未发布，无播放数据。
+
+
+## 2026-10-28 · 第二版提纲：验证分层与当前数字
+
+| 层级 | 含义 | 本轮覆盖 |
+| --- | --- | --- |
+| V1 离线逻辑 | 契约、策略、状态、故障注入、缓存 | 494 项 `pytest -m "not slow and not live"`；`ruff` 通过；`tsc --noEmit` 通过 |
+| V2 小型真实媒体 | 字体、编码、动态帧、音频与同步 | 真实 Remotion 静帧/草片/相机与形变对照/圈注确定性（`pytest -m slow`）；ffprobe 探针 |
+| V3 导入脚本制作 | 固定 film/research → 真实渲染与检查 | 未在本轮重跑（历史结果见 v1/v2/v3-evaluation） |
+| V4 真实题目制作 | 不导入脚本的标题驱动链路 | **阻塞**：本机无模型端点 |
+| V5 实际看听 | 完整观看、实听、内容问题与时间点 | **未做**：需要人耳与人眼 |
+
+```text
+pytest -q -m "not slow and not live"   → 494 passed, 5 deselected
+pytest -q -m slow                      → 5 passed（真实 Remotion 渲染：图层静帧、相机、形变、圈注确定性×2）
+ruff check src tests                   → All checks passed
+npm --prefix studio run typecheck      → 通过
+movelyth doctor / capabilities         → 可运行，输出可解析 JSON
+```
+
+**不能由本轮结果推出的结论**：任何“更自然/更易懂”的主观判断、真实模型下的采纳率、
+平台数据表现。这些需要 V4/V5 条件，见 `docs/optimization/capabilities.md` §4。

@@ -41,6 +41,10 @@ jobs:
           git diff --exit-code studio/src/generated
       - name: TypeScript typecheck
         run: npm --prefix studio run typecheck
+      - name: Real renderer checks (V2: stills, camera, morph, determinism)
+        # Chrome is present on the Windows runner; the tests skip themselves when it
+        # is not, so a missing browser cannot turn into a false pass or a false failure.
+        run: python -m pytest -q -m slow
       - name: CLI smoke test and doctor report
         # doctor exits non-zero when generation is not configured (no model key in CI);
         # the report itself must still be produced and parseable.

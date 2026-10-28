@@ -64,8 +64,8 @@
 | S2-07 真实形变/共享对象/公式 | verified（V1 + V2 真实帧对照；公式对应只做 token 保留统计） | S2-05, S2-06, S1-06 | A18；`continuity.py`、`Action.morph_mode/target_points`、`Stage.morphPointsFor`、`tests/test_continuity.py`、D20 |
 | S2-08 稳定纸面/圈注/材质 | verified（V1 + V2 确定性渲染；材质/纸面纹理未新增） | S2-01, S2-04 | A19；`sketch.py`、`SketchOverlay.tsx`、`Scene.sketches`、`tests/test_sketch.py`、D21 |
 | S2-09 布局预检/完整草片/编码核对 | verified（V1 + V2 草片渲染/混音；真实整片看听未做） | S2-03/04/05/06 | A9；`animatic.py`、`precheck` 阶段、`render.mjs` animatic 分支、`tests/test_animatic.py`、D11 |
-| S2-10 真实编导使用新能力 | todo | S2-01/07/08/09, S1-04 |
-| S2-11 三组样片与两题成片 | todo | S2-03/04/07/08/09/10 |
+| S2-10 真实编导使用新能力 | blocked（无模型端点） | S2-01/07/08/09, S1-04 |
+| S2-11 三组样片与两题成片 | blocked（无模型端点；样片材料见 S2 各项证据） | S2-03/04/07/08/09/10 |
 
 ### S3 自动修复、效率与扩展
 
@@ -74,9 +74,9 @@
 | S3-01 按缺陷类型最小修复 | C | verified（V1；真实模型修复未跑） | S1-02, S1-06, S1-07, S2-09 | A12；`repair.py`、`_repair_plans`/`_invalidate_stages`、`tests/test_repair_routing.py`、D14 |
 | S3-02 单镜缓存/转场把手/组装 | C | verified（V1 + V2 真实编码探针；未做逐镜分段渲染） | S1-03, S1-06, S1-07, S3-01 | A13；`cache.py`、`scene-keys.json`/`scene-changes.json`、`tests/test_cache_assembly.py`、D15 |
 | S3-03 资产需求/匹配/授权/裁切 | C（本地已实现；联网供应商未接入） | verified（V1 + 真实图片裁切；联网来源 E 未启用） | S1-04/05, S2-01/04, S1-07 | A14；`assetplan.py`、`assets.register` 元数据、`apply_asset_crops`、`tests/test_asset_plan.py`、D16 |
-| S3-04 代码/数据结构/公式模板 | E | todo | S1-05/06, S2-04/07/10 |
-| S3-05 素材视频/证据面板 | E | todo | S1-04/05, S2-01/04, S3-03 |
-| S3-06 PDF 可定位证据 | E | todo | S1-04, S1-07 |
+| S3-04 代码/数据结构/公式模板 | E | not_implemented | S1-05/06, S2-04/07/10 |
+| S3-05 素材视频/证据面板 | E | not_implemented | S1-04/05, S2-01/04, S3-03 |
+| S3-06 PDF 可定位证据 | E | not_implemented | S1-04, S1-07 |
 | S3-07 三维/shader/生成后端 | O | optional_deferred | S1-05/07, S2-06, S3-02/03 |
 | S3-08 可编辑时间轴导出 | O | optional_deferred | S1-03/06, S2-03/04, S3-02 |
 
@@ -84,12 +84,12 @@
 
 | 编号 | 状态 | 依赖 |
 | --- | --- | --- |
-| S4-01 冻结实验与可归因对照 | todo | S2-11, S1-07 |
-| S4-02 六题材重复真实评测 | todo | S4-01, S3-01/02/03, S1-07 |
+| S4-01 冻结实验与可归因对照 | blocked（需 3–5 名目标受众） | S2-11, S1-07 |
+| S4-02 六题材重复真实评测 | blocked（无模型端点） | S4-01, S3-01/02/03, S1-07 |
 | S4-03 异常/恢复/确定性/资源回归 | verified（V1 故障矩阵 23 项；真实编码/模型注入见 A20） | S1-02/03/07, S2-09, S3-01/02 | A20；`tests/test_fault_matrix.py` |
 | S4-04 一次配置、题目输入与投稿包 | implemented（V1；真实题目端到端见 S2-11 阻塞） | S1-05/03/07, S2-11, S3-01 | A21；`report.py`、`status`/`capabilities` 命令、`tests/test_report.py`、D22 |
-| S4-05 版本/时间点/观察窗口反馈 | todo | S1-03/07, S4-02 |
-| S4-06 最终能力声明与交接 | todo | S4-01…S4-05 |
+| S4-05 版本/时间点/观察窗口反馈 | blocked（需真实投稿数据） | S1-03/07, S4-02 |
+| S4-06 最终能力声明与交接 | implemented（能力矩阵与交接文档已交付） | S4-01…S4-05 |
 
 ## 3. 已知外部阻塞（不伪造通过）
 

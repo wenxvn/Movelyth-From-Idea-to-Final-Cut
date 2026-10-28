@@ -139,9 +139,6 @@ def test_formula_tokens_and_correspondence():
 
 # ----------------------------------------------------------------- real frames
 
-pytestmark_slow = pytest.mark.slow
-
-
 def _available() -> bool:
     return (bool(shutil.which("node")) and chrome() is not None
             and (ROOT / "studio/node_modules/@remotion/renderer/package.json").is_file())
@@ -183,6 +180,7 @@ def _render(tmp_path: Path, name: str, mode: str) -> Path:
     return Path(json.loads((tmp_path / f"{name}.json").read_text(encoding="utf-8"))["long"]["stills"][0])
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not _available(), reason="需要 Node 与已安装的 Remotion 渲染器")
 def test_a_geometry_morph_changes_the_rendered_shape(tmp_path):
     plain = np.asarray(Image.open(_render(tmp_path, "crossfade", "crossfade")).convert("L"), dtype=float)

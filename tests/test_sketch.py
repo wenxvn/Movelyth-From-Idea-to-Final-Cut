@@ -182,6 +182,7 @@ def _render(tmp_path: Path, name: str, *, seed: int = 7) -> Path:
     return Path(json.loads((tmp_path / f"{name}.json").read_text(encoding="utf-8"))["long"]["stills"][0])
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not _available(), reason="需要 Node 与已安装的 Remotion 渲染器")
 def test_the_same_frame_renders_identically_twice(tmp_path):
     first = _render(tmp_path, "run-a")
@@ -189,6 +190,7 @@ def test_the_same_frame_renders_identically_twice(tmp_path):
     assert first.read_bytes() == second.read_bytes(), "同一帧两次渲染必须逐字节一致"
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not _available(), reason="需要 Node 与已安装的 Remotion 渲染器")
 def test_a_different_seed_draws_a_different_stroke(tmp_path):
     seven = np.asarray(Image.open(_render(tmp_path, "seed-7", seed=7)).convert("L"), dtype=float)
