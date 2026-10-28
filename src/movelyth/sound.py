@@ -499,9 +499,29 @@ def design_sound_events(scenes: list[dict], *, fps: int, scene_starts: list[floa
     return kept
 
 
+def soundtrack_stems(voice_track: np.ndarray, scene_starts: list[float], style: str = "tech",
+                     *, cues: list[dict] | None = None, scene_seconds: list[float] | None = None,
+                     sections: list[dict] | None = None) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """The mix plus every stem it was built from, so the mix can be audited later.
+
+    Stems keep the dry voice and the processed voice separately: a missing voice must
+    be provable from the voice stem, not inferred from a mix where music could hide it.
+    """
+    mix, stems = _soundtrack_impl(voice_track, scene_starts, style, cues=cues,
+                                  scene_seconds=scene_seconds, sections=sections)
+    return mix, stems
+
+
 def soundtrack(voice_track: np.ndarray, scene_starts: list[float], style: str = "tech",
                   *, cues: list[dict] | None = None, scene_seconds: list[float] | None = None,
                   sections: list[dict] | None = None) -> np.ndarray:
+    return _soundtrack_impl(voice_track, scene_starts, style, cues=cues,
+                            scene_seconds=scene_seconds, sections=sections)[0]
+
+
+def _soundtrack_impl(voice_track: np.ndarray, scene_starts: list[float], style: str = "tech",
+                     *, cues: list[dict] | None = None, scene_seconds: list[float] | None = None,
+                     sections: list[dict] | None = None) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     size = len(voice_track)
     music, arp_left, arp_right = _music_bed_v3(size, style, sections)
     # Bed level relative to the voice.  V3's adaptive arrangement is denser than
@@ -549,4 +569,13 @@ def soundtrack(voice_track: np.ndarray, scene_starts: list[float], style: str = 
     peak = float(np.max(np.abs(stereo))) if stereo.size else 0.0
     if peak > 0.95:
         stereo *= 0.95 / peak
-    return stereo
+    stems = {
+        "voice_dry": np.asarray(voice_track, dtype=np.float32),
+        "voice": voice.astype(np.float32),
+        "music": bed.astype(np.float32),
+        "arp": (arp[0] + arp[1]).astype(np.float32) * 0.5,
+        "sfx": (sfx_left + sfx_right).astype(np.float32) * 0.5,
+        "room": room.astype(np.float32),
+        "duck": duck.astype(np.float32),
+    }
+    return stereo, stems

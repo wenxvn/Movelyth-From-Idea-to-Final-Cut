@@ -43,6 +43,7 @@ from .policy import (
     claim_usage_checks,
     decide,
     layout_checks,
+    mix_checks,
     review_checks,
     scene_ticks,
     source_checks,
@@ -1166,10 +1167,14 @@ class Studio:
                                                config=config)
                 reports[name]["asr_checked"] = audio_reports[name]["asr"]["status"] == "completed"
                 reports[name]["animatic"] = renders[name].get("animatic")
+                reports[name]["mix"] = timelines[name].get("mix_report") or {}
                 assembly = assembly_report(renders[name], timelines[name])
                 if not assembly["passed"]:
                     raise RuntimeError(f"{name} 组装检查未通过：" + "；".join(assembly["problems"]))
                 reports[name]["assembly"] = assembly
+                stem_report = timelines[name].get("mix_report") or {}
+                if not stem_report.get("passed", True):
+                    raise RuntimeError(f"{name} 混音检查未通过：" + "；".join(stem_report.get("problems", [])))
                 reports[name]["assembly_encoded"] = verify_assembly(
                     video, expected_frames=renders[name]["frames"], fps=config["fps"],
                     scenes=timelines[name]["scenes"], probe=probe_media)
@@ -1203,6 +1208,7 @@ class Studio:
             for name in ["long", "short"]:
                 checks.extend(technical_checks(reports[name], cut=name))
                 checks.extend(audio_checks(audio_reports[name], cut=name))
+                checks.extend(mix_checks(timelines[name].get("mix_report") or {}, cut=name))
                 checks.extend(layout_checks(timelines[name], cut=name))
             checks.extend(source_checks(coverage))
             checks.extend(claim_usage_checks(film, coverage))

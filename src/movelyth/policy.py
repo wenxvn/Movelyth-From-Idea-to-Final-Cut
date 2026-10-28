@@ -494,6 +494,47 @@ def claim_usage_checks(film: dict, coverage: list[dict]) -> list[CheckResult]:
     return results
 
 
+def mix_checks(report: dict, *, cut: str) -> list[CheckResult]:
+    """Voice presence and stem balance, measured on stems before encoding."""
+    if not report:
+        return [CheckResult(check_id=f"audio.{cut}.mix", source="audio", status="unknown",
+                            severity="minor", required=False,
+                            observation="没有混音报告（未生成 stems）", location={"cut": cut})]
+    results = []
+    voice = report.get("voice") or {}
+    results.append(CheckResult(
+        check_id=f"audio.{cut}.voice-stem", source="audio",
+        status="pass" if voice.get("present") else "fail",
+        severity="critical", required=True, repairable=True,
+        observation="" if voice.get("present") else
+        f"人声轨缺失或几乎全静音（{voice.get('reason') or voice.get('audible_share')}）",
+        location={"cut": cut}, evidence={"voice": voice}))
+    balance = report.get("balance") or {}
+    results.append(CheckResult(
+        check_id=f"audio.{cut}.balance", source="audio",
+        status="pass" if balance.get("ok", True) else "fail",
+        severity="major", required=True, repairable=True,
+        observation="；".join(balance.get("problems") or []), location={"cut": cut},
+        evidence=balance))
+    onsets = report.get("onsets") or {}
+    if onsets.get("checked"):
+        results.append(CheckResult(
+            check_id=f"audio.{cut}.onsets", source="audio",
+            status="pass" if not onsets.get("missing") else "unknown",
+            severity="minor", required=False,
+            observation=("有 %d 个声音事件没有测到能量" % len(onsets.get("missing") or []))
+                        if onsets.get("missing") else "",
+            location={"cut": cut}, evidence=onsets))
+    ducking = report.get("ducking") or {}
+    if ducking:
+        results.append(CheckResult(
+            check_id=f"audio.{cut}.ducking", source="audio",
+            status="pass" if ducking.get("ok", True) else "unknown",
+            severity="minor", required=False, observation=ducking.get("note", ""),
+            location={"cut": cut}, evidence=ducking))
+    return results
+
+
 def layout_checks(timeline: dict, *, cut: str) -> list[CheckResult]:
     """Soft layout warnings and estimated caption timing, per scene.
 

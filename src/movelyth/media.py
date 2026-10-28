@@ -26,7 +26,7 @@ import imageio_ffmpeg
 import numpy as np
 from PIL import Image, ImageDraw
 
-from .sound import design_sound_events, soundtrack
+from .sound import design_sound_events
 from .textfit import caption_chunks
 from .util import atomic_json, file_hash, fingerprint, read_json, run
 
@@ -589,15 +589,24 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
     output.mkdir(parents=True, exist_ok=True)
     dry, mixed = output / "narration.wav", output / "mix.wav"
     write_wav(dry, narration)
-    write_wav(mixed, soundtrack(narration, starts, style, cues=events,
-                                   scene_seconds=scene_seconds, sections=sections))
-    paths.extend([dry, mixed])
+    from .mix import mix_report, write_stems
+    from .sound import soundtrack_stems
+
+    mixed_audio, stems = soundtrack_stems(narration, starts, style, cues=events,
+                                          scene_seconds=scene_seconds, sections=sections)
+    write_wav(mixed, mixed_audio)
+    stem_paths = write_stems(stems, output / "stems")
+    # Measured on the stems, before encoding: a missing voice must be provable from
+    # the voice stem, and a decorative stem may not outweigh the voice.
+    report = mix_report(stems, events, mix=mixed_audio)
+    paths.extend([dry, mixed, *[Path(path) for path in stem_paths.values()]])
     return {"title": cut["title"], "scenes": scenes, "frames": sum(s["frames"] for s in scenes),
             "seconds": duration, "mix": str(mixed), "voice": str(dry),
             "style": style, "cues": events, "sound_events": events,
             "prosody": "clause+emphasis",
             # What actually produced the audio: backend, voice, real sample counts and
             # where the boundaries came from, per scene.
+            "mix_report": report, "stems": stem_paths,
             "speech": {"backend": settings.backend, "voice": settings.voice,
                        "model": settings.model, "granularity": settings.granularity,
                        "sample_rate": SAMPLE_RATE, "characters": sum(r["characters"] for r in speech_records),

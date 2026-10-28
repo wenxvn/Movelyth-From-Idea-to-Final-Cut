@@ -295,3 +295,21 @@
 - 否：继续用字符数估算宽度（会把 46px 的 30 字塞进 520px 的注释框）；
   只依赖浏览器渲染后的人工检查（问题发现太晚）。
 - 证据：`tests/test_captions_qc.py`（14 项，含真实字体与缺字检测）。
+
+## D19 · 混音必须能分轨审计，人声在人声轨上判（S2-03）
+
+- 问题：`soundtrack()` 只返回立体声混音，无法证明“人声缺失”或“音乐压人声”，也无法复听单个音轨；
+  事件是否真的落在时间点上只能靠听。
+- 选择：
+  1. `soundtrack_stems()` 返回混音 + 分轨（voice_dry/voice/music/arp/sfx/room/duck），
+     `write_stems()` 落盘为 WAV 并写 `stems.json`。
+  2. `mix.voice_presence()` 在人声轨上判“有没有人声”，绝不用混音能量代替（M04）。
+  3. `onset_report()` 在音效轨上测事件处能量相对基线的变化：只证明“这一刻有声音”，
+     不证明音色/语义正确（报告里写明）。
+  4. `tail_report()` 抓被截断的尾音，`ducking_report()` 抓侧链抽吸，`stem_balance()` 抓装饰轨盖过人声。
+  5. `policy.mix_checks()`：人声缺失 → critical 阻断；分轨失衡 → major 阻断；
+     事件未测到/抽吸 → 非必需 unknown 提示复听。
+  6. 检查在编码前完成，避免“混音坏了才发现”。
+- 否：只用响度与峰值判断混音（-14 LUFS 的混音可以完全没有声音）；
+  用混音能量判断人声（音乐会把静音填满）。
+- 证据：`tests/test_mix.py`（16 项，含真实 `prepare_cut` 分轨落盘）。
