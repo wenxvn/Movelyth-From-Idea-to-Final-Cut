@@ -30,6 +30,15 @@ export type SemanticEvent = {
   purpose: string;
   target: string;
 };
+export type CameraKeyframe = {
+  at: number;
+  mode: 'overview' | 'focus' | 'follow' | 'reframe';
+  scale: number;
+  cx: number;
+  cy: number;
+  target?: string;
+  reason: string;
+};
 export type ResolvedEvent = {
   id: string;
   kind: EventKind;
@@ -128,6 +137,7 @@ export type Scene = {
   transition_reason?: string;
   events?: SemanticEvent[];
   events_resolved?: ResolvedEvent[];
+  camera_plan?: CameraKeyframe[];
   recipe?: string;
   schema_version?: number;
 };

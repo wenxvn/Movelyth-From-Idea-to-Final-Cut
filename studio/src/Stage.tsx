@@ -93,6 +93,9 @@ export const SceneStage: React.FC<{
   const camera = cameraFor(scene.camera, progress, {
     beatIndex: beat, beatStartedAt: beats[beat]?.start ?? 0,
     seconds: scene.duration || scene.frames / 30, time,
+    // The plan is computed from real layer regions in Python; when it exists it wins
+    // over the decorative per-beat push, because it points at the subject.
+    plan: scene.camera_plan,
   });
   const pulse = beatPulse(time, beats[beat]?.start ?? 0);
   return <AbsoluteFill>

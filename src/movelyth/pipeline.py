@@ -870,7 +870,7 @@ class Studio:
                 policy = duration_policy(config, name)
                 if not policy["minimum_seconds"] <= data[name]["seconds"] <= policy["maximum_seconds"]:
                     raise RuntimeError(f"{name} 实际旁白时长 {data[name]['seconds']:.1f}s 偏离目标 {target}s")
-                problems = validate_cut_timeline(data[name], config["fps"])
+                problems = validate_cut_timeline(data[name], config["fps"], portrait=name == "short")
                 if problems:
                     raise RuntimeError(f"{name} 时间轴检查未通过：" + "；".join(problems[:5]))
                 paths.extend(generated)

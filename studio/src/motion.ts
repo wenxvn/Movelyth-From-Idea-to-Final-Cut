@@ -1,4 +1,4 @@
-﻿import type {CameraKind, Layer, ResolvedAction} from './types';
+﻿import type {CameraKeyframe, CameraKind, Layer, ResolvedAction} from './types';
 import {clamp, ease, easeOut, springish} from './theme';
 
 export type Motion = {
@@ -123,11 +123,51 @@ export type CameraState = {scale: number; translateX: number; translateY: number
  * starts, the framing eases to a new target and then holds.  The move is bounded
  * (±3.5% scale, ±1.4% translate) so text stays inside its safe box.
  */
+/**
+ * Plan-driven camera: the Python side decides *what* to focus on (a real layer's
+ * region box) and this function only interpolates between keyframes.  Captions and
+ * the footer are drawn outside this transform, so they never zoom with the content.
+ */
+export const cameraFromPlan = (
+  plan: CameraKeyframe[] | undefined,
+  time: number,
+): CameraState | null => {
+  if (!plan || plan.length === 0) return null;
+  const at = (key: CameraKeyframe): CameraState => ({
+    scale: key.scale,
+    translateX: (0.5 - key.cx) * key.scale,
+    translateY: (0.5 - key.cy) * key.scale,
+  });
+  if (time <= plan[0].at) return at(plan[0]);
+  for (let index = 1; index < plan.length; index++) {
+    const previous = plan[index - 1];
+    const next = plan[index];
+    if (time < next.at) {
+      // A keyframe holds its framing until the transition window that *ends* at the
+      // next keyframe; easing from the previous keyframe instead would arrive early
+      // and sit at the next framing for the whole shot.
+      const window = Math.min(0.7, Math.max(0.001, next.at - previous.at));
+      const k = ease(clamp((time - (next.at - window)) / window));
+      const a = at(previous);
+      const b = at(next);
+      return {
+        scale: a.scale + (b.scale - a.scale) * k,
+        translateX: a.translateX + (b.translateX - a.translateX) * k,
+        translateY: a.translateY + (b.translateY - a.translateY) * k,
+      };
+    }
+  }
+  return at(plan[plan.length - 1]);
+};
+
 export const cameraFor = (
   kind: CameraKind | undefined,
   progress: number,
-  options: {beatIndex?: number; beatStartedAt?: number; seconds?: number; time?: number} = {},
+  options: {beatIndex?: number; beatStartedAt?: number; seconds?: number; time?: number;
+    plan?: CameraKeyframe[]} = {},
 ): CameraState => {
+  const planned = cameraFromPlan(options.plan, options.time ?? progress * (options.seconds ?? 10));
+  if (planned) return planned;
   const beatIndex = options.beatIndex ?? 0;
   const seconds = options.seconds ?? 10;
   const time = options.time ?? progress * seconds;

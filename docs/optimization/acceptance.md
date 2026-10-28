@@ -156,3 +156,19 @@
 | 记录 | 离线成片 | `质检报告.json` 含 `animatic`/`layout_precheck`/`sampling_plan`；`render-spec.json` 含 `animaticScale` | V1 |
 
 **未验证**：真实长片（180 s）草片与成片的完整看听（V5）；草片渲染耗时与节省的正式渲染成本未统计。
+
+## A10 · S2-06 内容绑定焦点相机（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 329 passed | V1 |
+| 焦点求解 | 1164×730 主体框 | 缩放 1.0–1.55；取景中心被夹在 `[0.5/s, 1-0.5/s]`，不露出画面外 | V1 |
+| 计划生成 | 8 s 镜头、30% 处 emphasis 指向 chart | 关键帧：overview(0) → focus(2.4, target=chart) → overview(7.3)；`reason` 可读 | V1 |
+| 无目标事件 | target 为空 | 不产生 focus（相机只指向真实对象） | V1 |
+| 画幅差异 | portrait vs landscape | 横版可推近注释带；竖版该带已占 87% 宽，正确放弃推近；窄框在两种画幅都推近但中心不同 | V1 |
+| 确定性 | 同输入两次 | 计划完全一致 | V1 |
+| 计划校验 | 越界/缩放越界/取景溢出/倒序 | 各自报错，并进入 `validate_cut_timeline` | V1 |
+| 关键帧保持 | node 直接调用 `cameraFromPlan` | 0.4 s 到达焦点后保持到 2.6 s，再在 0.7 s 内回到 overview（修复了“提前到位”的插值） | V1 |
+| 真实帧对照 | 真实 Remotion 渲染同一镜（有无 focus 计划） | 960×540 两帧平均像素差 **8.86**，均非空白 | V2 |
+
+**未验证**：follow/reframe 两种模式（未实现，能力声明不包含）；真实长片中焦点是否帮助理解（V5，需人群评估）。

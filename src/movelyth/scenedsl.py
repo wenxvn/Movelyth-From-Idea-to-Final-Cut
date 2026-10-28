@@ -642,10 +642,14 @@ def normalize_scene(scene: Scene, *, duration: float, boundaries: list[dict] | N
         "layout_warnings": warnings,
         "duration": round(duration, 3),
     })
+    from .camera import camera_plan
+
+    orientation = "portrait" if vertical else "landscape"
+    data["camera_plan"] = camera_plan(data, orientation=orientation, duration=duration)
     return data
 
 
-def validate_cut_timeline(cut: dict, fps: int) -> list[str]:
+def validate_cut_timeline(cut: dict, fps: int, *, portrait: bool = False) -> list[str]:
     """Consistency checks over a prepared cut (frames, captions, actions)."""
     problems = []
     total = 0
@@ -665,6 +669,13 @@ def validate_cut_timeline(cut: dict, fps: int) -> list[str]:
         for action in scene.get("actions_resolved", []):
             if not 0 <= action["from"] < action["to"] <= 1.0:
                 problems.append(f"{scene['id']}: 动画区间越界")
+        from .camera import validate_plan
+
+        plan = scene.get("camera_plan") or []
+        if plan:
+            problems.extend(f"{scene['id']}: {problem}" for problem in
+                            validate_plan(plan, orientation="portrait" if portrait else "landscape",
+                                          duration=seconds))
         seen_events = set()
         for event in scene.get("events_resolved", []):
             if event["id"] in seen_events:
