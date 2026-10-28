@@ -163,3 +163,9 @@ def caption_chunks(text: str, limit: int) -> list[str]:
     if len(balanced) >= 2 and len(balanced[0]) <= 2 and len(balanced[0]) + len(balanced[1]) <= limit * 1.15:
         balanced = [balanced[0] + balanced[1], *balanced[2:]]
     return balanced
+
+
+def normalize_for_compare(text: str) -> str:
+    """Whitespace- and punctuation-insensitive form used to compare cue text with SRT."""
+    stripped = re.sub(r"\s+", "", str(text or ""))
+    return stripped.strip("，。、；：！？,.!?;:").casefold()

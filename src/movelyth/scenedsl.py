@@ -124,6 +124,13 @@ def regions(orientation: str, layout: str) -> dict[str, dict[str, int]]:
     return {name: _region_tuple(box) for name, box in boxes.items()}
 
 
+def caption_band(orientation: str) -> dict[str, int]:
+    """The reserved caption strip for this orientation, as a rect."""
+    top, bottom = CAPTION_BANDS[orientation]
+    width = LAYOUTS[orientation]["diagram"]["full"][2]
+    return {"x": 0, "y": top, "w": width, "h": bottom - top}
+
+
 def heading_band(orientation: str, layout: str) -> dict[str, int]:
     bands = HEADING_BANDS[orientation]
     return _region_tuple(bands.get(layout) or bands["diagram"])

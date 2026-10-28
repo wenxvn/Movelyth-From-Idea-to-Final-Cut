@@ -58,7 +58,7 @@
 | S2-01 镜头配方与统一风格 | verified（V1；真实模型选择未跑） | S1-05, S1-06 | A8；`recipes.py`、`Scene.recipe`、`tests/test_recipes.py`、D10 |
 | S2-02 语音后端/读法/韵律/核对 | verified（V1；真实 TTS/ASR 未在本轮重跑） | S1-06, S1-07 | A15；`speech.py`、`audioqc.content_check`、`[speech]` 配置、`tests/test_speech.py`、D17 |
 | S2-03 声音事件/分轨/混音 | todo | S2-02, S1-06 |
-| S2-04 字体/字幕/动态布局 | todo | S2-01, S2-02 |
+| S2-04 字体/字幕/动态布局 | verified（V1 + 真实字体度量；逐词高亮沿用既有实现） | S2-01, S2-02 | A16；`fonts.py`、`captions_qc.py`、`tests/test_captions_qc.py`、D18 |
 | S2-05 受控计算驱动的参数动画 | verified（V1；真实成片未跑） | S2-01, S1-06 | A11；`parameters.py`、`Scene.function/parameters`、`tests/test_parameters.py`、D13 |
 | S2-06 内容绑定焦点相机 | verified（V1 + V2 真实帧对照；跟随/重新取景未实现） | S2-04, S2-05 | A10；`camera.py`、`motion.cameraFromPlan`、`tests/test_camera.py`、`tests/test_camera_render.py`、D12 |
 | S2-07 真实形变/共享对象/公式 | todo | S2-05, S2-06, S1-06 |

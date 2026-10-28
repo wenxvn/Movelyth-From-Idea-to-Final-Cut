@@ -28,7 +28,9 @@ from .cache import (
     verify_assembly,
 )
 from .capability import capability_table, classify_route
+from .captions_qc import srt_matches_cues
 from .craft import composition_report, narrative_report, rhythm_report, sound_design_report
+from .fonts import availability as font_availability
 from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
 from .metrics import Metrics
@@ -1256,6 +1258,10 @@ class Studio:
                                  "animatic": animatic_report,
                                  "layout_precheck": precheck,
                                  "sampling_plan": sampling_plan(timelines, config["fps"]),
+                                 "fonts": font_availability(),
+                                 "captions": {name: srt_matches_cues(
+                                     timelines[name], srt(timelines[name], config["fps"]))
+                                     for name in ["long", "short"]},
                                  "transition_policy": TRANSITION_POLICY,
                                  "scene_changes": (read_json(job / "scene-changes.json")
                                                    if (job / "scene-changes.json").is_file() else {}),

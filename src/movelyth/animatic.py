@@ -88,6 +88,16 @@ def layout_precheck(timelines: dict, config: dict, assets: list[str] | None = No
                 boxes = regions("portrait" if portrait else "landscape", scene.layout)
                 if not boxes:
                     problems.append(f"镜头 {scene.id} 的布局 {scene.layout} 不存在")
+            from .captions_qc import collision_report, cue_report, text_layer_report
+
+            caption_report = cue_report(raw, cut, orientation="portrait" if portrait else "landscape")
+            problems.extend(caption_report["problems"])
+            warnings.extend(caption_report["warnings"])
+            problems.extend(collision_report(raw, orientation="portrait" if portrait else "landscape"))
+            text_report = text_layer_report(raw, orientation="portrait" if portrait else "landscape",
+                                            cut=cut)
+            problems.extend(text_report["problems"])
+            warnings.extend(text_report["warnings"])
             for layer in scene.layers:
                 if layer.type == "image" and layer.data_ref:
                     internal = layer.data_ref.startswith("svd") or layer.data_ref in {"svd_1", "svd_4",
