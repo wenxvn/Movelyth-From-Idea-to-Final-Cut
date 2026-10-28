@@ -202,8 +202,9 @@ def main(argv=None) -> int:
     revise = sub.add_parser("revise", help="按审阅意见局部修改镜头，生成新 revision")
     revise.add_argument("id", type=number)
     revise.add_argument("--notes", type=Path, required=True, help="审阅意见文本，需包含镜头编号或 scene id")
-    status = sub.add_parser("status", help="查看任务、失败和交付记录")
+    status = sub.add_parser("status", help="查看任务状态、阻断原因与下一步（带 id 时为可读摘要）")
     status.add_argument("id", nargs="?", type=number)
+    status.add_argument("--verbose", action="store_true", help="同时输出完整历史与任务记录")
     sub.add_parser("ideas", help="查看尚未制作的 idea 和历史反馈")
     suggest = sub.add_parser("suggest", help="根据历史与当前能力提出候选选题（不制作）")
     suggest.add_argument("--count", type=int, default=3, help="候选数量 1–5")
@@ -230,6 +231,7 @@ def main(argv=None) -> int:
     sub.add_parser("asset-check", help="重新校验素材库（hash/授权/有效性）并标记失效项")
     sub.add_parser("schema", help="输出 Scene DSL v1 的 JSON Schema")
     sub.add_parser("components", help="输出可视化组件元数据（用途/必需字段/限制/横竖适配）")
+    sub.add_parser("capabilities", help="输出能力矩阵：题材路线、配方、参数函数与 E/O 状态")
     check = sub.add_parser("check", help="离线校验脚本 JSON（不调用模型、不渲染）")
     check.add_argument("--film", type=Path, required=True, help="Film JSON 路径")
     check.add_argument("--research", type=Path, required=True, help="Research JSON 路径")
@@ -271,6 +273,30 @@ def main(argv=None) -> int:
 
             emit(registry())
             return 0
+        if args.command == "capabilities":
+            from .capability import capability_table
+            from .components import missing_kinds
+            from .parameters import catalog as parameters_catalog
+            from .recipes import catalog as recipes_catalog
+
+            emit({
+                "routes": capability_table()["routes"],
+                "recipes": {name: {"purpose": spec["purpose"], "requires": spec["requires"]}
+                            for name, spec in recipes_catalog()["recipes"].items()},
+                "parameter_functions": {name: {"purpose": spec["purpose"],
+                                               "params": spec["params"]}
+                                        for name, spec in parameters_catalog()["functions"].items()},
+                "optional": {
+                    "S3-04 代码与数据结构": "not_implemented",
+                    "S3-05 素材视频与证据面板": "not_implemented",
+                    "S3-06 PDF 可定位证据": "not_implemented",
+                    "S3-07 三维/shader/生成后端": "optional_deferred",
+                    "S3-08 可编辑时间轴导出": "optional_deferred",
+                },
+                "missing_components": missing_kinds(),
+                "note": "这里只列真实状态；未实现的能力不会出现在编导可选范围里",
+            })
+            return 0
         if args.command == "check":
             from .models import Film, Research
             from .quality import validate_script
@@ -305,9 +331,16 @@ def main(argv=None) -> int:
             notes = args.notes.read_text(encoding="utf-8-sig")
             emit(studio.revise(args.id, notes))
         elif args.command == "status":
-            result = studio.ledger.get(args.id) if args.id else studio.ledger.list()
             if args.id:
-                result["history"] = studio.ledger.history(args.id)
+                from .report import summary
+
+                episode = studio.ledger.get(args.id)
+                result = summary(studio.workspace / f"VID-{args.id:06d}", episode)
+                if args.verbose:
+                    result["history"] = studio.ledger.history(args.id)
+                    result["record"] = episode
+            else:
+                result = studio.ledger.list()
             emit(result)
         elif args.command == "ideas":
             emit(studio.ledger.context())

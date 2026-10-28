@@ -343,3 +343,16 @@
      LCG 在 JS 侧用 `Math.imul` 保证 32 位乘法精度与 Python 一致。
 - 否：直接引入 rough-notation（CSS 动画 + 版本锁定成本）；用 SVG filter 做粗糙化（每帧重算，性能与确定性都差）。
 - 证据：`tests/test_sketch.py`（14 项，含两次渲染逐字节一致）。
+
+## D22 · 状态摘要只读磁盘，错误分类决定用户下一步（S4-04）
+
+- 问题：`status` 原来只输出 ledger 行，用户看不出卡在哪一步、为什么、下一步做什么。
+- 选择：
+  1. `report.summary()` 读 `stages/`、`production-brief.json`、`release-decision.json`、
+     `layout-precheck.json`、`budget.json`，拼出一屏摘要；没有的字段保持 null，不推测。
+  2. `classify_error()` 把错误分成预算/能力/素材/资源/复核/配置六类，每类给一条具体动作。
+  3. `review_items()` 只列阻断与待复核项，带 `check_id`、定位（scene_id/cut）与是否可修。
+  4. `movelyth capabilities` 输出能力矩阵：路线真实状态、配方、参数函数、E/O 状态；
+     未实现项明确写 `not_implemented` / `optional_deferred`。
+- 否：用百分比进度条（阶段不可等分，会制造假进度）；把 unknown 显示成 0 或通过。
+- 证据：`tests/test_report.py`（6 项）。
