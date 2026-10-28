@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from .ledger import BusyError
-from .media import ffmpeg, ffprobe
+from .media import ffmpeg, ffprobe, tool_version
 from .openai_compat import probe_endpoint
 from .pipeline import Studio, browser
 from .util import now, run
@@ -28,11 +28,49 @@ def emit(value):
     print(json.dumps(value, ensure_ascii=False, indent=2))
 
 
+CHINESE_FONT_CANDIDATES = [
+    r"C:\Windows\Fonts\msyh.ttc",
+    r"C:\Windows\Fonts\simhei.ttf",
+    r"C:\Windows\Fonts\simsun.ttc",
+    r"C:\Windows\Fonts\NotoSansSC-VF.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/System/Library/Fonts/PingFang.ttc",
+]
+
+
+def file_version(path: str | None) -> str | None:
+    """Product version of a GUI binary without launching it.
+
+    ``chrome.exe -version`` opens a browser window on Windows, so the executable
+    metadata is read instead of executing the program.
+    """
+    if not path:
+        return None
+    if os.name == "nt":
+        try:
+            result = run(["powershell", "-NoProfile", "-Command",
+                          f"(Get-Item -LiteralPath '{path}').VersionInfo.ProductVersion"], timeout=20)
+            return (result.stdout or "").strip() or None
+        except (OSError, RuntimeError):
+            return None
+    return tool_version(path)
+
+
+def font_status() -> dict:
+    """Which CJK fonts the renderer can actually fall back to on this machine."""
+    found = [path for path in CHINESE_FONT_CANDIDATES if Path(path).is_file()]
+    return {"found": found, "missing": [p for p in CHINESE_FONT_CANDIDATES if p not in found],
+            "ok": bool(found)}
+
+
 def doctor(root: Path) -> dict:
+    """Environment table with actionable reasons; a missing tool is reported, not raised."""
     from .agents import resolve_codex
     from .audioqc import asr_status
+    from .media import ffprobe_candidates, tool_version
     from .pipeline import settings
     from .scenedsl import renderer_contract
+    from .util import TimezoneError, display_timezone, resolve_timezone
 
     binary = ffmpeg()
     node = shutil.which("node")
@@ -40,22 +78,59 @@ def doctor(root: Path) -> dict:
     codex = resolve_codex()
     config = settings(root) if (root / "movelyth.toml").is_file() or os.getenv("MOVELYTH_CONFIG") else {}
     provider = (config.get("agents") or {}).get("provider", "codex")
+    try:
+        probe_binary, probe_error = ffprobe(), None
+    except RuntimeError as exc:
+        probe_binary, probe_error = None, str(exc)
+    reasons: list[str] = []
+    if probe_error:
+        reasons.append(probe_error)
+    fonts = font_status()
+    if not fonts["ok"]:
+        reasons.append("未找到可用的中文字体；字幕与图表文字会回退到不可控字体")
+    try:
+        zone = resolve_timezone()
+        timezone_status = {"configured": display_timezone(), "resolved": str(zone),
+                           "offset": now()[-6:], "ok": True}
+        checked_at = now()
+    except TimezoneError as exc:
+        # A bad MOVELYTH_TZ must be reported, not turned into a crash or a fake +08:00.
+        from datetime import datetime, timezone
+
+        timezone_status = {"configured": display_timezone(), "ok": False, "error": str(exc)}
+        reasons.append(str(exc))
+        checked_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        browser_path = browser()
+    except ValueError as exc:
+        browser_path = None
+        reasons.append(str(exc))
     check = {
         "project": str(root), "python": sys.version.split()[0], "node": node,
-        "npm": npm, "codex": codex, "browser": browser(), "ffmpeg": binary,
-        "ffprobe": ffprobe(),
+        "npm": npm, "codex": codex, "browser": browser_path, "ffmpeg": binary,
+        "ffprobe": probe_binary,
         "renderer_installed": (root / "studio/node_modules/@remotion/renderer/package.json").is_file(),
         "config": bool(config),
         "provider": provider,
         "schema_version": renderer_contract()["schema_version"],
         "asr": asr_status(),
-        "checked_at": now(), "tts": "Edge TTS（联网，doctor 尚未调用语音服务）",
+        "checked_at": checked_at, "tts": "Edge TTS（联网，doctor 尚未调用语音服务）",
+        "fonts": fonts,
+        "timezone": timezone_status,
+        "tools": {
+            "ffmpeg": {"path": binary, "version": tool_version(binary)},
+            "ffprobe": {"path": probe_binary,
+                        "version": tool_version(probe_binary) if probe_binary else None,
+                        "searched": [str(p) for p in ffprobe_candidates()]},
+            "browser": {"path": browser_path, "version": file_version(browser_path)},
+        },
     }
     if node:
         check["node_version"] = run([node, "--version"], timeout=15).stdout.strip()
-    check["ffmpeg_version"] = run([binary, "-version"], timeout=15).stdout.splitlines()[0]
+    check["ffmpeg_version"] = check["tools"]["ffmpeg"]["version"]
     needs_codex = provider == "codex"
     check["ready_for_generation"] = bool(node and check["renderer_installed"] and check["config"]
+                                        and fonts["ok"] and timezone_status["ok"]
                                         and (codex if needs_codex else True))
     if provider == "openai":
         agents = (config.get("agents") or {})
@@ -74,10 +149,15 @@ def doctor(root: Path) -> dict:
             endpoint["reason"] = "缺少 " + "、".join(f"agents.{name}" for name in missing)
         elif not endpoint["api_key_present"]:
             endpoint["reason"] = f"环境变量 {env_name} 未设置"
+        if endpoint.get("reason"):
+            reasons.append(endpoint["reason"])
         check["ready_for_generation"] = bool(check["ready_for_generation"] and not endpoint.get("reason"))
         check["endpoint_note"] = "doctor 只检查配置与密钥是否存在；连通性请运行 movelyth probe"
+    if provider == "codex" and not codex:
+        reasons.append('provider=codex 但未找到 codex 可执行文件；安装 Codex 或改用 [agents].provider = "openai"')
     if provider == "mock":
         check["mock_note"] = "provider=mock：只用于离线测试与预览，产物不是真实模型创作"
+    check["reasons"] = reasons
     check["note"] = "环境检查不等同于 Codex 配额、TTS 连通性或视频生成验证"
     return check
 

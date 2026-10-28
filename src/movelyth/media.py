@@ -40,16 +40,47 @@ def ffmpeg() -> str:
     return os.getenv("MOVELYTH_FFMPEG") or imageio_ffmpeg.get_ffmpeg_exe()
 
 
-def ffprobe() -> str:
-    configured = os.getenv("MOVELYTH_FFPROBE") or shutil.which("ffprobe")
+def ffprobe_candidates() -> list[Path]:
+    """Every place ffprobe is looked for, in resolution order."""
+    found: list[Path] = []
+    configured = os.getenv("MOVELYTH_FFPROBE")
     if configured:
-        return configured
+        found.append(Path(configured))
+    on_path = shutil.which("ffprobe")
+    if on_path:
+        found.append(Path(on_path))
     packages = Path(__file__).resolve().parents[2] / "studio/node_modules/@remotion"
     name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
-    candidates = list(packages.glob(f"compositor-*/{name}"))
-    if candidates:
-        return str(candidates[0])
-    raise RuntimeError("缺少 ffprobe。请先在 studio 运行 npm ci，或设置 MOVELYTH_FFPROBE")
+    found.extend(sorted(packages.glob(f"compositor-*/{name}")))
+    return found
+
+
+def ffprobe() -> str:
+    """Locate ffprobe, or fail with the locations that were actually checked.
+
+    The Remotion compositor binary is a fallback because ``studio/node_modules``
+    is only populated by ``npm ci``; CI used to run pytest before that install,
+    so the media checks failed on a clean checkout.  The error now names every
+    checked location instead of only suggesting one of them.
+    """
+    candidates = ffprobe_candidates()
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    searched = "；".join(str(path) for path in candidates) or "（未找到任何候选路径）"
+    raise RuntimeError(
+        "缺少 ffprobe：媒体验证与编码检查无法进行。已检查：" + searched
+        + "。请运行 npm ci --prefix studio，或设置 MOVELYTH_FFPROBE 指向 ffprobe 可执行文件")
+
+
+def tool_version(binary: str) -> str | None:
+    """First line of ``<binary> -version``; ``None`` when it cannot be executed."""
+    try:
+        result = run([binary, "-version"], timeout=20)
+    except (OSError, RuntimeError):
+        return None
+    line = (result.stdout or "").splitlines()
+    return line[0].strip() if line else None
 
 
 def write_wav(path: Path, audio: np.ndarray):

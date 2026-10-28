@@ -7,9 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  # Windows keeps the full core check set: the renderer, the compositor ffprobe,
+  # the contract diff and the CLI smoke tests are all exercised here.
+  windows-core:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,10 +20,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - name: Install renderer first (ffprobe fallback lives in node_modules)
+        # pytest used to run before this step; media checks then failed on a clean
+        # checkout because ffprobe only existed after `npm ci`.
+        run: npm ci --prefix studio
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+      - name: Media toolchain resolves
+        run: |
+          python -c "import sys; sys.path.insert(0,'src'); from movelyth.media import ffmpeg, ffprobe, tool_version; print(ffmpeg()); print(ffprobe()); print(tool_version(ffprobe()))"
       - name: Ruff
         run: python -m ruff check src tests
       - name: Unit and integration tests (no model, no TTS, no render)
@@ -31,10 +40,36 @@ jobs:
           python -c "import sys; sys.path.insert(0,'src'); from pathlib import Path; from movelyth.scenedsl import write_renderer_contracts; write_renderer_contracts(Path('studio/src'))"
           git diff --exit-code studio/src/generated
       - name: TypeScript typecheck
-        run: |
-          npm ci --prefix studio
-          npm --prefix studio run typecheck
-      - name: CLI help smoke test
+        run: npm --prefix studio run typecheck
+      - name: CLI smoke test and doctor report
+        # doctor exits non-zero when generation is not configured (no model key in CI);
+        # the report itself must still be produced and parseable.
         run: |
           python -m movelyth --help
           python -m movelyth schema
+          python -m movelyth --root . doctor > doctor.json || true
+          python -c "import json; report=json.load(open('doctor.json',encoding='utf-8')); print(json.dumps({k: report[k] for k in ('ffprobe','ffmpeg','timezone')}, ensure_ascii=False))"
+
+  # Linux covers the offline logic layer only: no renderer, no ffprobe, no network.
+  # This keeps the Windows media path authoritative while catching platform drift
+  # in pure-Python code (paths, hashing, DSL normalisation, policy).
+  linux-logic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Ruff
+        run: python -m ruff check src tests
+      - name: Offline tests
+        run: python -m pytest -q -m "not slow and not live"
+      - name: Renderer contract is in sync with the Python DSL
+        run: |
+          python -c "import sys; sys.path.insert(0,'src'); from pathlib import Path; from movelyth.scenedsl import write_renderer_contracts; write_renderer_contracts(Path('studio/src'))"
+          git diff --exit-code studio/src/generated

@@ -9,7 +9,7 @@ description = "Movelyth — 幕绎: From Idea to Final Cut"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "wenxvn", email = "1055602033@qq.com"}]
-dependencies = ["edge-tts>=7,<8", "imageio-ffmpeg>=0.6,<0.7", "numpy>=1.24,<3", "Pillow>=10,<13", "pydantic>=2.10,<3"]
+dependencies = ["edge-tts>=7,<8", "imageio-ffmpeg>=0.6,<0.7", "numpy>=1.24,<3", "Pillow>=10,<13", "pydantic>=2.10,<3", "tzdata>=2024.1"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.11"]
