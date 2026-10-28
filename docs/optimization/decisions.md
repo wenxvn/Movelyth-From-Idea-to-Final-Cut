@@ -356,3 +356,17 @@
      未实现项明确写 `not_implemented` / `optional_deferred`。
 - 否：用百分比进度条（阶段不可等分，会制造假进度）；把 unknown 显示成 0 或通过。
 - 证据：`tests/test_report.py`（6 项）。
+
+## D23 · 反馈必须绑定 revision 与观察窗口（S4-05）
+
+- 问题：旧 `feedback` 只写 (episode, platform, metrics)，没有 revision、cut、观察时间与窗口。
+  同一条视频换过 revision 后，旧数据会被当成新版本表现；累计值与 7 天区间值也会被直接相减。
+- 选择：
+  1. `Observation` 绑定 episode/revision/cut/platform/url/observed_at/window/metrics。
+  2. 指标白名单；未测到的指标**不写入**（不是 0）；负数与非法窗口拒绝。
+  3. `compare()` 只在 revision、窗口、平台、cut 都一致时给 delta，否则说明不可比；单侧缺失的 delta 为 null。
+  4. `ViewerIssue` 把观众问题定位到秒与 scene_id，并映射成“待验证假设 + 应该跑哪些检查”，
+     状态固定 `unverified`——一次偏好不改变全局默认。
+  5. `feedback` 命令只记录用户提供的数据，明确“没有抓取平台留存、没有触发发布或策略变更”。
+- 否：自动抓取平台数据（无授权接口，且会把波动误当因果）；把反馈直接改默认风格（单条意见不是证据）。
+- 证据：`tests/test_feedback.py`（15 项）。

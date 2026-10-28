@@ -381,3 +381,19 @@
 | 能力矩阵 | `movelyth capabilities` | 5 条路线真实状态、6 个配方、3 个参数函数、E/O 明确 not_implemented/optional_deferred | V1 |
 
 **未验证**：真实题目“只输入标题到成片”的端到端（需要模型端点，见 §3 阻塞）。
+
+## A22 · S4-05 版本、时间点与观察窗口反馈（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 509 passed | V1 |
+| 版本绑定 | 观察记录 | 含 episode/revision/cut/platform/url/observed_at/window/metrics | V1 |
+| 未知不记 0 | `parse_metrics({"views":10,"likes":None,"completion_rate":""})` | 只保留 views | V1 |
+| 非法输入 | 未知指标名、负数、非法窗口 | 各自报错 | V1 |
+| 可比性 | 同 revision+窗口 / 换 revision / 换窗口 / 换 cut | 可比并给出 delta / 不可比并说明原因 | V1 |
+| 单侧缺失 | 一侧没有 likes | delta 为 null | V1 |
+| 观众问题 | “字幕来不及看、语速太快”@73.5s, scene l4 | 生成待验证假设 + 对应检查项（caption_reading_speed 等），状态 unverified | V1 |
+| 落盘 | `feedback.json` | 往返可读；坏行被跳过；文件缺失返回空 | V1 |
+| CLI | `movelyth feedback <id> --window 24h --cut short --views 120` | 记录 revision、窗口、cut；指标只含 views；提示未抓取平台留存 | V1 |
+
+**未验证**：真实平台数据（无已授权接口，未抓取留存）；把反馈自动变成回归样例的闭环（只生成假设，需人工确认后写测试）。

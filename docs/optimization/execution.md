@@ -88,7 +88,7 @@
 | S4-02 六题材重复真实评测 | blocked（无模型端点） | S4-01, S3-01/02/03, S1-07 |
 | S4-03 异常/恢复/确定性/资源回归 | verified（V1 故障矩阵 23 项；真实编码/模型注入见 A20） | S1-02/03/07, S2-09, S3-01/02 | A20；`tests/test_fault_matrix.py` |
 | S4-04 一次配置、题目输入与投稿包 | implemented（V1；真实题目端到端见 S2-11 阻塞） | S1-05/03/07, S2-11, S3-01 | A21；`report.py`、`status`/`capabilities` 命令、`tests/test_report.py`、D22 |
-| S4-05 版本/时间点/观察窗口反馈 | blocked（需真实投稿数据） | S1-03/07, S4-02 |
+| S4-05 版本/时间点/观察窗口反馈 | implemented（V1；真实平台数据未接入） | S1-03/07, S4-02 | A22；`feedback.py`、`feedback` 命令、`tests/test_feedback.py`、D23 |
 | S4-06 最终能力声明与交接 | implemented（能力矩阵与交接文档已交付） | S4-01…S4-05 |
 
 ## 3. 已知外部阻塞（不伪造通过）

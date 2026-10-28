@@ -242,6 +242,15 @@ def main(argv=None) -> int:
     feedback.add_argument("--views", type=int)
     feedback.add_argument("--likes", type=int)
     feedback.add_argument("--completion-rate", type=float)
+    feedback.add_argument("--comments", type=int)
+    feedback.add_argument("--shares", type=int)
+    feedback.add_argument("--favorites", type=int)
+    feedback.add_argument("--watch-seconds", type=float, help="平均观看时长")
+    feedback.add_argument("--cut", choices=["long", "short"], default="long")
+    feedback.add_argument("--window", choices=["cumulative", "24h", "7d", "28d", "custom"],
+                          default="cumulative", help="观察窗口；累计值与区间值不能混用")
+    feedback.add_argument("--observed-at", help="观察时间（ISO8601），默认现在")
+    feedback.add_argument("--note", help="口径说明，例如“手动记录，平台未提供完播率”")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     studio = None
@@ -380,15 +389,29 @@ def main(argv=None) -> int:
                   "invalid": [item["id"] for item in report if item["status"] != "valid"],
                   "note": "失效素材会在渲染前被拒绝，不会静默替换"})
         elif args.command == "feedback":
-            metrics = {k: v for k, v in {"views": args.views, "likes": args.likes,
-                       "completion_rate": args.completion_rate}.items() if v is not None}
+            from .feedback import Observation, append_observation, parse_metrics
+
+            metrics = parse_metrics({"views": args.views, "likes": args.likes,
+                                     "comments": args.comments, "shares": args.shares,
+                                     "favorites": args.favorites,
+                                     "completion_rate": args.completion_rate,
+                                     "average_watch_seconds": args.watch_seconds})
             if not args.url.startswith("https://"):
                 raise ValueError("发布链接需以 https:// 开头")
-            if any(v < 0 for v in metrics.values()) or (args.completion_rate is not None and args.completion_rate > 1):
-                raise ValueError("计数不可为负，完播率范围为 0–1")
+            if args.completion_rate is not None and args.completion_rate > 1:
+                raise ValueError("完播率范围为 0–1")
+            episode = studio.ledger.get(args.id)
+            observation = Observation(
+                episode=f"VID-{args.id:06d}", revision=episode["revision"], cut=args.cut,
+                platform=args.platform, url=args.url, observed_at=args.observed_at or now(),
+                window=args.window, metrics=metrics, note=args.note or "")
+            # The versioned record is authoritative; the ledger keeps the quick index.
+            append_observation(studio.workspace / "feedback.json", observation)
             studio.ledger.add_feedback(args.id, args.platform, args.url, metrics)
             studio.export_index()
-            emit({"recorded": True, "metrics": metrics, "missing_metrics": "unknown"})
+            emit({"recorded": True, "observation": observation.model_dump(),
+                  "missing_metrics": "unknown",
+                  "note": "只记录你提供的数据；没有抓取平台留存，也没有触发发布或策略变更"})
         return 0
     except (Exception, KeyboardInterrupt) as exc:
         print(f"Movelyth 停在可恢复状态：{type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
