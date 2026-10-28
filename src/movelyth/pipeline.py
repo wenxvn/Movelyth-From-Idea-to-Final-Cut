@@ -25,7 +25,7 @@ from .craft import composition_report, narrative_report, rhythm_report, sound_de
 from .ledger import Ledger
 from .media import ffmpeg, image_layers, prepare_cut
 from .metrics import Metrics
-from .models import SCHEMA_VERSION, Cut, Film, Research, Review, TopicPlan
+from .models import SCHEMA_VERSION, Cut, Film, Finding, Research, Review, TopicPlan
 from .parameters import catalog as parameters_catalog
 from .policy import (
     POLICY_VERSION,
@@ -55,6 +55,7 @@ from .quality import (
 )
 from .recipes import catalog as recipes_catalog
 from .recipes import choose as recipes_choose
+from .repair import plan_for_review, scope_violations
 from .scenedsl import pacing_report, resolve_data_layers, validate_cut_timeline
 from .util import atomic_json, file_hash, fingerprint, now, read_json, run
 
@@ -545,7 +546,13 @@ class Studio:
                     except VisualReviewError:
                         if import_film or repair == self.config["studio"]["max_retries"]:
                             raise
-                        print("[修复] 将实际抽帧反馈交给编导，重建受影响的下游阶段", flush=True)
+                        plans = self._repair_plans(job, round_index=repair + 1)
+                        if plans and all(not item.allowed() for item in plans):
+                            raise RuntimeError("修复轮次已用尽：" + "；".join(
+                                item.blocked_reason for item in plans if item.blocked_reason))
+                        self._invalidate_stages(episode["id"], job, plans)
+                        print("[修复] 按缺陷类型重做受影响的下游阶段：" + "、".join(
+                            sorted({item.defect for item in plans}) or {"review"}), flush=True)
                 raise RuntimeError("制作未返回结果")
             except BaseException as exc:
                 self.ledger.status(episode_id, "failed", error=f"{type(exc).__name__}: {exc}")
@@ -620,6 +627,43 @@ class Studio:
         notes_path = folder / "review-notes.txt"
         notes_path.write_text(notes.strip(), encoding="utf-8")
         return self.produce(episode["id"], target_scenes=sorted(set(targeted)), notes=notes.strip())
+
+    @staticmethod
+    def _repair_plans(job: Path, *, round_index: int):
+        """Turn the last visual-review rejection into defect-routed plans."""
+        path = job / "visual-feedback.json"
+        if not path.is_file():
+            return []
+        try:
+            feedback = read_json(path)
+        except (OSError, ValueError):
+            return []
+        findings = []
+        for raw in feedback.get("findings") or []:
+            try:
+                findings.append(Finding.model_validate(raw))
+            except ValueError:
+                continue
+        if not findings:
+            return []
+        return plan_for_review(findings, round_index=round_index)
+
+    def _invalidate_stages(self, episode_id: int, job: Path, plans) -> None:
+        """Delete only the stage markers a defect actually invalidates."""
+        stage_alias = {"sound-mix": "sound", "script": "script", "assets": "assets",
+                       "evidence": "evidence", "sound": "sound", "render": "render", "check": "check"}
+        removed = []
+        for plan in plans:
+            for name in plan.invalidates:
+                stage = stage_alias.get(name, name)
+                marker = job / "stages" / f"{stage}.json"
+                if marker.is_file():
+                    marker.unlink()
+                    removed.append(stage)
+        if removed:
+            self.ledger.event(episode_id, "repair", "invalidated",
+                              {"stages": sorted(set(removed)),
+                               "defects": sorted({plan.defect for plan in plans})})
 
     def _provider(self):
         """One provider per Studio, so capability probes (a rejected response_format)
@@ -766,6 +810,14 @@ class Studio:
                 film.title = episode["title"]
                 if frozen and notes:
                     film = self._keep_untouched_scenes(frozen, film, set(target_scenes or []))
+                    frozen_scenes = {scene.id: scene.model_dump()
+                                     for cut in (frozen.long, frozen.short) for scene in cut.scenes}
+                    revised_scenes = {scene.id: scene.model_dump()
+                                      for cut in (film.long, film.short) for scene in cut.scenes}
+                    violations = scope_violations(frozen_scenes, revised_scenes,
+                                                  set(target_scenes or []))
+                    if violations:
+                        raise RuntimeError("修复越界：" + "；".join(violations))
                 try:
                     warnings = validate_script(film, research, config["long_seconds"], config["short_seconds"])
                 except ScriptIssues as exc:
@@ -1090,7 +1142,15 @@ class Studio:
                         "issues": [check.observation for check in decision.blocking],
                         "findings": [finding.model_dump() for finding in visual.findings],
                         "at": now(), "prior_film_hash": fingerprint(film)})
-                    raise RuntimeError("成片检查未通过：" + "；".join(
+                    # A defect the director can fix (a finding, an unsupported claim) goes
+                    # back for a routed repair; a broken media file or a missing voice
+                    # track cannot be fixed by rewriting the script, so it stops here.
+                    editorial = all(check.source in {"model", "source"} and check.repairable
+                                    for check in decision.blocking)
+                    if not editorial:
+                        raise RuntimeError("成片检查未通过：" + "；".join(
+                            check.check_id for check in decision.blocking))
+                    raise VisualReviewError("可修复缺陷：" + "；".join(
                         check.check_id for check in decision.blocking))
                 raise VisualReviewError("需要复核：" + "；".join(
                     f"{check.check_id}: {check.observation}" for check in decision.review))

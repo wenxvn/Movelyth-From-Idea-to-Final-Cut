@@ -189,3 +189,22 @@
 | 契约暴露 | `RENDERER_CAPABILITIES.parameter_functions`、director.md | 编导只能选 3 个函数与有界参数 | V1 |
 
 **未验证**：真实模型使用 function 的采纳率；参数动画在真实横竖版成片中的观感。
+
+## A12 · S3-01 按缺陷类型路由的最小修复（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 362 passed | V1 |
+| 分类 | 9 组 finding 文本 | fact / data / pronunciation / mix / caption / layout / event / asset / review 各自正确 | V1 |
+| 信号冲突 | “音乐把结论压住了”“纵轴单位写成毫秒但数据是秒” | 按信号计分选 mix / data，不按首个关键词 | V1 |
+| 路由表 | 9 类缺陷 | 每类都有 operations / invalidates / rechecks / must_not；排版修复不得改 claims 或音频 | V1 |
+| 轮次 | layout 第 1/2/3 轮 | 前两轮允许，第 3 轮 `blocked_reason` 明确“已用尽” | V1 |
+| 分组 | 3 条 finding（2 layout + 1 fact） | 归为 2 个计划，layout 带两个 scene_id | V1 |
+| 范围检查 | 未在范围内的镜头被改动 / 被删除 | 各自报告“改动了未在范围内的镜头”“删除了未在范围内的镜头” | V1 |
+| 排版缺陷 | 视觉审片报 `visual_defect` | 只失效 render/check（不含 sound）；ledger 记录 `invalidated` 事件 | V1（离线 pipeline） |
+| 事实缺陷 | 视觉审片报 `factual` | 失效 evidence/script/sound/render/check | V1（离线 pipeline） |
+| 不可修复的硬失败 | 技术检查失败（非 model/source 来源） | 仍直接 `RuntimeError`，不进修复循环 | V1 |
+| 范围保持 | 编导重写全部镜头、只指定 one | 范围外镜头逐字不变（merge + scope guard 双重保护） | V1 |
+| 轮次上限 | 同一 layout 缺陷持续出现 | 总尝试次数 ≤ 3，任务记为 failed，不无限循环 | V1 |
+
+**未验证**：真实模型在路由后的修复采纳率；`remix`/`re-synthesise-clause` 两个操作的独立执行路径（当前按阶段失效重建，未做单句级重合成）。

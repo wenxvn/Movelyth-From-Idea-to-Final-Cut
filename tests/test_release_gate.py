@@ -48,7 +48,7 @@ def test_passed_true_with_a_factual_finding_blocks_delivery(offline_pipeline):
     studio = _studio(offline_pipeline, reviewer)
     try:
         episode = studio.create("事实缺陷阻断测试")
-        with pytest.raises(RuntimeError, match="成片检查未通过"):
+        with pytest.raises(RuntimeError, match="review.visual.factual"):
             studio.produce(episode["id"])
         assert not list(studio.delivery.rglob("*.mp4")), "未通过的成片不得进入待上传目录"
         job = studio.workspace / f"VID-{episode['id']:06d}"

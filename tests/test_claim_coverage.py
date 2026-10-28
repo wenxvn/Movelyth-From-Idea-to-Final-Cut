@@ -134,7 +134,9 @@ def test_unsupported_claim_blocks_before_the_director_is_called(offline_pipeline
     studio = make_studio(offline_pipeline, provider)
     try:
         episode = studio.create("证据不支持测试")
-        with pytest.raises(RuntimeError, match="成片检查未通过"):
+        # An unsupported claim is an editorial defect: it goes back for a routed
+        # repair (and still fails after the retry budget, never reaching delivery).
+        with pytest.raises(RuntimeError, match="source.research.c1"):
             studio.produce(episode["id"])
         job = studio.workspace / f"VID-{episode['id']:06d}"
         coverage = json.loads((job / "claim-coverage.json").read_text(encoding="utf-8"))
