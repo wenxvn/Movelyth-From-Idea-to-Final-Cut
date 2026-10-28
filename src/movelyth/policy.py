@@ -352,6 +352,20 @@ def audio_checks(report: dict, *, cut: str) -> list[CheckResult]:
             required=True, repairable=True,
             observation=transcript.get("note", ""), location={"cut": cut},
             evidence={"asr": asr, "detail": transcript}))
+        content = report.get("content_check") or {}
+        changed = content.get("changed") or []
+        missing = content.get("missing") or []
+        # A changed sign or magnitude is a meaning change, not a mishearing: it blocks.
+        results.append(CheckResult(
+            check_id=f"audio.{cut}.content", source="audio",
+            status="fail" if changed else ("unknown" if missing else "pass"),
+            severity="critical" if changed else "major",
+            required=bool(changed), repairable=True,
+            observation=("语音核对发现数值被改变：" + "；".join(
+                f"{item['written']}（{item['reason']}）" for item in changed[:3])) if changed
+                        else (f"语音核对未在转写中找到 {len(missing)} 处关键内容，需复听" if missing else ""),
+            location={"cut": cut},
+            evidence={"changed": changed[:5], "missing": missing[:5], "units": content.get("units")}))
     else:
         results.append(CheckResult(
             check_id=f"audio.{cut}.transcript", source="audio", status="not_applicable",

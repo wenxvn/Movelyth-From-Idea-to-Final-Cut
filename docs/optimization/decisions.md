@@ -258,3 +258,22 @@
      + `object-position`；决策写入 `asset-decisions.json`。
 - 否：联网抓图（E 部分未接入，需预算/许可/边界）；用关键词命中直接当匹配（同词不同义会把示意图当证据）。
 - 证据：`tests/test_asset_plan.py`（15 项，含真实 PNG 裁切与竖版拒绝）。
+
+## D17 · 语音后端与核对分离，等价读法只折叠形式（S2-02）
+
+- 问题：语音参数混在 `[studio]`，缓存键不含适配器；配音核对只有字符覆盖率与术语，
+  数字量级/正负号变化不会被发现（覆盖率仍可能很高）。
+- 选择：
+  1. 新增 `[speech]` 分区（backend/voice/model/rate/pitch/volume/granularity/boundary_policy/
+     supported_controls/fallback_voice），缺省继承 studio，旧配置不变。
+  2. 后端不支持的控制项直接报错，不静默忽略。
+  3. `SpeechResult` 记录真实 samples/seconds/voice/model/granularity/边界来源/字符数/用量；
+     无真实边界时标 `estimated`，不冒充 native。
+  4. `cache_key()` 含读法、后端、音色、granularity 与版本；换后端不会复用旧音频。
+  5. `reading_units()` 抽取带符号与单位的数字、否定词、术语与公式；`verify_reading()` 用
+     **独立转写**核对，按位置配对比较符号与位数。
+  6. `canonical_reading()` 只折叠形式（中文数字、零点五、负），**不折叠符号与量级**。
+  7. `policy.audio_checks()`：符号/量级改变 → critical 阻断；未命中的术语/否定 → 非必需 unknown
+     提示复听。
+- 否：用字符覆盖率代替内容核对（0.5→5 覆盖率仍然很高）；把 ASR 结果当作发音正确性的证明。
+- 证据：`tests/test_speech.py`（20 项）。

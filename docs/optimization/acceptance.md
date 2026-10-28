@@ -249,3 +249,25 @@
 | 渲染 | `pytest -m slow` | 通过（image 图层在无 crop 时仍按 contain 渲染） | V2 |
 
 **未验证**：联网素材供应商（E 部分，未接入，能力声明不含）；真实照片的裁切观感（需人眼确认构图）。
+
+## A15 · S2-02 语音后端、读法与独立核对（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 412 passed | V1 |
+| 旧配置兼容 | 无 `[speech]` 的配置 | 继承 studio.voice/rate/pitch/volume，行为不变 | V1 |
+| 局部覆盖 | `[speech]` 只写 voice/granularity | 其余沿用 studio | V1 |
+| 不支持的控制 | pitch 非默认 + supported_controls 不含 pitch | `ValueError`“不支持 pitch”，不静默忽略 | V1 |
+| 缓存键 | 同文本 / 改 granularity / 改读法 / 改后端 | 一致 / 不同 / 不同 / 不同 | V1 |
+| 合成记录 | 1 s 24kHz 音频 + 1 个边界 | samples=24000、seconds=1.0、boundary_source=native、usage 有值 | V1 |
+| 边界来源 | 无边界 | 记为 `estimated`，不冒充 native | V1 |
+| 备用音色 | `fallback_from` | 记录被替换的主音色 | V1 |
+| 读法单位 | “0.5 / -0.05 / 12 毫秒” | 提取带符号、量级与单位的读法单位；否定/术语/公式各自识别 | V1 |
+| 等价读法 | “零点五 / 负零点零五 / 十二毫秒” | 全部折叠为 0.5 / -0.05 / 12，判为通过 | V1 |
+| 正负号被改变 | 正确读 -0.05，转写为 0.05 | `changed`（“正负号被改变”），critical 阻断 | V1 |
+| 量级被改变 | 正确读 0.5，转写为 5 | `changed`（“数字位数/量级被改变”），critical 阻断 | V1 |
+| 漏否定词 | “不正确”转写为“正确” | `missing`（不），非必需 unknown，需复听 | V1 |
+| ASR 未启用 | `content_check` | `not-run`，明确写“语音内容未做独立核对” | V1 |
+
+**未验证**：真实 Edge TTS 合成与 faster-whisper 转写（本轮未跑，需联网/模型）；逐句 vs 整段合成的
+主观自然度对照（V5，需实听）。

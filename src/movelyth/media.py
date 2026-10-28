@@ -338,12 +338,15 @@ def prosody_segments(narration: str, emphasis: list[str] | None = None,
 
 
 def voice(text: str, config: dict, cache: Path, *, rate: str | None = None,
-          pitch: str | None = None, volume: str | None = None) -> tuple[np.ndarray, list[dict], list[Path]]:
+          pitch: str | None = None, volume: str | None = None,
+          adapter: str = "edge") -> tuple[np.ndarray, list[dict], list[Path]]:
     rate = rate or config["voice_rate"]
     pitch = pitch or config.get("voice_pitch", "+0Hz")
     volume = volume or config.get("voice_volume", "+0%")
+    # The cache key names the adapter as well: a different backend for the same text,
+    # voice and rate produces different audio.
     key = fingerprint({"text": text, "voice": config["voice"], "rate": rate, "pitch": pitch,
-                       "volume": volume, "version": TTS_VERSION})
+                       "volume": volume, "adapter": adapter, "version": TTS_VERSION})
     folder = cache / key
     folder.mkdir(parents=True, exist_ok=True)
     wav, mp3, timing = folder / "voice.wav", folder / "voice.mp3", folder / "timing.json"
@@ -488,12 +491,15 @@ def speech_plan(narration: str, replacements: dict | None = None) -> tuple[str, 
 def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait: bool) -> tuple[dict, list[Path]]:
     from .models import Scene
     from .scenedsl import normalize_scene
+    from .speech import describe, speech_settings
 
     fps = config["fps"]
     style = cut.get("style", "tech")
     replacements = config.get("speech_replace") or {}
     chunks, starts, paths, scenes, cursor = [], [], [], [], 0
     script_events: list[dict] = []
+    settings = speech_settings({"studio": config})
+    speech_records: list[dict] = []
     scene_seconds: list[float] = []
     lead = 0.25
     for raw in cut["scenes"]:
@@ -552,6 +558,10 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
         normalized.update({"frames": frames, "captions": pages, "caption_timing": timing})
         if spoken != scene.narration:
             normalized["spoken_narration"] = spoken
+        speech_records.append(describe(
+            settings.backend, audio, boundaries, settings=settings, text=scene.narration,
+            reading=spoken, sample_rate=SAMPLE_RATE,
+            boundary_source="native" if boundaries else "estimated").model_dump())
         scenes.append(normalized)
         starts.append(cursor / SAMPLE_RATE)
         scene_seconds.append(frames / fps)
@@ -585,7 +595,14 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
     return {"title": cut["title"], "scenes": scenes, "frames": sum(s["frames"] for s in scenes),
             "seconds": duration, "mix": str(mixed), "voice": str(dry),
             "style": style, "cues": events, "sound_events": events,
-            "prosody": "clause+emphasis"}, paths
+            "prosody": "clause+emphasis",
+            # What actually produced the audio: backend, voice, real sample counts and
+            # where the boundaries came from, per scene.
+            "speech": {"backend": settings.backend, "voice": settings.voice,
+                       "model": settings.model, "granularity": settings.granularity,
+                       "sample_rate": SAMPLE_RATE, "characters": sum(r["characters"] for r in speech_records),
+                       "boundary_sources": sorted({r["boundary_source"] for r in speech_records}),
+                       "scenes": speech_records}}, paths
 
 
 def image_layers(output: Path) -> tuple[list[str], list[Path], dict]:

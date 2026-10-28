@@ -61,6 +61,19 @@ model = ""
 # inline_schema = true
 # 连通性检查：movelyth doctor 会探测；也可单独运行 movelyth probe
 
+[speech]
+# 语音后端独立于 agents 的文字角色。缺省继承 [studio] 的 voice/rate/pitch/volume，
+# 旧配置不写本节也能照原样工作。
+backend = "edge"
+# granularity：sentence（逐句，句间停顿真实）/ clause / paragraph（整段交给后端）
+granularity = "sentence"
+# native：使用后端返回的真实词语边界；estimated：按字符比例估计（字幕会标为估计）
+boundary_policy = "native"
+# 后端不支持的控制项不能静默忽略：列在这里的控制项才会被使用。
+supported_controls = ["rate", "pitch", "volume"]
+# 可选：主音色失败时的备用音色。切换会记录 fallback_from 并重算下游缓存。
+fallback_voice = ""
+
 [budget]
 # 一次任务的上限，用尽即停止后续阶段（不会降低事实与关键检查标准）。
 # 费用：未配置价格表时 estimated_cost/actual 都为 null，不按 0 记。

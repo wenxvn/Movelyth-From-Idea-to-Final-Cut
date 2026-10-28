@@ -56,7 +56,7 @@
 | 编号 | 状态 | 依赖 | 证据 |
 | --- | --- | --- | --- |
 | S2-01 镜头配方与统一风格 | verified（V1；真实模型选择未跑） | S1-05, S1-06 | A8；`recipes.py`、`Scene.recipe`、`tests/test_recipes.py`、D10 |
-| S2-02 语音后端/读法/韵律/核对 | todo | S1-06, S1-07 |
+| S2-02 语音后端/读法/韵律/核对 | verified（V1；真实 TTS/ASR 未在本轮重跑） | S1-06, S1-07 | A15；`speech.py`、`audioqc.content_check`、`[speech]` 配置、`tests/test_speech.py`、D17 |
 | S2-03 声音事件/分轨/混音 | todo | S2-02, S1-06 |
 | S2-04 字体/字幕/动态布局 | todo | S2-01, S2-02 |
 | S2-05 受控计算驱动的参数动画 | verified（V1；真实成片未跑） | S2-01, S1-06 | A11；`parameters.py`、`Scene.function/parameters`、`tests/test_parameters.py`、D13 |

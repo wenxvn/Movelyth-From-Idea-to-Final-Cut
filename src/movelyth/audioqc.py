@@ -207,12 +207,32 @@ def key_term_report(script: str, transcript: dict, terms: list[str]) -> dict:
             "limitations": ["术语核对依赖 ASR；未通过只说明需要复听，不等于配音读错"]}
 
 
+def content_check(script: str, asr: dict, *, terms: list[str] | None = None) -> dict:
+    """Independent check of numbers, units, negations, terms and formulas.
+
+    This is separate from character coverage: a sentence can be 95% covered and still
+    have lost the word "不" or turned 0.5 into 5.
+    """
+    from .speech import reading_units, verify_reading
+
+    if asr.get("status") != "completed" or not asr.get("text"):
+        return {"status": "not-run", "units": 0, "missing": [], "changed": [],
+                "reason": "ASR 未启用或没有转写文本；语音内容未做独立核对"}
+    units = reading_units(script, terms=terms)
+    result = verify_reading(units, asr["text"])
+    key_units = [unit for unit in units if unit.importance == "key"]
+    return {"status": result["status"], "units": len(units), "key_units": len(key_units),
+            "missing": result["missing"], "changed": result["changed"],
+            "limitations": result["limitations"]}
+
+
 def audio_qc(voice: Path, mix: Path, script: str, *, config: dict) -> dict:
     asr = transcribe(voice, enabled=bool(config.get("asr_enabled", False)),
                      model_size=str(config.get("asr_model", "small")))
     return {
         "asr": asr,
         "transcript_check": compare_transcript(script, asr),
+        "content_check": content_check(script, asr, terms=config.get("key_terms") or []),
         "key_terms": key_term_report(script, asr, config.get("key_terms") or []),
         "silence": silence_report(mix),
         "ducking": ducking_report(voice, mix),

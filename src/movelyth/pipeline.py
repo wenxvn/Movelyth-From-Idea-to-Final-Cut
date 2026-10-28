@@ -82,6 +82,8 @@ ALLOWED_SETTINGS = {
     "agents": {"provider", "timeout_seconds", "model", "mock_dir", "base_url", "api_key_env",
                "structured_output", "vision", "max_tokens", "temperature", "inline_schema", "thinking"},
     "paths": {"workspace", "delivery"},
+    "speech": {"backend", "voice", "model", "rate", "pitch", "volume", "granularity",
+               "boundary_policy", "fallback_voice", "supported_controls"},
     "budget": {"model_calls", "input_tokens", "output_tokens", "tts_characters", "tts_seconds",
                "render_minutes", "wall_seconds", "currency", "price_version"},
 }
