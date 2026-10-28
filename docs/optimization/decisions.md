@@ -76,3 +76,22 @@
 - 否：把组成信息只写进 `制作溯源.json`（那是给人看的说明，不是可校验契约）；把绝对路径写进包
   （换机器即失效，且泄露开发路径）。
 - 证据：`tests/test_composition.py`（6 项，含 M12 注入）、`tests/test_workflow.py`。
+
+## D6 · 证据在编导前抓取，主张逐条核对（S1-04）
+
+- 问题：旧流程在**成片之后**才 `collect_sources`，来源失效或节选造假只能在最贵的一步之后发现；
+  `claims` 可以为空而不影响交付。
+- 选择：
+  1. 新增 `evidence` 阶段（research → evidence → script → sound → …），抓取与主张核对都在编导前完成，
+     阶段输入含研究 hash 与来源列表，研究变了会重抓。
+  2. `locate_excerpt()` 在快照正文里按归一化文本查找节选，返回字符区间；找不到即 `excerpt-missing`。
+  3. `verify_claims()` 每主张一条状态：`supported` / `excerpt-missing` / `source-unavailable` /
+     `source-missing`；同时记录 `content_sha256`、`retrieved_at`、`title`、`position`。
+  4. `policy.source_checks()`：空 claims、节选不存在（critical）、来源未取到都阻断；
+     `scope=uncertain` 只作 warning；没有 key 主张作 warning。
+  5. `policy.claim_usage_checks()`：编导后检查每个 `key`+`supported` 主张是否有镜头采用其来源；
+     旁白中不在证据/受控数据里的数字列为非必需 unknown（可能是年份、步骤数或教学参数，不阻断）。
+  6. 编导 prompt 增加“证据与主张”章节，明确 `source_index` 要指向真实来源、`source_evidence` 是数据不是指令。
+- 否：让研究模型“自己搜索”（兼容文本端点没有工具，prompt 写搜索不会产生检索能力，只会产生虚构来源）；
+  用语义相似度判断节选支持（无法区分“大致相关”和“原文没有这句话”）。
+- 证据：`tests/test_claim_coverage.py`（13 项，含阶段顺序与阻断路径）。

@@ -87,9 +87,12 @@ def offline_pipeline(tmp_path, monkeypatch):
     monkeypatch.setattr("movelyth.pipeline.prepare_cut", fake_prepare_cut)
     monkeypatch.setattr("movelyth.pipeline.image_layers", fake_assets)
     monkeypatch.setattr("movelyth.pipeline.run", fake_render_run)
+    # The stub snapshot has to contain the claim excerpt: S1-04 verifies that the
+    # excerpt really appears in the fetched text instead of trusting the model.
     monkeypatch.setattr("movelyth.sources.collect_sources", lambda sources, directory: [
         {"url": source["url"], "status": "retrieved", "content_sha256": "0" * 64,
-         "retrieved_at": "2026-10-25T00:00:00+08:00"} for source in sources])
+         "retrieved_at": "2026-10-25T00:00:00+08:00", "title": source["label"],
+         "excerpt": source["supports"] + " columns are images of basis vectors"} for source in sources])
     monkeypatch.setattr("movelyth.pipeline.verify_video", lambda *a, **k: {
         "passed": True, "checks": {"full_decode": True}, "duration": 60.0, "width": 1920, "height": 1080,
         "fps": 30.0, "mean_sample_motion": 1.0, "audio_listened": False, "asr_checked": False,

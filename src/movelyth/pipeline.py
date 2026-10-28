@@ -24,10 +24,12 @@ from .models import SCHEMA_VERSION, Cut, Film, Research, Review, TopicPlan
 from .policy import (
     POLICY_VERSION,
     audio_checks,
+    claim_usage_checks,
     decide,
     layout_checks,
     review_checks,
     scene_ticks,
+    source_checks,
     technical_checks,
 )
 from .publish import audit_summary, credits, publishing_copy
@@ -526,6 +528,33 @@ class Studio:
         research = Research.model_validate(research_data)
         self.ledger.add_ideas(research.next_ideas, episode["id"])
 
+        def evidence_action():
+            # Retrieval and claim support happen *before* directing: the director gets
+            # excerpts that were actually fetched, and a claim whose excerpt is missing
+            # from the snapshot is already known to be unsupported here.
+            from .sources import collect_sources, coverage_summary, verify_claims
+
+            fetched = collect_sources(research.sources and research_data["sources"],
+                                      job / "source-evidence")
+            claims = verify_claims(research, fetched)
+            path = job / "claim-coverage.json"
+            atomic_json(path, {"claims": claims, "summary": coverage_summary(claims),
+                               "sources": [{key: item[key] for key in
+                                            ("url", "resolved_url", "status", "title", "content_sha256",
+                                             "retrieved_at", "error", "excerpt") if key in item}
+                                           for item in fetched]})
+            return {"claims": claims, "summary": coverage_summary(claims),
+                    "sources": fetched}, [path]
+
+        evidence = self.stage(episode, "evidence",
+                              {"research": file_hash(job / "research.json"),
+                               "sources": research_data["sources"],
+                               "network": "公网 HTTPS；重定向逐跳校验；正文按字节与类型限制"},
+                              evidence_action)
+        coverage = evidence["claims"]
+        source_excerpts = [{key: item.get(key) for key in ("url", "status", "title", "excerpt")}
+                           for item in evidence["sources"]]
+
         def script_action():
             nonlocal target_scenes, notes
             script_feedback = job / "script-feedback.json"
@@ -571,9 +600,11 @@ class Studio:
                     film = Film.model_validate(read_json(import_film))
                 elif config.get("director_split", True):
                     film = self._director_split(provider, common, research_data, research, issues,
-                                                job, attempt, frozen, target_scenes, notes)
+                                                job, attempt, frozen, target_scenes, notes,
+                                                coverage=coverage, source_excerpts=source_excerpts)
                 else:
-                    context = {**common, "research": research_data, "review_issues": issues}
+                    context = {**common, "research": research_data, "claim_coverage": coverage,
+                               "source_evidence": source_excerpts, "review_issues": issues}
                     if frozen and notes:
                         context["revise"] = {"scene_ids": target_scenes, "notes": notes,
                                              "current_film": frozen.model_dump()}
@@ -649,7 +680,8 @@ class Studio:
             atomic_json(job / "script-feedback.json", {"issues": issues, "at": now()})
             raise RuntimeError("脚本审片未通过：" + "；".join(issues))
 
-        film = self.stage(episode, "script", {"research": research_data, "prompts": prompts,
+        film = self.stage(episode, "script", {"research": research_data,
+                          "evidence": evidence["summary"], "prompts": prompts,
                           "brief": brief, "targets": [config["long_seconds"], config["short_seconds"]],
                           # Contract changes must invalidate an approved script: a cached film that
                           # no longer passes validation has to be regenerated, not silently shipped.
@@ -824,11 +856,9 @@ class Studio:
                 images.append(image)
                 outputs.extend([video, image])
                 outputs.extend(Path(p) for p in actual_stills)
-            from .sources import collect_sources
-
-            evidence = collect_sources(research_data["sources"], job / "source-evidence")
             visual_raw = provider.call("reviewer", {"stage": "visual", "film": film,
-                                  "research": research_data, "source_evidence": evidence,
+                                  "research": research_data, "source_evidence": source_excerpts,
+                                  "claim_coverage": coverage,
                                   "technical_reports": reports, "audio_reports": audio_reports,
                                   "pacing": pacing, "sound_design": design,
                                   "duration_policy": {k: duration_policy(config, k) for k in ["long", "short"]},
@@ -848,6 +878,8 @@ class Studio:
                 checks.extend(technical_checks(reports[name], cut=name))
                 checks.extend(audio_checks(audio_reports[name], cut=name))
                 checks.extend(layout_checks(timelines[name], cut=name))
+            checks.extend(source_checks(coverage))
+            checks.extend(claim_usage_checks(film, coverage))
             checks.extend(review_findings)
             decision = decide(checks, inputs={
                 "episode": f"VID-{episode['id']:06d}", "revision": episode["revision"],
@@ -878,7 +910,8 @@ class Studio:
                                  "release_decision": decision.model_dump(),
                                  "source_fetches": [{k: source[k] for k in
                                                      ["url", "status", "content_sha256", "retrieved_at"]
-                                                     if k in source} for source in evidence],
+                                                     if k in source} for source in evidence["sources"]],
+                                 "claim_coverage": {"summary": evidence["summary"], "claims": coverage},
                                  "creation_mode": ("imported-script" if import_film else
                                                    ("mock-provider" if getattr(provider, "name", "") == "mock"
                                                     else "title-driven-codex-agents")),
@@ -899,7 +932,7 @@ class Studio:
         return self.deliver(episode, job, film, research_data, timelines, library_ids)
 
     def _director_split(self, provider, common, research_data, research, issues, job, attempt,
-                        frozen, target_scenes, notes) -> Film:
+                        frozen, target_scenes, notes, coverage=None, source_excerpts=None) -> Film:
         """Generate each cut in its own call.
 
         A whole Film with 9+ composed scenes easily exceeds the provider's output
@@ -912,6 +945,7 @@ class Studio:
         cuts = {}
         for name, seconds in targets.items():
             context = {**common, "research": research_data, "review_issues": issues,
+                       "claim_coverage": coverage or [], "source_evidence": source_excerpts or [],
                        "cut": name, "target_seconds": seconds,
                        "cut_instruction": f"只输出 {name} 这一个 cut（schema 为 Cut），不要输出 Film。"}
             if frozen and notes:

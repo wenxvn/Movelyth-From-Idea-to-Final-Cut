@@ -6,10 +6,13 @@
 
 输出要求：
 - facts：有来源支持的核心事实，每条都要能被 sources 中至少一项支持。
-- claims：把关键主张映射到证据。每条含 claim_id（c1、c2…）、statement、source_index（sources 下标）、excerpt（来源中的简短摘录或定位，不是整段复制）、scope：
+- claims：把关键主张映射到证据。每条含 claim_id（c1、c2…）、statement、source_index（sources 下标）、evidence_refs（可选，另有支持该主张的来源下标，最多 3 个）、excerpt（**必须是从来源正文逐字摘录的连续片段**，不是概括、翻译或“定位说明”）、scope、importance：
   - established：已有共识、来源可直接支持；
   - illustrative：只是解释用示意，不能当成实测；
-  - uncertain：存在争议或证据不足。
+  - uncertain：存在争议或证据不足；
+  - importance：key 表示这集的核心结论（必须进入至少一个镜头），supporting 表示背景信息。
+- excerpt 会被程序到实际抓取的正文里查找：找不到就判为该主张证据不成立，整集会在编导前被拦下。
+  因此只写你确实能在来源中看到的连续原文；宁可用更短的句子，也不要改写或翻译。
 - sources 的 supports 写清具体支持哪条主张。
 - cautions 写明知识边界、可能的误解和无法核实的部分。
 - next_ideas 是相关但未制作的新题。

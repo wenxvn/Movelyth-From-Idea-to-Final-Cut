@@ -376,6 +376,110 @@ def audio_checks(report: dict, *, cut: str) -> list[CheckResult]:
     return results
 
 
+CLAIM_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def source_checks(coverage: list[dict], *, stage: str = "research") -> list[CheckResult]:
+    """Claim support against the snapshots that were actually fetched.
+
+    An unfetched or unparsable source can never support a claim, and an excerpt
+    that is absent from the snapshot is treated as invented rather than "roughly
+    right".  A research record with no claims cannot pass the factual gate.
+    """
+    if not coverage:
+        return [CheckResult(
+            check_id=f"source.{stage}.no-claims", source="source", status="fail",
+            severity="major", required=True, repairable=True,
+            observation="研究没有主张—证据映射（claims 为空），关键事实无法核对")]
+    results = []
+    for entry in coverage:
+        claim_id = entry["claim_id"]
+        status = entry["status"]
+        base = {"source": "source", "location": {"claim_id": claim_id,
+                                                 "source_index": entry.get("source_index")},
+                "evidence": {key: entry.get(key) for key in
+                             ("source_url", "position", "content_sha256", "title", "detail")
+                             if entry.get(key) is not None}}
+        if status == "supported":
+            results.append(CheckResult(check_id=f"source.{stage}.{claim_id}", status="pass",
+                                       severity="major", required=True,
+                                       observation=f"{claim_id} 已定位到来源节选", **base))
+        elif status == "excerpt-missing":
+            results.append(CheckResult(check_id=f"source.{stage}.{claim_id}", status="fail",
+                                       severity="critical", required=True, repairable=True,
+                                       observation=f"{claim_id} 的节选在抓取正文中找不到：{entry['statement'][:60]}",
+                                       **base))
+        elif status == "source-unavailable":
+            results.append(CheckResult(check_id=f"source.{stage}.{claim_id}", status="fail",
+                                       severity="major", required=True, repairable=True,
+                                       observation=f"{claim_id} 的来源未取到：{entry.get('detail', '')[:120]}",
+                                       **base))
+        elif status == "source-missing":
+            results.append(CheckResult(check_id=f"source.{stage}.{claim_id}", status="fail",
+                                       severity="major", required=True, repairable=True,
+                                       observation=f"{claim_id} 引用了不存在的来源", **base))
+        else:
+            results.append(CheckResult(check_id=f"source.{stage}.{claim_id}", status="unknown",
+                                       severity="minor", required=False,
+                                       observation=f"{claim_id} 状态未知：{status}", **base))
+        if entry.get("scope") == "uncertain":
+            results.append(CheckResult(
+                check_id=f"source.{stage}.{claim_id}.uncertain", source="source", status="unknown",
+                severity="minor", required=False,
+                observation=f"{claim_id} 标注为不确定，正文必须保留适用条件",
+                location={"claim_id": claim_id}, evidence={"scope": entry.get("scope")}))
+    if not any(entry.get("importance") == "key" for entry in coverage):
+        results.append(CheckResult(
+            check_id=f"source.{stage}.no-key-claim", source="source", status="unknown",
+            severity="minor", required=False,
+            observation="所有主张都标为 supporting：核心结论缺少 key 主张"))
+    return results
+
+
+def claim_usage_checks(film: dict, coverage: list[dict]) -> list[CheckResult]:
+    """After directing: do key claims reach a scene, and are there unsupported numbers?
+
+    The second part is deliberately a warning, not a gate: a narration number can be
+    a date, a count of steps or a teaching parameter.  It is reported with the
+    numbers that appear nowhere in the evidence so a human can look, instead of
+    silently passing or blocking every video.
+    """
+    results: list[CheckResult] = []
+    used = {int(scene.get("source_index", -1)) for cut in ("long", "short")
+            for scene in (film.get(cut) or {}).get("scenes", [])}
+    for entry in coverage:
+        if entry.get("importance") != "key" or entry["status"] != "supported":
+            continue
+        indices = {int(entry.get("source_index", -1)), *[int(i) for i in entry.get("evidence_refs") or []]}
+        if used & indices:
+            continue
+        results.append(CheckResult(
+            check_id=f"source.coverage.{entry['claim_id']}", source="source", status="fail",
+            severity="major", required=True, repairable=True,
+            observation=f"关键主张 {entry['claim_id']} 没有进入任何镜头：{entry['statement'][:60]}",
+            location={"claim_id": entry["claim_id"]}))
+    known_numbers: set[str] = set()
+    for entry in coverage:
+        known_numbers.update(CLAIM_NUMBER.findall(str(entry.get("statement", ""))))
+        known_numbers.update(CLAIM_NUMBER.findall(str(entry.get("detail", ""))))
+    for cut in ("long", "short"):
+        for scene in (film.get(cut) or {}).get("scenes", []):
+            for layer in scene.get("layers") or []:
+                for series in layer.get("series") or []:
+                    known_numbers.update(str(value) for value in series.get("values") or [])
+                known_numbers.update(str(value) for value in layer.get("points") or [])
+            unknown = [number for number in CLAIM_NUMBER.findall(scene.get("narration", ""))
+                       if number not in known_numbers]
+            if unknown:
+                results.append(CheckResult(
+                    check_id=f"source.coverage.{cut}.{scene.get('id', '?')}.numbers",
+                    source="source", status="unknown", severity="minor", required=False,
+                    observation="旁白里的数字没有出现在主张或受控数据中：" + "、".join(unknown[:5]),
+                    location={"cut": cut, "scene_id": scene.get("id")},
+                    evidence={"numbers": unknown[:10]}))
+    return results
+
+
 def layout_checks(timeline: dict, *, cut: str) -> list[CheckResult]:
     """Soft layout warnings and estimated caption timing, per scene.
 

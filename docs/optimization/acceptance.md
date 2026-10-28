@@ -52,3 +52,21 @@
 | 平台 AI 说明 | `发布文案.md` | 含 AI 说明草稿与“仍需你本人勾选确认”，不声称已完成平台声明 | V1 |
 
 **未验证**：真实编码后视频/音轨与组成清单的一致性（离线 pipeline 使用桩），在 S2-09 与 S3-02 补真实媒体证据。
+
+## A4 · S1-04 来源前移与关键主张覆盖（2026-10-28）
+
+| 项 | 命令 / 输入 | 结果 | 层级 |
+| --- | --- | --- | --- |
+| 离线测试 | `pytest -q -m "not slow and not live"` | 251 passed | V1 |
+| 阶段顺序 | 离线 pipeline 记录调用顺序 | `evidence` 在 `director` 之前；编导 prompt 含 `claim_coverage` 与 `source_evidence` 正文节选 | V1 |
+| 节选定位 | `locate_excerpt` | 空白/大小写归一后可定位并返回字符区间；不在正文中返回 `None` | V1 |
+| 证据不成立 | 快照正文不含 claim 节选 | `claim-coverage.json` 为 `excerpt-missing`；交付决定 `blocked`（critical）；不进入渲染 | V1（离线 pipeline） |
+| 来源未取到 | 快照 `status=unavailable` | `source-unavailable`，不冒充已读 | V1 |
+| 空主张 | `claims=[]` | `source.research.no-claims` 阻断 | V1 |
+| 不确定主张 | `scope=uncertain` | 非必需 unknown → warning，不阻断 | V1 |
+| 关键主张未进镜头 | 关键主张来源未被任何镜头 `source_index` 引用 | `fail/major`，阻断 | V1 |
+| 旁白新数字 | 旁白出现证据中没有的“37 倍” | 记为非必需 unknown（列出数字），不阻断 | V1 |
+| 模型边界 | `source_index`/`evidence_refs` 越界 | Pydantic 拒绝 | V1 |
+
+**未验证**：真实公网来源抓取（本轮无网络抓取任务）、PDF/表格定位（S3-06）、真实模型对
+`importance`/`excerpt` 的采纳率（无模型端点）。

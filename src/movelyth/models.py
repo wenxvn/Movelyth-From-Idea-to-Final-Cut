@@ -54,8 +54,12 @@ class Claim(Contract):
     claim_id: str = Field(pattern=r"^c[0-9]{1,2}$")
     statement: str = Field(min_length=5, max_length=240)
     source_index: int = Field(ge=0, le=5)
+    # Additional sources that support the same statement (corroboration, not a copy).
+    evidence_refs: list[int] = Field(default_factory=list, max_length=3)
     excerpt: str = Field(min_length=4, max_length=280)
     scope: Literal["established", "illustrative", "uncertain"]
+    # ``key`` claims must reach a scene; ``supporting`` ones may stay background.
+    importance: Literal["key", "supporting"] = "key"
 
 
 class Research(Contract):
@@ -73,6 +77,9 @@ class Research(Contract):
         for claim in self.claims:
             if claim.source_index >= len(self.sources):
                 raise ValueError(f"claim {claim.claim_id} 引用了不存在的来源")
+            for index in claim.evidence_refs:
+                if index >= len(self.sources):
+                    raise ValueError(f"claim {claim.claim_id} 的 evidence_refs 引用了不存在的来源")
         return self
 
 

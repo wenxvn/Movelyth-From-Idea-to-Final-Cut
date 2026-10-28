@@ -38,20 +38,31 @@ class SourceError(RuntimeError):
 
 
 class ArticleText(HTMLParser):
+    """Extract visible text and the document title; script/style bodies are ignored."""
+
     def __init__(self):
         super().__init__()
         self.ignored = 0
         self.parts = []
+        self.title = ""
+        self._in_title = False
 
     def handle_starttag(self, tag, attrs):
         if tag in {"script", "style", "svg", "nav", "iframe", "noscript"}:
             self.ignored += 1
+        elif tag == "title":
+            self._in_title = True
 
     def handle_endtag(self, tag):
         if tag in {"script", "style", "svg", "nav", "iframe", "noscript"}:
             self.ignored = max(0, self.ignored - 1)
+        elif tag == "title":
+            self._in_title = False
 
     def handle_data(self, data):
+        if self._in_title:
+            self.title = (self.title + " " + data.strip()).strip()
+            return
         if not self.ignored and data.strip():
             self.parts.append(data.strip())
 
@@ -221,6 +232,8 @@ def collect_sources(sources: list[dict], directory: Path, *, resolver=None, open
                          "resolved_ip": document["resolved_ip"],
                          "content_type": document["content_type"],
                          "content_sha256": hashlib.sha256(document["raw"]).hexdigest(),
+                         "title": (parser.title or source.get("label") or "")[:200],
+                         "text_length": len(text),
                          "excerpt": text[:16000]})
         except Exception as exc:
             status = "blocked" if isinstance(exc, BlockedSource) else "unavailable"
@@ -229,3 +242,84 @@ def collect_sources(sources: list[dict], directory: Path, *, resolver=None, open
         atomic_json(cached, item)
         result.append(item)
     return result
+
+
+def normalize_for_match(text: str) -> str:
+    """Whitespace/case-insensitive form used to locate an excerpt in a snapshot."""
+    return " ".join(str(text).split()).casefold()
+
+
+def locate_excerpt(excerpt: str, snapshot_text: str) -> dict | None:
+    """Character range of ``excerpt`` inside the snapshot, or ``None`` when absent.
+
+    An excerpt that cannot be found is not "roughly supported": the claim is then
+    unsupported, which is exactly the defect this check exists to catch.
+    """
+    haystack = normalize_for_match(snapshot_text)
+    needle = normalize_for_match(excerpt)
+    if not needle or not haystack:
+        return None
+    index = haystack.find(needle)
+    if index < 0:
+        return None
+    return {"start": index, "end": index + len(needle)}
+
+
+def verify_claims(research, evidence: list[dict]) -> list[dict]:
+    """Check every claim against the snapshot that was actually fetched.
+
+    Retrieval, parsing and claim support are separate states: a source can be
+    ``retrieved`` while an excerpt is missing from it, and an unfetched source can
+    never support anything.  The result is per claim, with the position of the
+    excerpt in the snapshot when it was found.
+    """
+    results = []
+    by_url = {item.get("url"): item for item in evidence}
+    for claim in getattr(research, "claims", []):
+        indices = [claim.source_index, *[i for i in claim.evidence_refs if i != claim.source_index]]
+        sources = []
+        for index in indices:
+            source = research.sources[index] if index < len(research.sources) else None
+            snapshot = by_url.get(source.url) if source else None
+            sources.append({"source_index": index, "url": source.url if source else None,
+                            "snapshot": snapshot})
+        primary = sources[0]["snapshot"] if sources else None
+        entry = {"claim_id": claim.claim_id, "statement": claim.statement,
+                 "scope": claim.scope, "importance": claim.importance,
+                 "source_index": claim.source_index,
+                 "evidence_refs": list(claim.evidence_refs),
+                 "source_url": sources[0]["url"] if sources else None}
+        if primary is None:
+            entry.update({"status": "source-missing", "detail": "来源不在研究记录中"})
+        elif primary.get("status") != "retrieved":
+            entry.update({"status": "source-unavailable",
+                          "detail": f"来源状态 {primary.get('status')}：{primary.get('error', '')}"[:200]})
+        else:
+            position = locate_excerpt(claim.excerpt, primary.get("excerpt") or "")
+            corroboration = [item for item in sources[1:]
+                             if item["snapshot"] and item["snapshot"].get("status") == "retrieved"
+                             and locate_excerpt(claim.excerpt, item["snapshot"].get("excerpt") or "")]
+            if position is None:
+                entry.update({"status": "excerpt-missing",
+                              "detail": "抓取到的正文里找不到这段节选",
+                              "content_sha256": primary.get("content_sha256"),
+                              "title": primary.get("title")})
+            else:
+                entry.update({"status": "supported", "position": position,
+                              "content_sha256": primary.get("content_sha256"),
+                              "retrieved_at": primary.get("retrieved_at"),
+                              "title": primary.get("title"),
+                              "corroborating_sources": len(corroboration)})
+        results.append(entry)
+    return results
+
+
+def coverage_summary(checks: list[dict]) -> dict:
+    counts: dict[str, int] = {}
+    for entry in checks:
+        counts[entry["status"]] = counts.get(entry["status"], 0) + 1
+    return {"claims": len(checks), "by_status": counts,
+            "key_claims": sum(1 for entry in checks if entry.get("importance") == "key"),
+            "supported_key_claims": sum(1 for entry in checks
+                                        if entry.get("importance") == "key"
+                                        and entry["status"] == "supported")}
