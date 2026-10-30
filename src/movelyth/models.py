@@ -145,6 +145,16 @@ class DiagramEdge(Contract):
     source: str = Field(pattern=r"^[a-z][a-z0-9_]{0,15}$")
     target: str = Field(pattern=r"^[a-z][a-z0-9_]{0,15}$")
     label: str = Field(default="", max_length=12)
+    # Optional semantic id for the packet travelling along this edge. Semantic
+    # events may target it so the camera follows the actual moving message.
+    message_id: str = Field(default="", max_length=24)
+
+    @field_validator("message_id")
+    @classmethod
+    def safe_message_id(cls, value: str) -> str:
+        if value and not __import__("re").fullmatch(r"[a-z][a-z0-9_]{0,23}", value):
+            raise ValueError("message_id 只能是小写标识符")
+        return value
 
 
 class Annotation(Contract):
@@ -274,6 +284,9 @@ class Layer(Contract):
             if any(edge.source not in identifiers or edge.target not in identifiers
                    for edge in self.edges):
                 raise ValueError("diagram 连线引用了不存在的节点")
+            message_ids = [edge.message_id for edge in self.edges if edge.message_id]
+            if len(message_ids) != len(set(message_ids)):
+                raise ValueError("同一 diagram 中的 message_id 不能重复")
         if self.type == "timeline" and len(self.steps) < 2:
             raise ValueError("timeline 图层至少需要两个步骤")
         return self
@@ -504,6 +517,14 @@ class Scene(Contract):
         identifiers = {layer.id for layer in self.layers}
         if len(identifiers) != len(self.layers):
             raise ValueError(f"镜头 {self.id} 的图层 id 不能重复")
+        node_ids = [node.id for layer in self.layers if layer.type == "diagram" for node in layer.nodes]
+        message_ids = [edge.message_id for layer in self.layers if layer.type == "diagram"
+                       for edge in layer.edges if edge.message_id]
+        tracked_ids = node_ids + message_ids
+        if len(tracked_ids) != len(set(tracked_ids)):
+            raise ValueError(f"镜头 {self.id} 的 diagram node/message id 必须唯一")
+        if identifiers & set(tracked_ids):
+            raise ValueError(f"镜头 {self.id} 的 diagram node/message id 不能与图层 id 重复")
         if any(action.target not in identifiers for action in self.actions):
             raise ValueError(f"镜头 {self.id} 的动画引用了不存在的图层")
         if self.hero and self.hero not in identifiers:
@@ -514,6 +535,7 @@ class Scene(Contract):
 V2_SCENE_FIELDS = {"events", "claim_ids", "hold_reason", "transition_reason",
                    "sketches", "recipe", "function", "parameters"}
 V2_LAYER_FIELDS = {"subject_id", "state_before", "state_after", "visual_explanation"}
+V2_EDGE_FIELDS = {"message_id"}
 
 
 def migrate_scene(data: dict) -> dict:
@@ -533,6 +555,9 @@ def migrate_scene(data: dict) -> dict:
     for layer in data.get("layers") or []:
         if isinstance(layer, dict):
             offending.extend(sorted(V2_LAYER_FIELDS & set(layer)))
+            for edge in layer.get("edges") or []:
+                if isinstance(edge, dict):
+                    offending.extend(sorted(V2_EDGE_FIELDS & set(edge)))
     if offending:
         raise ValueError("schema_version=1 的脚本不能包含 v2 字段：" + "、".join(sorted(set(offending)))
                          + "；请把 schema_version 升到 2 或移除这些字段")

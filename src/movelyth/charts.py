@@ -54,9 +54,12 @@ def format_tick(value: float, step: float) -> str:
     return "0" if text == "-0" else text
 
 
-def tick_labels(values: Iterable[float], target: int = 4) -> list[str]:
+def tick_labels(values: Iterable[float], target: int = 4, *, include_zero: bool = False) -> list[str]:
     """Label strings a chart of these values actually shows on its y axis."""
-    domain = nice_domain(list(values), target)
+    data = list(values)
+    if include_zero:
+        data.append(0.0)
+    domain = nice_domain(data, target)
     return [format_tick(value, domain["step"]) for value in domain_ticks(domain)]
 
 
@@ -71,7 +74,7 @@ def scene_tick_labels(scenes: Iterable[dict]) -> dict[str, list[str]]:
             series = layer.get("series") or []
             values = [float(value) for item in series for value in item.get("values") or []]
             if values:
-                scene_labels.extend(tick_labels(values))
+                scene_labels.extend(tick_labels(values, include_zero=layer.get("chart") == "bar"))
         if scene_labels:
             labels[str(scene.get("id", ""))] = sorted(set(scene_labels), key=_label_order)
     return labels

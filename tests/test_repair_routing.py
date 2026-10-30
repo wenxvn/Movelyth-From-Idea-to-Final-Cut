@@ -11,7 +11,8 @@ import json
 import pytest
 
 from movelyth.agents import MockProvider
-from movelyth.models import Finding
+from movelyth.models import Finding, Research
+from movelyth.pipeline import VisualReviewError
 from movelyth.repair import (
     MAX_ROUNDS,
     ROUTES,
@@ -214,5 +215,86 @@ def test_a_defect_that_keeps_failing_stops_after_its_own_budget(offline_pipeline
         # initial attempt + max_retries (2) = 3 attempts, then the plan budget blocks.
         assert calls["n"] <= 3
         assert studio.ledger.get(episode["id"])["status"] == "failed"
+    finally:
+        studio.close()
+
+
+def test_visual_retry_does_not_inherit_old_revision_scope(offline_pipeline):
+    studio = _studio(offline_pipeline, review_payload())
+    try:
+        episode = studio.create("视觉修复范围测试")
+        calls = []
+
+        def produce_once(*args):
+            calls.append(args)
+            if len(calls) == 1:
+                raise VisualReviewError("另一个镜头需要修复")
+            return {"status": "test"}
+
+        studio._produce = produce_once
+        studio._repair_plans = lambda *args, **kwargs: []
+        studio.produce(episode["id"], target_scenes=["one"], notes="原局部修改", reuse_script=True)
+        assert calls[0][-3:] == (["one"], "原局部修改", True)
+        assert calls[1][-3:] == (None, None, False)
+    finally:
+        studio.close()
+
+
+def test_invalid_director_cut_is_retried_with_validation_feedback(offline_pipeline):
+    studio = _studio(offline_pipeline, review_payload())
+    payload = film()
+    contexts = []
+
+    class OnceInvalid:
+        def call(self, role, context, contract, directory, **kwargs):
+            contexts.append(context)
+            cut = json.loads(json.dumps(payload[context["cut"]]))
+            if len(contexts) == 1:
+                cut["scenes"][0]["emphasis"] = ["超过十二个字的强调词不能通过模型验证"]
+            return contract.model_validate(cut)
+
+    try:
+        research = Research.model_validate(research_payload())
+        result = studio._director_split(OnceInvalid(), {}, research.model_dump(), research, [],
+                                        studio.workspace, 0, None, None, None)
+        assert result.long.scenes
+        assert len(contexts) == 3
+        assert "emphasis" in " ".join(contexts[1]["contract_errors"])
+        assert contexts[2]["cut"] == "short"
+        assert "contract_errors" not in contexts[2]
+    finally:
+        studio.close()
+
+
+def test_revision_reuses_original_research(offline_pipeline):
+    studio = _studio(offline_pipeline, review_payload())
+    try:
+        episode = studio.create("局部修改来源测试")
+        job = studio.workspace / f"VID-{episode['id']:06d}"
+        job.mkdir(parents=True, exist_ok=True)
+        (job / "film.json").write_text(json.dumps(film()), encoding="utf-8")
+        research_path = job / "research.json"
+        research_path.write_text(json.dumps(research_payload()), encoding="utf-8")
+        calls = []
+        studio.produce = lambda episode_id, **kwargs: calls.append(kwargs) or {"id": episode_id}
+        studio.revise(episode["id"], "只修改镜头 one")
+        assert calls[0]["import_research"].name == "revise-research.json"
+        assert json.loads(calls[0]["import_research"].read_text(encoding="utf-8")) == research_payload()
+        assert calls[0]["target_scenes"] == ["one"]
+    finally:
+        studio.close()
+
+
+def test_resume_uses_retained_revision_research(offline_pipeline):
+    studio = _studio(offline_pipeline, review_payload())
+    try:
+        episode = studio.create("续做来源测试")
+        job = studio.workspace / f"VID-{episode['id']:06d}"
+        retained = job / "revise-research.json"
+        retained.write_text(json.dumps(research_payload()), encoding="utf-8")
+        seen = []
+        studio._produce = lambda *args: seen.append(args) or {"status": "test"}
+        studio.produce(episode["id"])
+        assert seen[0][5] == retained
     finally:
         studio.close()

@@ -41,7 +41,7 @@
   任何 series 全为 0 会被判为不可见并拒绝。
 - connect：布尔值。`chart: "scatter"` 时把散点连成闭合轮廓，用来画三角形/多边形对比；
   `shape: "line"` 时给折线加起点圆点与箭头（表示行进方向）。不需要时保持 false。
-- timeline：横向里程碑/阶段条，用 `steps` 提供 2–6 个阶段名（每个 ≤ 24 字），当前阶段会随节拍高亮。
+- timeline：横向里程碑/阶段条，用 `steps` 提供 2–6 个阶段名（每个 ≤ 24 字），高亮随进度向后推进并最终停在最后一项。不要用它表达需要突出中间项的排序或中位数；应选择能准确呈现目标的图层组合。
 - procedural：matrix / vectors / projection / wave / network / image_layers / orbit（procedural 图层）。
   - matrix 的动画只有一段：单位矩阵在 4 秒内线性过渡到 `matrix`，不会回退、不会继续到第二个矩阵。
     旁白只能描述这一段；要讲"塌缩后再展开"就得分两个镜头，或换 chart/shape 画两个端点。
@@ -69,7 +69,7 @@
   本地 JSON 或 CSV 数据；image 只能引用已登记素材（`movelyth asset-add`）或内置 `svd_1/4/12/32`。
 - unit / axis / source_note：图表单位、横轴含义、来源或“示意”标注。
 - color：cyan / amber / coral / mint。
-- emphasis：1–3，控制字号与强调程度。
+- emphasis：1–3 个旁白中的短词或短语，每项 1–12 字，控制强调程度；不要填写整句。
 
 ## 布局、节拍与动画
 
@@ -211,19 +211,11 @@ context 里带有 `claim_coverage`（每条主张的核对状态、位置与重�
 
 ## 镜头配方（v2）
 
-每个镜头必须能落到下列**已实现**配方之一（写进 `recipe`；不写则按内容推断，但会写警告）。
-`renderer_capabilities.recipes` 里有完整要求；选了不满足条件的配方会在渲染前被拒绝。
-
-| recipe | 用途 | 必需绑定 |
-| --- | --- | --- |
-| `chart-focus` | 聚焦曲线上的真实数据点 | chart + 至少一个 annotations |
-| `same-scale-compare` | 同尺度对照两条序列 | chart + 2 条同单位 series |
-| `parameter-process` | 一个参数驱动坐标/数值/标签 | procedural：vectors/projection/matrix |
-| `flow-expand` | 沿路径展开、再进节点内部 | diagram + ≥2 steps |
-| `paper-evidence` | 纸面证据、圈注关键处 | text/math + source_note |
-| `conclusion-callback` | 回扣开场、用一句主张收束 | text + claim_ids |
-
-同一片用一个主风格；配方可以组合，但不要为每镜换一套视觉语言。
+初次编导时不要自行猜 `recipe`，留空即可；程序会在场景图层和绑定齐全后自动推断。
+若修订上下文包含 `scene_recipe_guidance`，其中每个 scene id 只列出结构上适用的配方；
+逐镜核对对应配方的 `semantic_conditions`，只有语义也成立时才在 `recipe` 填写其中一个名称。
+不要引用未列出的配方。`timeline` 是按比例的动态示例，不是固定秒数；`failure_examples` 是该镜的自检点。
+同一片用一个主风格，配方用于镜头结构，不要为每镜换一套视觉语言。
 
 ## 受控参数函数（v2）
 
@@ -245,7 +237,9 @@ context 里带有 `claim_coverage`（每条主张的核对状态、位置与重�
   `kind` 取 reveal/transform/compare/conclude/emphasis/pause/transition；`anchor` 支持
   `{kind:"start"|"end"|"fraction", fraction}` 或 `{kind:"narration", text, occurrence, char_start}`。
   重复出现的词必须用 `occurrence`（第几次）或 `char_start`（字符位置）区分；找不到会直接报错。
-  `target` 必须是该镜头已存在的图层 id 或 subject_id。
+  `target` 必须是该镜头已存在的图层 id、subject_id、唯一的 diagram 节点 id，或连线的 `message_id`；
+  chart 图层设置 subject_id 且只有一个 annotation 时，相机聚焦到该真实数据点。
+  diagram edge 可选 `message_id`（小写 id）；事件反复指向它时，相机按真实旁白时间跟随运动的数据包。
 - 同一对象跨镜追踪时写 `subject_id`（小写标识符），并可用 `state_before`/`state_after` 描述变化；
   只写状态不写 subject_id 会被拒绝。图层 `id` 只代表本镜实例，不要用 id 表示“同一个东西”。
 - `claim_ids` 引用研究里的 c1、c2，说明这一镜承载哪条主张。

@@ -37,6 +37,13 @@ const niceDomain = (min: number, max: number, target = 4): {lo: number; hi: numb
   return {lo, hi, step};
 };
 
+const yDomainFor = (values: number[], includeZero: boolean, target = 4) => {
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  return niceDomain(includeZero ? Math.min(0, low) : low,
+                    includeZero ? Math.max(0, high) : high, target);
+};
+
 const format = (value: number, step: number): string => {
   const decimals = step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step)));
   const text = value.toFixed(decimals);
@@ -169,7 +176,10 @@ export const ChartLayer: React.FC<{
     xTicks.push(Number(value.toFixed(6)));
   }
 
-  const yDomain = niceDomain(Math.min(...ys), Math.max(...ys), 4);
+  // Bars start at zero, so derive their ticks from the same zero-based domain.
+  // Otherwise a tight data range (for example 3–5) puts every tick in the
+  // upper half while the bars themselves occupy the full plot from zero.
+  const yDomain = yDomainFor(ys, bars, 4);
   const {lo, hi, step} = yDomain;
   const yTicks: number[] = [];
   for (let value = lo; value <= hi + step * 1e-6; value += step) yTicks.push(Number(value.toFixed(6)));

@@ -28,6 +28,20 @@ def review_with(issues=(), findings=(), *, passed=False, warnings=()) -> Review:
                   warnings=list(warnings), findings=list(findings))
 
 
+def test_warning_findings_do_not_flip_a_passing_review():
+    warning = Finding(category="warning", scene_id="s1", detail="建议检查画面节奏")
+    review, checks, _ = review_checks(review_with(findings=[warning], passed=True))
+    assert review.passed is True
+    assert decide(checks).decision == "ready"
+
+
+def test_unexplained_rejection_with_only_warnings_needs_review():
+    warning = Finding(category="warning", scene_id="s1", detail="建议检查画面节奏")
+    review, checks, _ = review_checks(review_with(findings=[warning], passed=False))
+    assert review.passed is False
+    assert decide(checks).decision != "ready"
+
+
 # ---------------------------------------------------------------- consistency
 
 def test_passed_true_cannot_override_a_factual_finding():

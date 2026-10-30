@@ -107,18 +107,20 @@ export const SceneStage: React.FC<{
   const camera = cameraFor(scene.camera, progress, {
     beatIndex: beat, beatStartedAt: beats[beat]?.start ?? 0,
     seconds: scene.duration || scene.frames / 30, time,
+    cameraMoveSeconds: theme.motionProfile.cameraMoveSeconds,
     // The plan is computed from real layer regions in Python; when it exists it wins
     // over the decorative per-beat push, because it points at the subject.
     plan: scene.camera_plan,
   });
-  const pulse = beatPulse(time, beats[beat]?.start ?? 0);
+  const pulse = beatPulse(time, beats[beat]?.start ?? 0, theme.motionProfile.heroPulse);
   return <AbsoluteFill>
     <AbsoluteFill style={{
       transform: `scale(${camera.scale}) translate(${camera.translateX * 100}%, ${camera.translateY * 100}%)`,
       transformOrigin: 'center center',
     }}>
       {scene.layers.map((layer, index) => {
-        const motion = motionFor(layer, scene.actions_resolved || [], progress, index, theme.motion);
+        const motion = motionFor(layer, scene.actions_resolved || [], progress, index,
+          theme.motion, theme.enter, theme.motionProfile);
         // Geometry morph: interpolate this layer's own vertices towards the action's
         // target for the duration of the action, then hold the target.
         const morphPoints = morphPointsFor(layer, scene.actions_resolved || [], progress);
@@ -131,11 +133,20 @@ export const SceneStage: React.FC<{
         const box: Box = isFullBleed(activeLayout, layer.region)
           ? {x: 0, y: 0, w: width, h: height}
           : (boxes[layer.region] || boxes.main);
+        // The restrained documentary/tech planes let distant backdrops lag the
+        // subject slightly while reading labels stay nearly fixed.  Charts and
+        // timelines remain on one plane so their scales and annotations stay exact.
+        const planes = theme.motionProfile.planes;
+        const plane = layer.type === 'chart' || layer.type === 'timeline' ? 1
+          : layer.region === 'full' ? planes.background
+            : layer.region === 'main' ? planes.subject : planes.reading;
+        const left = box.x + (plane - 1) * camera.translateX * width;
+        const top = box.y + (plane - 1) * camera.translateY * height;
         const render = renderers[layer.type];
         const color = accent[layer.color] || theme.text;
         const deep = accentDeep[layer.color] || color;
         return <div key={layer.id} style={{
-          position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h,
+          position: 'absolute', left, top, width: box.w, height: box.h,
           opacity: motion.opacity * heroOpacity,
           transform: `translate(${motion.translateX * box.w}px, ${motion.translateY * box.h}px)`
             + ` scale(${motion.scale * heroScale}) rotate(${motion.rotate}deg)`,

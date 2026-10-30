@@ -34,12 +34,13 @@ CASES = [
 def renderer_functions() -> str:
     source = STUDIO.read_text(encoding="utf-8")
     parts = []
-    for name in ("niceStep", "niceDomain", "format"):
+    for name in ("niceStep", "niceDomain", "yDomainFor", "format"):
         match = re.search(rf"const {name} = [\s\S]*?\n}};", source)
         assert match, f"{name} not found in ChartLayer.tsx"
         parts.append(match.group(0))
     body = "\n".join(parts)
     body = body.replace(": {lo: number; hi: number; step: number}", "")
+    body = body.replace("values: number[]", "values").replace("includeZero: boolean", "includeZero")
     body = body.replace(": number", "").replace(": string", "")
     return body
 
@@ -49,7 +50,7 @@ def test_python_scales_match_the_renderer_source():
     script = renderer_functions() + """
 const cases = JSON.parse(process.argv[2]);
 const out = cases.map((values) => {
-  const domain = niceDomain(Math.min(...values), Math.max(...values));
+  const domain = yDomainFor(values, true);
   const ticks = [];
   for (let value = domain.lo; value <= domain.hi + 1e-9; value += domain.step) ticks.push(value);
   return {domain, labels: ticks.map((value) => format(value, domain.step))};
@@ -65,16 +66,18 @@ console.log(JSON.stringify(out));
         path.unlink(missing_ok=True)
     expected = json.loads(result.stdout)
     for values, reference in zip(CASES, expected, strict=True):
-        domain = nice_domain([float(value) for value in values])
+        domain = nice_domain([0.0, *(float(value) for value in values)])
         assert domain["lo"] == pytest.approx(reference["domain"]["lo"], abs=1e-9)
         assert domain["hi"] == pytest.approx(reference["domain"]["hi"], abs=1e-9)
         assert domain["step"] == pytest.approx(reference["domain"]["step"], rel=1e-12)
-        assert tick_labels(values) == reference["labels"]
+        assert tick_labels(values, include_zero=True) == reference["labels"]
 
 
 def test_teaching_sample_axis_labels():
     # The frozen sample A data: mean 4 -> 10 after one value becomes 34.
     assert tick_labels([3, 4, 4, 5, 34]) == ["0", "10", "20", "30", "40"]
+    # Bar marks start at zero; a close data range must not stack ticks above them.
+    assert tick_labels([3, 4, 4, 5], include_zero=True) == ["0", "2", "4", "6"]
     assert format_tick(-0.0, 1) == "0"
 
 
@@ -92,3 +95,9 @@ def test_scene_tick_labels_only_cover_chart_layers():
     assert set(labels) == {"l1"}
     # Span 2 with 1-2-5 rounding gives a 0.5 step, so labels carry one decimal.
     assert labels["l1"] == ["3.0", "3.5", "4.0", "4.5", "5.0"]
+
+
+def test_scene_tick_labels_anchor_bar_charts_at_zero():
+    chart = Layer(id="bar_a", type="chart", chart="bar", series=[Series(label="均值", values=[3, 4, 5])])
+    labels = scene_tick_labels([{"id": "bar", "layers": [chart.model_dump()]}])
+    assert labels["bar"] == ["0", "2", "4", "6"]

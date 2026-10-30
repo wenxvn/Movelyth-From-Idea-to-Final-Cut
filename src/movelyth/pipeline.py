@@ -11,6 +11,8 @@ import unicodedata
 import uuid
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from . import __version__
 from .agents import create_provider
 from .animatic import compare_animatic, layout_precheck, sampling_plan
@@ -64,6 +66,7 @@ from .quality import (
 )
 from .recipes import catalog as recipes_catalog
 from .recipes import choose as recipes_choose
+from .recipes import guidance_for_scene
 from .repair import plan_for_review, scope_violations
 from .scenedsl import pacing_report, resolve_data_layers, validate_cut_timeline
 from .util import atomic_json, file_hash, fingerprint, now, read_json, run
@@ -374,6 +377,20 @@ def manifest_valid(directory: Path, *, job: Path | None = None) -> bool:
     return manifest_report(directory, job=job)["valid"]
 
 
+def _without_recipe_catalog(context: dict) -> dict:
+    """Keep the director's general capabilities, but defer recipe detail until a
+    concrete scene exists and its applicable bindings can be checked.
+    """
+    capabilities = dict(context.get("renderer_capabilities") or {})
+    capabilities.pop("recipes", None)
+    return {**context, "renderer_capabilities": capabilities}
+
+
+def _scene_recipe_guidance(cut) -> dict[str, dict]:
+    """Detailed recipe guidance keyed by scene, limited to structurally applicable recipes."""
+    return {scene.id: guidance_for_scene(scene) for scene in cut.scenes}
+
+
 RENDERER_CAPABILITIES = {
     "schema_version": SCHEMA_VERSION,
     "routes": {name: {"status": spec["status"], "description": spec["description"]}
@@ -382,7 +399,10 @@ RENDERER_CAPABILITIES = {
                                    "requires": spec["requires"]}
                             for name, spec in parameters_catalog()["functions"].items()},
     "recipes": {name: {"purpose": spec["purpose"], "requires": spec["requires"],
-                       "events": spec["events"], "limits": spec["limits"]}
+                       "events": spec["events"], "limits": spec["limits"],
+                       "semantic_conditions": spec["semantic_conditions"],
+                       "timeline": spec["timeline"], "dynamic_demo": spec["dynamic_demo"],
+                       "failure_examples": spec["failure_examples"]}
                 for name, spec in recipes_catalog()["recipes"].items()},
     "layers": {
         "text": "短文本/注解，自动换行并按区域限制字数",
@@ -576,6 +596,9 @@ class Studio:
             raise ValueError("导入脚本时同时需要 --import-research，不能省略来源")
         job = self.workspace / f"VID-{episode_id:06d}"
         (job / "data").mkdir(parents=True, exist_ok=True)
+        retained_research = job / "revise-research.json"
+        if import_research is None and retained_research.is_file():
+            import_research = retained_research
         with self.ledger.claim(episode_id):
             try:
                 for repair in range(self.config["studio"]["max_retries"] + 1):
@@ -590,6 +613,11 @@ class Studio:
                             raise RuntimeError("修复轮次已用尽：" + "；".join(
                                 item.blocked_reason for item in plans if item.blocked_reason))
                         self._invalidate_stages(episode["id"], job, plans)
+                        # A visual review can find problems outside the scope of an
+                        # earlier user revision. Do not keep freezing the old base
+                        # and target list on the next attempt: the new feedback must
+                        # be able to change every affected scene.
+                        target_scenes, notes, reuse_script = None, None, False
                         print("[修复] 按缺陷类型重做受影响的下游阶段：" + "、".join(
                             sorted({item.defect for item in plans}) or {"review"}), flush=True)
                 raise RuntimeError("制作未返回结果")
@@ -665,7 +693,14 @@ class Studio:
         (folder / "revise-base.json").write_text(film_path.read_text(encoding="utf-8"), encoding="utf-8")
         notes_path = folder / "review-notes.txt"
         notes_path.write_text(notes.strip(), encoding="utf-8")
-        return self.produce(episode["id"], target_scenes=sorted(set(targeted)), notes=notes.strip())
+        research_path = self.workspace / f"VID-{episode_id:06d}" / "research.json"
+        # A scene-only revision keeps its source research; the new task still
+        # fetches and verifies the sources again before directing.
+        retained_research = folder / "revise-research.json"
+        if research_path.is_file():
+            shutil.copy2(research_path, retained_research)
+        return self.produce(episode["id"], target_scenes=sorted(set(targeted)), notes=notes.strip(),
+                            import_research=retained_research if retained_research.is_file() else None)
 
     @staticmethod
     def _repair_plans(job: Path, *, round_index: int):
@@ -760,6 +795,7 @@ class Studio:
         evidence = self.stage(episode, "evidence",
                               {"research": file_hash(job / "research.json"),
                                "sources": research_data["sources"],
+                               "implementation": file_hash(Path(__file__).with_name("sources.py")),
                                "network": "公网 HTTPS；重定向逐跳校验；正文按字节与类型限制"},
                               evidence_action)
         coverage = evidence["claims"]
@@ -839,7 +875,8 @@ class Studio:
                                                 coverage=coverage, source_excerpts=source_excerpts,
                                                 production_brief=production_brief)
                 else:
-                    context = {**common, "research": research_data, "claim_coverage": coverage,
+                    context = {**_without_recipe_catalog(common), "research": research_data,
+                               "claim_coverage": coverage,
                                "source_evidence": source_excerpts, "review_issues": issues}
                     if frozen and notes:
                         context["revise"] = {"scene_ids": target_scenes, "notes": notes,
@@ -902,8 +939,15 @@ class Studio:
                     if import_film or attempt == config["max_retries"]:
                         raise
                     continue
-                review = provider.call("reviewer", {"stage": "script", **common, "research": research_data,
-                                       "film": film.model_dump(), "validation_warnings": warnings},
+                scene_recipe_guidance = {
+                    "long": _scene_recipe_guidance(film.long),
+                    "short": _scene_recipe_guidance(film.short),
+                }
+                atomic_json(job / "recipe-guidance.json", scene_recipe_guidance)
+                review = provider.call("reviewer", {"stage": "script",
+                                       **_without_recipe_catalog(common), "research": research_data,
+                                       "film": film.model_dump(), "validation_warnings": warnings,
+                                       "scene_recipe_guidance": scene_recipe_guidance},
                                        Review, job / "agents" / f"script-review-{attempt}")
                 if review.passed and not review.issues:
                     path, report = job / "film.json", job / "script-review.json"
@@ -931,7 +975,8 @@ class Studio:
                           # Contract changes must invalidate an approved script: a cached film that
                           # no longer passes validation has to be regenerated, not silently shipped.
                           "contracts": {name: file_hash(Path(__file__).with_name(name))
-                                        for name in ("scenedsl.py", "consistency.py", "quality.py")},
+                                        for name in ("pipeline.py", "models.py", "recipes.py", "scenedsl.py",
+                                                     "consistency.py", "quality.py")},
                           **({"visual_feedback": visual_feedback} if visual_feedback else {}),
                           "revision": {"scenes": target_scenes, "notes": notes} if target_scenes else None,
                           "provider": self.config["agents"],
@@ -941,7 +986,12 @@ class Studio:
                           freeze_approved_plan=(not visual_feedback and not import_film
                                                 and not target_scenes
                                                 and not (job / "script-feedback.json").exists()))
-        film = Film.model_validate(film).model_dump()
+        film_model = Film.model_validate(film)
+        atomic_json(job / "recipe-guidance.json", {
+            "long": _scene_recipe_guidance(film_model.long),
+            "short": _scene_recipe_guidance(film_model.short),
+        })
+        film = film_model.model_dump()
         try:
             warnings = validate_script(Film.model_validate(film), research, config["long_seconds"],
                                        config["short_seconds"])
@@ -1281,7 +1331,8 @@ class Studio:
                    "short": self.config["studio"]["short_seconds"]}
         cuts = {}
         for name, seconds in targets.items():
-            context = {**common, "research": research_data, "review_issues": issues,
+            context = {**_without_recipe_catalog(common), "research": research_data,
+                       "review_issues": issues,
                        "claim_coverage": coverage or [], "source_evidence": source_excerpts or [],
                        "production_brief": production_brief or {},
                        "cut": name, "target_seconds": seconds,
@@ -1289,9 +1340,21 @@ class Studio:
             if frozen and notes:
                 context["revise"] = {"scene_ids": target_scenes, "notes": notes,
                                      "current_cut": getattr(frozen, name).model_dump()}
-            cuts[name] = provider.call("director", context, Cut,
-                                       job / "agents" / f"director-{name}-{attempt}",
-                                       sanitize=repair_dangling_actions)
+                context["scene_recipe_guidance"] = _scene_recipe_guidance(getattr(frozen, name))
+            for validation_attempt in range(self.config["studio"]["max_retries"] + 1):
+                try:
+                    suffix = f"-validation-{validation_attempt}" if validation_attempt else ""
+                    cuts[name] = provider.call("director", context, Cut,
+                                               job / "agents" / f"director-{name}-{attempt}{suffix}",
+                                               sanitize=repair_dangling_actions)
+                    break
+                except ValidationError as exc:
+                    if validation_attempt == self.config["studio"]["max_retries"]:
+                        raise
+                    issues_for_cut = [f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}"
+                                      for err in exc.errors(include_url=False, include_input=False)][:15]
+                    context = {**context, "contract_errors": issues_for_cut}
+                    print(f"[契约] {name} 输出无效，交回编导修复 {len(issues_for_cut)} 项", flush=True)
         thesis = research.angle if len(research.angle) >= 8 else f"{research.question} {research.angle}"
         return Film(title=research.title, thesis=thesis[:300], long=cuts["long"], short=cuts["short"])
 

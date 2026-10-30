@@ -33,6 +33,30 @@ def timeline(*, captions=None, hold_reason="", duration=6.0, layers=None, scene_
 def test_a_healthy_timeline_passes_the_dry_run():
     report = layout_precheck({"long": timeline()}, CONFIG)
     assert report["passed"] is True and report["checked_scenes"] == 1
+    scene_report = report["cuts"]["long"]["scenes"][0]
+    assert scene_report["mobile_readability"]["profile"] == "landscape-rotated-844px"
+    assert "非实际理解评测" in scene_report["mobile_readability"]["method"]
+
+
+def test_phone_readability_uses_portrait_feed_scale_and_flags_small_content():
+    small_chart = timeline(layers=[{
+        "id": "plot", "type": "chart", "chart": "line",
+        "series": [{"label": "A", "values": [1, 2, 3]}],
+        "annotations": [{"x": 1, "text": "起点"}],
+    }])
+    report = layout_precheck({"short": small_chart}, CONFIG)
+    mobile = report["cuts"]["short"]["scenes"][0]["mobile_readability"]
+    assert mobile["profile"] == "portrait-feed-390px"
+    assert mobile["scale"] == pytest.approx(390 / 1080, abs=1e-4)
+    assert mobile["small_text"]
+    assert any("项目 12px 复核线" in warning for warning in mobile["warnings"])
+
+
+def test_a_still_reading_pause_with_a_reason_is_not_reported_as_a_motion_defect():
+    quiet = timeline(captions=[{"start": 0.2, "end": 2.0, "text": "停住读完结果"}],
+                     hold_reason="停稳后让观众读完结果")
+    report = layout_precheck({"long": quiet}, CONFIG)
+    assert not any("没有动作/事件/字幕变化" in warning for warning in report["warnings"])
 
 
 def test_caption_reading_speed_and_flash_are_caught():

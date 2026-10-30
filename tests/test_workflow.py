@@ -167,6 +167,31 @@ def test_pronunciation_replacement_changes_the_voice_but_not_the_caption():
     assert pages[0]["start"] == 0.1
 
 
+def test_captions_extend_only_into_available_gaps():
+    text = "你会选哪个？然后再看。"
+    words = [{"start": 0.3, "end": 1.0, "text": "你会选哪个"},
+             {"start": 1.5, "end": 2.3, "text": "然后再看"}]
+    pages, _ = captions(text, words, 2.4, 8, min_display=1.0)
+    assert len(pages) == 2
+    assert pages[0]["end"] - pages[0]["start"] >= 1.0
+    assert pages[0]["end"] <= pages[1]["start"]
+    assert pages[1]["end"] <= 2.4
+    assert pages[0]["words"][0]["start"] == 0.3
+
+
+def test_portrait_caption_pages_use_measured_width():
+    from movelyth.captions_qc import CAPTION_SIZE, MAX_WIDTH_RATIO
+    from movelyth.fonts import text_width_ratio
+    from movelyth.scenedsl import caption_band
+
+    text = "变化前从小到大是三、四、四、四、五。"
+    words = [{"start": i * 0.2, "end": (i + 1) * 0.2, "text": ch} for i, ch in enumerate(text)]
+    pages, _ = captions(text, words, 4.0, 16, portrait=True)
+    assert "".join(page["text"] for page in pages).replace("、", "") == text.rstrip("。").replace("、", "")
+    assert all(text_width_ratio(page["text"], caption_band("portrait")["w"],
+                                size=CAPTION_SIZE["short"]) <= MAX_WIDTH_RATIO for page in pages)
+
+
 def test_replacement_that_changes_length_still_times_the_caption():
     narration = "用 det 表示行列式。"
     spoken, origin = speech_plan(narration, {"det": "determinant"})

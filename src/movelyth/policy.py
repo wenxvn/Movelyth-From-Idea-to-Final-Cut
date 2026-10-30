@@ -19,6 +19,7 @@ Nothing in this module renders, calls a model or touches the filesystem.
 """
 from __future__ import annotations
 
+import math
 import re
 from typing import Literal
 
@@ -27,7 +28,7 @@ from pydantic import Field
 from .charts import scene_tick_labels
 from .models import Contract, Finding, Review
 
-POLICY_VERSION = "2"
+POLICY_VERSION = "3"
 
 # A finding that reports one of these is never downgraded: the words describe a
 # defect that can be seen without reading any number off an axis.
@@ -234,9 +235,14 @@ def review_checks(review: Review, *, ticks_by_scene: dict[str, list[str]] | None
     checks.extend(_issue_checks(clean.issues, stage=stage, verdicts=issue_results))
     # A review whose only objections were axis readings no longer fails the cut, but
     # the softened observations stay in the decision as optional unknowns.
-    base = clean.passed or (softened and not kept and not kept_issues)
+    has_failure = any(check.status == "fail" for check in checks)
+    base = clean.passed or (softened and not has_failure and not kept_issues)
+    if not base and not has_failure and not kept_issues:
+        checks.append(CheckResult(check_id=f"review.{stage}.unexplained-rejection", source="model",
+                                  status="unknown", severity="major", required=True,
+                                  observation="审片未通过但没有可核对的阻断原因"))
     final = Review.model_validate({
-        "passed": base and not kept and not kept_issues,
+        "passed": base and not has_failure and not kept_issues,
         "issues": kept_issues,
         "strengths": clean.strengths,
         "warnings": clean.warnings,
@@ -491,6 +497,164 @@ def claim_usage_checks(film: dict, coverage: list[dict]) -> list[CheckResult]:
                     observation="旁白里的数字没有出现在主张或受控数据中：" + "、".join(unknown[:5]),
                     location={"cut": cut, "scene_id": scene.get("id")},
                     evidence={"numbers": unknown[:10]}))
+    results.extend(screen_claim_checks(film, coverage))
+    return results
+
+
+def _number_key(value) -> str | None:
+    """Normalize displayed and sourced numbers without mistaking geometry for data."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return str(int(number)) if number.is_integer() else format(number, ".12g")
+
+
+def _screen_content(scene: dict) -> tuple[str, set[str]]:
+    """Collect graphic content and encoded data; subtitles are deliberately excluded."""
+    text_parts: list[str] = []
+    numbers: set[str] = set()
+
+    def add_text(value) -> None:
+        if value is None:
+            return
+        text = str(value).strip()
+        if not text:
+            return
+        text_parts.append(text)
+        numbers.update(_number_key(token) for token in CLAIM_NUMBER.findall(text)
+                       if _number_key(token) is not None)
+
+    for key in ("heading", "chapter", "takeaway", "metric"):
+        add_text(scene.get(key))
+    for value in scene.get("labels") or []:
+        add_text(value)
+
+    for layer in scene.get("layers") or []:
+        for key in ("text", "axis", "source_note"):
+            add_text(layer.get(key))
+        for annotation in layer.get("annotations") or []:
+            add_text(annotation.get("text"))
+        for series in layer.get("series") or []:
+            add_text(series.get("label"))
+            numbers.update(key for value in series.get("values") or []
+                           if (key := _number_key(value)) is not None)
+        for node in layer.get("nodes") or []:
+            for key in ("label", "value", "text"):
+                add_text(node.get(key))
+        for edge in layer.get("edges") or []:
+            for key in ("label", "value", "text"):
+                add_text(edge.get(key))
+        for step in layer.get("steps") or []:
+            add_text(step)
+    return "\n".join(text_parts), numbers
+
+
+def screen_claim_checks(film: dict, coverage: list[dict]) -> list[CheckResult]:
+    """Check that supported claims have visible numeric/caveat witnesses.
+
+    This is a structural audit, not proof of semantic understanding: it ignores
+    subtitles so that repeated narration cannot count as a visual demonstration,
+    and leaves any missing or ambiguous witness as ``unknown`` for human review.
+    """
+    results: list[CheckResult] = []
+    boundary_groups = (
+        ("only", ("仅", "只", "only")),
+        ("condition", ("如果", "若", "当", "除非", "if", "when", "unless")),
+        ("assumption", ("假设", "前提", "条件", "assuming", "provided that")),
+        ("bound", ("至少", "至多", "不超过", "不低于", "at least", "at most", "no more than")),
+    )
+    illustrative_markers = ("示意", "演示", "本例", "自行构造", "illustrative", "example")
+
+    for cut in ("long", "short"):
+        scenes = (film.get(cut) or {}).get("scenes", [])
+        for entry in coverage:
+            if entry.get("importance") != "key" or entry.get("status") != "supported":
+                continue
+            claim_id = str(entry.get("claim_id") or "claim")
+            linked = [scene for scene in scenes if claim_id in (scene.get("claim_ids") or [])]
+            if not linked:
+                source_indices = {int(entry.get("source_index", -1)),
+                                  *[int(i) for i in entry.get("evidence_refs") or []]}
+                if any(int(scene.get("source_index", -1)) in source_indices for scene in scenes):
+                    results.append(CheckResult(
+                        check_id=f"source.visual.{cut}.{claim_id}.binding", source="source",
+                        status="unknown", severity="minor", required=False,
+                        observation=f"{claim_id} 只通过来源编号间接进入镜头，未显式绑定 claim_ids，无法核实其画面见证",
+                        location={"cut": cut, "claim_id": claim_id}))
+                continue
+
+            visible_text_parts: list[str] = []
+            visible_numbers: set[str] = set()
+            linked_data_numbers: set[str] = set()
+            for scene in linked:
+                text, numbers = _screen_content(scene)
+                visible_text_parts.append(text)
+                visible_numbers.update(numbers)
+                for layer in scene.get("layers") or []:
+                    for series in layer.get("series") or []:
+                        linked_data_numbers.update(key for value in series.get("values") or []
+                                                   if (key := _number_key(value)) is not None)
+                    for node in layer.get("nodes") or []:
+                        value = node.get("value")
+                        if value is not None and (key := _number_key(value)) is not None:
+                            linked_data_numbers.add(key)
+            screen_text = "\n".join(visible_text_parts).casefold()
+            statement = str(entry.get("statement") or "")
+            expected_numbers = {_number_key(token) for token in CLAIM_NUMBER.findall(statement)}
+            expected_numbers.discard(None)
+            missing_numbers = sorted(expected_numbers - visible_numbers, key=lambda value: (float(value), value))
+            results.append(CheckResult(
+                check_id=f"source.visual.{cut}.{claim_id}.numbers", source="source",
+                status="unknown" if missing_numbers else "pass", severity="minor", required=False,
+                observation=(f"{claim_id} 主张中的数值 {', '.join(missing_numbers[:8])} 未在关联图形或可见文字中找到；字幕不计作演示"
+                             if missing_numbers else f"{claim_id} 的数值可在关联图形或可见文字中找到"),
+                location={"cut": cut, "claim_id": claim_id},
+                evidence={"missing": missing_numbers, "visible_numbers": sorted(visible_numbers)}))
+
+            scope = entry.get("scope")
+            if scope == "illustrative":
+                marked = any(marker in screen_text for marker in illustrative_markers)
+                results.append(CheckResult(
+                    check_id=f"source.visual.{cut}.{claim_id}.scope", source="source",
+                    status="pass" if marked else "unknown", severity="minor", required=False,
+                    observation=("示意范围在关联画面文字中有标记" if marked else
+                                 f"{claim_id} 是示意性主张，但关联画面未标明示意/本例范围"),
+                    location={"cut": cut, "claim_id": claim_id},
+                    evidence={"scope": scope, "illustrative_marker_visible": marked}))
+            elif scope == "uncertain":
+                results.append(CheckResult(
+                    check_id=f"source.visual.{cut}.{claim_id}.scope", source="source",
+                    status="unknown", severity="minor", required=False,
+                    observation=f"{claim_id} 的适用条件仍需人工确认是否在画面中保留",
+                    location={"cut": cut, "claim_id": claim_id},
+                    evidence={"scope": scope, "visible_text": screen_text[:240]}))
+
+            missing_boundary = [name for name, markers in boundary_groups
+                                if any(marker in statement.casefold() for marker in markers)
+                                and not any(marker in screen_text for marker in markers)]
+            if missing_boundary:
+                results.append(CheckResult(
+                    check_id=f"source.visual.{cut}.{claim_id}.boundary", source="source",
+                    status="unknown", severity="minor", required=False,
+                    observation=f"{claim_id} 的限定词 {', '.join(missing_boundary)} 未在关联画面文字中找到；图形是否表达该边界仍需复核",
+                    location={"cut": cut, "claim_id": claim_id},
+                    evidence={"missing_boundary_groups": missing_boundary, "scope": scope}))
+
+            source_note_present = any((layer.get("source_note") or "").strip()
+                                      for scene in linked for layer in scene.get("layers") or [])
+            unsupported_data = sorted(linked_data_numbers - expected_numbers,
+                                      key=lambda value: (float(value), value))
+            illustrative_note = any(marker in screen_text for marker in illustrative_markers)
+            if unsupported_data and not source_note_present and not illustrative_note:
+                results.append(CheckResult(
+                    check_id=f"source.visual.{cut}.{claim_id}.reverse", source="source",
+                    status="unknown", severity="minor", required=False,
+                    observation=f"{claim_id} 关联图形含有无法回溯到主张或来源说明的数值：{', '.join(unsupported_data[:8])}",
+                    location={"cut": cut, "claim_id": claim_id},
+                    evidence={"unmapped_data_numbers": unsupported_data}))
     return results
 
 

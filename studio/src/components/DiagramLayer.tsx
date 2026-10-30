@@ -71,18 +71,17 @@ export const DiagramLayer: React.FC<{layer: Layer; theme: Theme; time: number; r
         const to = positions.get(edge.target);
         if (!from || !to) return null;
         const appear = Math.min(1, Math.max(0, reveal * 1.6 - index * 0.12));
-        const packet = (time * 0.32 + index * 0.27) % 1;
         // A shallow arc reads as a route; a straight line reads as a table border.
         const bend = 0.12 * Math.hypot(to.x - from.x, to.y - from.y);
         const midX = (from.x + to.x) / 2;
         const midY = (from.y + to.y) / 2 - bend;
-        const labelY = Math.min(from.y, to.y) - 76;
+        // The label belongs to this edge, not to the node above it. Position it
+        // at the midpoint of the quadratic curve so vertically stacked edges do
+        // not appear to describe the preceding relationship.
+        const labelY = (from.y + 2 * midY + to.y) / 4;
         return <g key={`${edge.source}-${edge.target}-${index}`} opacity={appear}>
           <path d={`M${from.x} ${from.y} Q${midX} ${midY} ${to.x} ${to.y}`} fill="none"
             stroke={color} strokeOpacity={0.4} strokeWidth={3} markerEnd={`url(#flow-${layer.id})`}/>
-          <circle cx={from.x + (to.x - from.x) * packet}
-            cy={from.y + (to.y - from.y) * packet - bend * 2 * packet * (1 - packet)} r={6}
-            fill={color} opacity={0.9}/>
           {edge.label && <>
             <rect x={midX - edge.label.length * 15 - 10} y={labelY - 26}
               width={edge.label.length * 30 + 20} height={36} rx={8}
@@ -104,11 +103,32 @@ export const DiagramLayer: React.FC<{layer: Layer; theme: Theme; time: number; r
             filter={`url(#halo-${layer.id})`}/>}
           <rect x={node.x - width / 2} y={node.y - 56} width={width} height={112} rx={20}
             fill={`url(#node-${layer.id})`} stroke={isActive ? color : `${color}aa`} strokeWidth={isActive ? 5 : 4}/>
-          <text x={node.x} y={node.y + 15} textAnchor="middle" fill={theme.text} fontSize={44}
-            fontWeight={isActive ? 700 : 600}>
-            {node.label}
-          </text>
         </g>;
+      })}
+      {layer.edges.map((edge, index) => {
+        if (!edge.message_id) return null;
+        const from = positions.get(edge.source);
+        const to = positions.get(edge.target);
+        if (!from || !to) return null;
+        const packet = (time * 0.32 + index * 0.27) % 1;
+        const bend = 0.12 * Math.hypot(to.x - from.x, to.y - from.y);
+        const x = from.x + (to.x - from.x) * packet;
+        const y = from.y + (to.y - from.y) * packet - bend * 2 * packet * (1 - packet);
+        // Keep the travelling message visible when it reaches a node. Draw it over
+        // node surfaces but under their labels so the path can be followed through
+        // a seam without hiding the node name.
+        return <g key={`message-${edge.message_id}-${index}`}>
+          <circle cx={x} cy={y} r={11} fill={color} opacity={0.95}/>
+          <circle cx={x} cy={y} r={19} fill="none" stroke={color} strokeWidth={3} opacity={0.8}/>
+        </g>;
+      })}
+      {nodes.map((node, index) => {
+        const appear = Math.min(1, Math.max(0.35, reveal * 2 - index * 0.08));
+        const isActive = activeNode?.id === node.id;
+        return <text key={`label-${node.id}`} x={node.x} y={node.y + 15} textAnchor="middle"
+          fill={theme.text} fontSize={44} fontWeight={isActive ? 700 : 600} opacity={appear}>
+          {node.label}
+        </text>;
       })}
       {steps.map((step, index) => {
         const y = maxY + 24 + index * 52;

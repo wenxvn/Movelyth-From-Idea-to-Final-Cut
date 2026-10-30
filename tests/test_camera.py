@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from movelyth.camera import MAX_FOCUS_SCALE, focus_on, validate_plan
+from movelyth.camera import MAX_FOCUS_SCALE, POINT_FOCUS_MAX_SCALE, focus_on, validate_plan
 from movelyth.models import Scene
 from movelyth.scenedsl import normalize_scene, validate_cut_timeline
 from tests.factories import chart_layer, layer, scene
@@ -37,7 +37,99 @@ def test_plan_starts_at_the_overview_and_focuses_a_real_layer():
     focus = [key for key in plan if key["mode"] == "focus"]
     assert focus and focus[0]["target"] == "chart"
     assert focus[0]["at"] == pytest.approx(2.4, abs=0.01)  # 30% of 8 s
-    assert plan[-1]["mode"] == "overview", "结论不能被裁切"
+    assert plan[-1]["mode"] == "reframe", "结论不能被裁切"
+
+
+def test_subject_target_focuses_an_annotated_chart_point():
+    target_scene = scene_model(layout="diagram", layers=[
+        chart_layer("chart", values=[3, 4, 4, 5, 34], subject_id="outlier",
+                    annotations=[{"x": 4, "text": "极端值"}]),
+    ], events=[{"id": "outlier", "kind": "emphasis", "target": "outlier",
+                "anchor": {"kind": "fraction", "fraction": 0.4}}])
+    for portrait in (False, True):
+        data = normalize_scene(target_scene, duration=10.0, vertical=portrait)
+        focus = next(key for key in data["camera_plan"] if key["mode"] == "focus")
+        assert focus["target"] == "outlier"
+        # The target is the point near the right edge of the real chart, not the chart
+        # region center. Keep the whole data context in view in both orientations.
+        assert focus["cx"] > 0.5
+        assert focus["scale"] == pytest.approx(POINT_FOCUS_MAX_SCALE)
+        half = 0.5 / focus["scale"]
+        assert half <= focus["cx"] <= 1 - half
+        assert half <= focus["cy"] <= 1 - half
+
+
+def test_diagram_node_targets_resolve_to_node_geometry_in_both_orientations():
+    flow = scene_model(layout="diagram", layers=[{
+        "id": "flow", "type": "diagram", "nodes": [
+            {"id": "send", "label": "发送端", "x": 160, "y": 250},
+            {"id": "receive", "label": "接收端", "x": 800, "y": 250},
+        ], "edges": [{"source": "send", "target": "receive", "label": "传递"}],
+        "steps": ["发送端", "抵达接收端"],
+    }], events=[{"id": "to_receiver", "kind": "emphasis", "target": "receive",
+                 "anchor": {"kind": "fraction", "fraction": 0.6}}])
+    landscape = normalize_scene(flow, duration=10.0)["camera_plan"]
+    portrait = normalize_scene(flow, duration=10.0, vertical=True)["camera_plan"]
+    h = next(key for key in landscape if key["mode"] == "focus")
+    v = next(key for key in portrait if key["mode"] == "focus")
+    assert h["target"] == v["target"] == "receive"
+    assert h["cx"] > 0.5 and v["cx"] > 0.5
+    assert (h["cx"], h["cy"], h["scale"]) != (v["cx"], v["cy"], v["scale"])
+
+
+def test_message_target_tracks_the_rendered_packet_and_reframes():
+    flow = scene_model(layout="immersive", layers=[{
+        "id": "flow", "type": "diagram", "nodes": [
+            {"id": "send", "label": "发送端", "x": 120, "y": 300},
+            {"id": "receive", "label": "接收端", "x": 880, "y": 300},
+        ], "edges": [{"source": "send", "target": "receive", "label": "消息", "message_id": "packet"}],
+    }], events=[
+        {"id": "packet_start", "kind": "reveal", "target": "packet",
+         "anchor": {"kind": "fraction", "fraction": 0.1}},
+        {"id": "packet_arrive", "kind": "emphasis", "target": "packet",
+         "anchor": {"kind": "fraction", "fraction": 0.25}},
+    ])
+    plans = [normalize_scene(flow, duration=10.0, vertical=portrait)["camera_plan"]
+             for portrait in (False, True)]
+    for index, plan in enumerate(plans):
+        focused = [key for key in plan if key["mode"] in {"focus", "follow"}]
+        assert [key["mode"] for key in focused] == ["focus", "follow"]
+        assert [key["at"] for key in focused] == pytest.approx([1.0, 2.5])
+        assert focused[0]["target"] == focused[1]["target"] == "packet"
+        assert (focused[0]["cx"], focused[0]["cy"]) != (focused[1]["cx"], focused[1]["cy"])
+        assert plan[-1]["mode"] == "reframe"
+        assert validate_plan(plan, orientation="portrait" if index else "landscape",
+                             duration=10.0) == []
+
+
+def test_repeated_event_targets_form_a_deterministic_follow_and_reframe_plan():
+    base = scene_model(layers=[{
+        "id": "flow", "type": "diagram", "nodes": [
+            {"id": "send", "label": "发送端", "x": 160, "y": 250},
+            {"id": "receive", "label": "接收端", "x": 800, "y": 250},
+        ], "edges": [{"source": "send", "target": "receive", "label": "传递"}],
+    }], events=[
+        {"id": "receive", "kind": "emphasis", "target": "receive",
+         "anchor": {"kind": "fraction", "fraction": 0.65}},
+        {"id": "send", "kind": "reveal", "target": "send",
+         "anchor": {"kind": "fraction", "fraction": 0.25}},
+    ])
+    first = normalize_scene(base, duration=10.0)["camera_plan"]
+    second = normalize_scene(base, duration=10.0)["camera_plan"]
+    targets = [key["target"] for key in first if key["mode"] in {"focus", "follow"}]
+    assert targets == ["send", "receive"]
+    follow = [key for key in first if key["mode"] == "follow"]
+    assert follow and first == second and first[-1]["mode"] == "reframe"
+
+
+def test_a_late_focus_reframes_at_the_cut_end_without_reversing_time():
+    late = scene_model(layers=[chart_layer("chart", values=[1, 2, 3])],
+                       events=[{"id": "late", "kind": "emphasis", "target": "chart",
+                                "anchor": {"kind": "fraction", "fraction": 0.95}}])
+    data = normalize_scene(late, duration=8.0)
+    plan = data["camera_plan"]
+    assert plan[-1]["mode"] == "reframe" and plan[-1]["at"] == 8.0
+    assert validate_plan(plan, orientation="landscape", duration=8.0) == []
 
 
 def test_an_event_without_a_real_target_creates_no_focus():

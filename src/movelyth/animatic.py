@@ -14,7 +14,7 @@ frame per scene.
 """
 from __future__ import annotations
 
-from .captions_qc import collision_report, cue_report, text_layer_report
+from .captions_qc import collision_report, cue_report, mobile_readability_report, text_layer_report
 from .models import Scene
 from .scenedsl import regions
 
@@ -77,6 +77,10 @@ def layout_precheck(timelines: dict, config: dict, assets: list[str] | None = No
                                             cut=cut)
             problems.extend(text_report["problems"])
             warnings.extend(text_report["warnings"])
+            mobile_report = mobile_readability_report(
+                raw, cut=cut, orientation="portrait" if portrait else "landscape",
+                style=timeline.get("style", "tech"))
+            warnings.extend(mobile_report["warnings"])
             for layer in scene.layers:
                 if layer.type == "image" and layer.data_ref:
                     internal = layer.data_ref.startswith("svd") or layer.data_ref in {"svd_1", "svd_4",
@@ -88,7 +92,8 @@ def layout_precheck(timelines: dict, config: dict, assets: list[str] | None = No
 
                 problems.extend(validate_scene_recipe(scene))
                 problems.extend(check_scene(scene))
-            cut_report["scenes"].append({"id": scene.id, "problems": problems, "warnings": warnings})
+            cut_report["scenes"].append({"id": scene.id, "problems": problems, "warnings": warnings,
+                                         "mobile_readability": mobile_report})
             cut_report["problems"].extend(problems)
             cut_report["warnings"].extend(warnings)
             report["checked_scenes"] += 1

@@ -7,6 +7,8 @@ platform rules.
 """
 from __future__ import annotations
 
+import math
+
 from .fonts import font_report, text_width_ratio
 from .scenedsl import caption_band, regions
 
@@ -17,6 +19,152 @@ MIN_SECONDS = {"long": 1.0, "short": 0.9}
 MAX_LINES = 2
 MAX_WIDTH_RATIO = 0.92
 CAPTION_SIZE = {"long": 66, "short": 62}
+MOBILE_REFERENCE_WIDTH = 390
+MOBILE_LANDSCAPE_ROTATED_WIDTH = 844
+MOBILE_MIN_TEXT_PX = 12.0  # internal review heuristic, not a platform requirement
+
+_TYPE_TOKENS = {
+    "tech": {"body": 46, "heading": 112},
+    "minimal": {"body": 44, "heading": 104},
+    "documentary": {"body": 44, "heading": 108},
+}
+_REGION_FACTORS = {"main": 1.0, "bottom": 0.92, "top": 0.82,
+                   "side": 0.86, "annotation": 0.86, "full": 0.9}
+
+
+def _round_js(value: float) -> int:
+    return math.floor(value + 0.5)
+
+
+def _char_em(character: str) -> float:
+    code = ord(character)
+    if code < 0x2000:
+        return 0.56
+    if code >= 0xFF00 or code >= 0x3000:
+        return 1.0
+    return 0.62
+
+
+def _fit_estimated_font(text: str, box: dict, base: int, minimum: int,
+                        *, single_line: bool = False, line_height: float = 1.34) -> int:
+    """Mirror TextLayer.fitSize's box and character-width rules for a display estimate."""
+    lines = text.split("\n")
+
+    def fits(size: int) -> bool:
+        if single_line and len(lines) == 1:
+            width = sum(_char_em(character) * size for character in lines[0])
+            return width <= box["w"] and size * line_height <= box["h"]
+        rows = 0
+        for line in lines:
+            used = 0.0
+            count = 1
+            for character in line:
+                width = _char_em(character) * size
+                if used + width > box["w"] and used > 0:
+                    count += 1
+                    used = width
+                else:
+                    used += width
+            rows += count
+        return rows * size * line_height <= box["h"]
+
+    size = base
+    while size > minimum:
+        if fits(size):
+            return size
+        size -= 2
+    return minimum
+
+
+def _text_layer_size(layer: dict, box: dict, *, orientation: str, style: str) -> int:
+    tokens = _TYPE_TOKENS.get(style, _TYPE_TOKENS["tech"])
+    factor = _REGION_FACTORS.get(layer.get("region", "main"), 0.9)
+    emphasis = max(0, min(2, int(layer.get("emphasis", 1)) - 1))
+    vertical = orientation == "portrait"
+    text = str(layer.get("text") or "")
+    if layer.get("type") == "math":
+        base = _round_js((round(tokens["heading"] * 0.52) + emphasis * 16)
+                         * factor * (1.06 if vertical else 1))
+        inner = {"w": max(80, box["w"] - _round_js(base * 0.62)),
+                 "h": max(40, box["h"] - _round_js(base * 0.42))}
+        return _fit_estimated_font(text, inner, base, 38, single_line="\n" not in text)
+    base = _round_js((tokens["body"] + emphasis * 8) * factor * (1.08 if vertical else 1))
+    size = _fit_estimated_font(text, box, base, 28)
+    if layer.get("region") == "top":
+        return _round_js(size * 0.82)
+    if box["h"] < 60:
+        strip_base = min(24, math.floor(box["h"] / 1.2))
+        return _fit_estimated_font(text, box, strip_base, 14, line_height=1.1)
+    return size
+
+
+def _diagram_label_sizes(layer: dict, box: dict) -> list[float]:
+    nodes = layer.get("nodes") or []
+    if not nodes:
+        return []
+    widths = {node["id"]: max(210, len(node["label"]) * 46 + 70) for node in nodes}
+    min_x = min(node["x"] - widths[node["id"]] / 2 for node in nodes) - 48
+    max_x = max(node["x"] + widths[node["id"]] / 2 for node in nodes) + 48
+    min_y = min(node["y"] for node in nodes) - 104
+    max_y = max(node["y"] for node in nodes) + 104
+    box_width, box_height = max_x - min_x, max_y - min_y
+    steps = [step for step in layer.get("steps") or []
+             if not any(node["label"] in step or step in node["label"] for node in nodes)]
+    content_height = box_height + (len(steps) * 52 + 26 if steps else 0)
+    aspect = max(0.6, box["w"] / max(1, box["h"]))
+    content_aspect = box_width / max(1, content_height)
+    view_height = box_width / aspect if content_aspect > aspect else content_height
+    scale = box["h"] / max(1, view_height)
+    return [44 * scale, *([30 * scale] if steps else [])]
+
+
+def mobile_readability_report(scene: dict, *, cut: str, orientation: str,
+                              style: str = "tech") -> dict:
+    """Estimate rendered text size at a representative phone width.
+
+    This is a static layout heuristic. It does not claim that a viewer understood
+    the scene or that every browser rasterizes fonts identically.
+    """
+    boxes = regions(orientation, scene.get("layout") or "diagram")
+    if orientation == "portrait":
+        profile = "portrait-feed-390px"
+        scale = MOBILE_REFERENCE_WIDTH / 1080
+    else:
+        profile = "landscape-rotated-844px"
+        scale = MOBILE_LANDSCAPE_ROTATED_WIDTH / 1920
+
+    samples = []
+    pages = scene.get("captions") or []
+    if pages:
+        samples.append({"kind": "caption", "px": CAPTION_SIZE.get(cut, 66) * scale})
+    for layer in scene.get("layers") or []:
+        layer_type = layer.get("type")
+        box = boxes.get(layer.get("region") or "main") or boxes["main"]
+        if layer_type in {"text", "math"}:
+            size = _text_layer_size(layer, box, orientation=orientation, style=style)
+            samples.append({"kind": layer_type, "id": layer.get("id"), "px": size * scale})
+        elif layer_type == "chart":
+            # ChartLayer's SVG font units are scaled by the containing region.
+            aspect = max(0.7, min(3.4, box["w"] / max(1, box["h"])))
+            canvas_width = _round_js(640 * aspect)
+            unit = canvas_width / 1000
+            chart_px = _round_js(15 * unit) * box["h"] / 640
+            samples.append({"kind": "chart-label", "id": layer.get("id"), "px": chart_px * scale})
+        elif layer_type == "diagram":
+            sizes = _diagram_label_sizes(layer, box)
+            if sizes:
+                samples.append({"kind": "diagram-label", "id": layer.get("id"),
+                                "px": min(sizes) * scale})
+
+    small = [item for item in samples if float(item["px"]) < MOBILE_MIN_TEXT_PX]
+    warnings = [f"镜头 {scene.get('id')} 的 {item['kind']} {item.get('id', '')} 在 {profile} 估算"
+                f"约 {float(item['px']):.1f}px，低于项目 {MOBILE_MIN_TEXT_PX:.0f}px 复核线"
+                for item in small]
+    if not pages:
+        warnings.append(f"镜头 {scene.get('id')} 没有字幕页，静音阅读线索有限")
+    return {"profile": profile, "scale": round(scale, 4), "samples": samples,
+            "small_text": small, "warnings": warnings,
+            "method": "CSS/SVG 字号与版式盒估算；非平台规范、非实际理解评测"}
 
 
 def cue_report(scene: dict, cut: str, *, orientation: str) -> dict:
@@ -38,7 +186,7 @@ def cue_report(scene: dict, cut: str, *, orientation: str) -> dict:
         rate = len(text) / seconds
         if rate > speed:
             problems.append(f"{where} {rate:.1f} 字/秒，超过 {speed} 字/秒上限")
-        if seconds < minimum:
+        if seconds + 1e-9 < minimum:
             problems.append(f"{where}只显示 {seconds:.2f}s，短于 {minimum}s")
         if float(page["start"]) < previous_end - 1e-6:
             problems.append(f"{where}与上一页时间交叠")

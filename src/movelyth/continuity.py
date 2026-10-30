@@ -19,48 +19,82 @@ MAX_PAIRS = 32
 
 
 def subject_states(scenes: list[Scene]) -> dict[str, list[dict]]:
-    """Every appearance of a subject, in scene order."""
+    """One reviewable appearance per subject per scene, in scene order.
+
+    A subject may be drawn by a diagram and repeated in a nearby text note during the
+    same scene. Those are co-present representations, not a handoff. Keep all layer
+    references as evidence, but use the strongest visual layer as the representative
+    when comparing adjacent scenes.
+    """
     seen: dict[str, list[dict]] = {}
-    for scene in scenes:
+    for scene_index, scene in enumerate(scenes):
+        grouped: dict[str, list[dict]] = {}
         for layer in scene.layers:
             if not layer.subject_id:
                 continue
-            seen.setdefault(layer.subject_id, []).append({
-                "scene": scene.id, "layer": layer.id, "type": layer.type,
+            grouped.setdefault(layer.subject_id, []).append({
+                "layer": layer.id, "type": layer.type,
                 "color": layer.color, "state_before": layer.state_before,
                 "state_after": layer.state_after,
                 "label": layer.text or layer.axis or (layer.series[0].label if layer.series else ""),
+            })
+        for subject_id, representations in grouped.items():
+            # A diagram/chart/shape is the best proxy for the visible object's
+            # identity. Text notes often use their own semantic accent color.
+            priority = {"diagram": 0, "chart": 1, "shape": 2, "timeline": 3,
+                        "image": 4, "procedural": 5, "math": 6, "text": 7}
+            representative = min(representations,
+                                 key=lambda item: (priority.get(item["type"], 8), item["layer"]))
+            seen.setdefault(subject_id, []).append({
+                "scene": scene.id, "scene_index": scene_index,
+                **representative,
+                "representations": representations,
             })
     return seen
 
 
 def continuity_report(scenes: list[Scene]) -> dict:
-    """Problems that break the identity of a shared object across scenes."""
+    """Audit direct scene seams without comparing unrelated later reappearances."""
     subjects = subject_states(scenes)
-    problems, shared, transitions = [], [], []
+    problems, shared, transitions, handoffs = [], [], [], []
     for subject_id, appearances in subjects.items():
-        colours = {item["color"] for item in appearances}
-        if len(colours) > 1:
-            problems.append(f"主体 {subject_id} 在不同镜头换了颜色：{sorted(colours)}")
-        labels = {item["label"] for item in appearances if item["label"]}
-        if len(labels) > 1:
-            problems.append(f"主体 {subject_id} 在不同镜头叫法不同：{sorted(labels)[:3]}")
         if len(appearances) > 1:
             shared.append({"subject_id": subject_id, "scenes": [item["scene"] for item in appearances],
                            "types": sorted({item["type"] for item in appearances})})
         for previous, current in zip(appearances, appearances[1:], strict=False):
+            # A subject can disappear for several scenes while the explanation moves
+            # elsewhere.  Comparing its old state to a later reappearance invents a
+            # seam that viewers never see; only consecutive scene appearances are a
+            # direct handoff.
+            if current["scene_index"] != previous["scene_index"] + 1:
+                continue
+            if previous["color"] != current["color"]:
+                problems.append(f"主体 {subject_id} 在 {previous['scene']} → {current['scene']} 接缝换了颜色："
+                                f"{previous['color']} → {current['color']}")
+            if previous["type"] == current["type"] and previous["label"] and current["label"] \
+                    and previous["label"] != current["label"]:
+                problems.append(f"主体 {subject_id} 在 {previous['scene']} → {current['scene']} 接缝叫法不同："
+                                f"{previous['label']} → {current['label']}")
             if previous["state_after"] and current["state_before"] and \
                     previous["state_after"] != current["state_before"]:
                 problems.append(f"主体 {subject_id} 在 {previous['scene']} 之后是"
                                 f"“{previous['state_after']}”，但 {current['scene']} 开始时是"
                                 f"“{current['state_before']}”")
+            handoff = {"subject_id": subject_id, "from": previous["scene"], "to": current["scene"],
+                       "from_layer": previous["layer"], "to_layer": current["layer"],
+                       "from_state": previous["state_after"], "to_state": current["state_before"],
+                       "state_matches": (not previous["state_after"] or not current["state_before"]
+                                         or previous["state_after"] == current["state_before"]),
+                       "color_matches": previous["color"] == current["color"]}
+            handoffs.append(handoff)
             if previous["state_after"] or current["state_before"]:
-                transitions.append({"subject_id": subject_id,
-                                    "from": previous["scene"], "to": current["scene"],
+                transitions.append({"subject_id": subject_id, "from": previous["scene"],
+                                    "to": current["scene"],
                                     "state": current["state_before"] or previous["state_after"]})
     return {"problems": problems, "shared": shared, "transitions": transitions,
+            "handoffs": handoffs,
             "subjects": sorted(subjects),
-            "note": "共享对象只检查身份一致性；不检查语义是否相同"}
+            "note": "仅检查相邻镜头的直接接缝；跨镜对象的语义和画面是否清楚仍需审片"}
 
 
 def morph_plan(layer: Layer, action) -> dict:

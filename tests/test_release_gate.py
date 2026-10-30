@@ -29,7 +29,7 @@ def test_release_decision_is_written_and_lists_the_checks(offline_pipeline):
         job = studio.workspace / f"VID-{episode['id']:06d}"
         decision = json.loads((job / "release-decision.json").read_text(encoding="utf-8"))
         assert decision["decision"] == "ready"
-        assert decision["policy_version"] == "2"
+        assert decision["policy_version"] == "3"
         assert decision["blocking"] == []
         assert "technical.long.full_decode" in decision["passed"]
         assert "technical.short.full_decode" in decision["passed"]

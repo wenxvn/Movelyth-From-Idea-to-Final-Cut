@@ -14,6 +14,7 @@ from movelyth.recipes import (
     catalog,
     check_scene,
     choose,
+    guidance_for_scene,
     recipe_warnings,
     validate_scene_recipe,
 )
@@ -44,7 +45,20 @@ def test_every_recipe_declares_its_contract():
     for name, spec in RECIPES.items():
         assert spec["purpose"] and spec["requires"] and spec["events"] and spec["checks"]
         assert spec["orientations"] == ["landscape", "portrait"]
+        assert spec["semantic_conditions"] and spec["dynamic_demo"] and spec["failure_examples"]
+        timeline = spec["timeline"]
+        assert [item["span"] for item in timeline][0][0] == 0.0
+        assert [item["span"] for item in timeline][-1][1] == 1.0
+        assert all(item["focus"] and item["action"] for item in timeline)
     assert catalog()["recipes"] is RECIPES
+
+
+def test_scene_scoped_recipe_guidance_contains_only_applicable_recipes():
+    chart_scene = chart(annotations=[{"x": 2, "text": "拐点"}])
+    guidance = guidance_for_scene(chart_scene)
+    assert "chart-focus" in guidance
+    assert "flow-expand" not in guidance
+    assert all(item["timeline"] and item["failure_examples"] for item in guidance.values())
 
 
 def test_chart_focus_needs_an_annotation():
@@ -110,8 +124,10 @@ def test_renderer_capabilities_and_prompt_expose_recipes():
     assert set(RENDERER_CAPABILITIES["recipes"]) == set(RECIPES)
     prompt = (__import__("pathlib").Path(__file__).parents[1] / "src/movelyth/prompts/director.md")
     text = prompt.read_text(encoding="utf-8")
-    for name in RECIPES:
-        assert f"`{name}`" in text
+    assert "scene_recipe_guidance" in text
+    assert "初次编导时不要自行猜 `recipe`" in text
+    for spec in RENDERER_CAPABILITIES["recipes"].values():
+        assert spec["timeline"] and spec["dynamic_demo"] and spec["failure_examples"]
 
 
 def test_pipeline_records_recipe_usage_and_rejects_an_unimplemented_one(offline_pipeline):
@@ -130,6 +146,15 @@ def test_pipeline_records_recipe_usage_and_rejects_an_unimplemented_one(offline_
                              .read_text(encoding="utf-8"))
         assert quality["recipes"]["long"][0] == "chart-focus"
         assert all(quality["recipes"]["long"])
+        job = studio.workspace / f"VID-{episode['id']:06d}"
+        guidance = json.loads((job / "recipe-guidance.json").read_text(encoding="utf-8"))
+        assert set(guidance["long"]["one"]) == {"chart-focus"}
+        director_context = json.loads((job / "agents" / "director-long-0" / "prompt.txt")
+                                      .read_text(encoding="utf-8").split("\n", 1)[1])
+        assert "recipes" not in director_context["renderer_capabilities"]
+        reviewer_context = json.loads((job / "agents" / "script-review-0" / "prompt.txt")
+                                      .read_text(encoding="utf-8").split("\n", 1)[1])
+        assert set(reviewer_context["scene_recipe_guidance"]["long"]["one"]) == {"chart-focus"}
     finally:
         studio.close()
 

@@ -257,6 +257,12 @@
           "title": "Label",
           "type": "string"
         },
+        "message_id": {
+          "default": "",
+          "maxLength": 24,
+          "title": "Message Id",
+          "type": "string"
+        },
         "source": {
           "pattern": "^[a-z][a-z0-9_]{0,15}$",
           "title": "Source",

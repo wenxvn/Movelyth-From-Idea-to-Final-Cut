@@ -1,4 +1,4 @@
-import type {Color, StyleName} from './types';
+import type {Color, StyleName, TransitionKind} from './types';
 
 /**
  * V2 design tokens.
@@ -37,6 +37,18 @@ export type TypeScale = {
   micro: number;
 };
 
+export type MotionProfile = {
+  staggerSeconds: number;
+  restLift: number;
+  restScale: number;
+  heroPulse: number;
+  cameraMoveSeconds: number;
+  overshoot: boolean;
+  transitions: Record<TransitionKind, number>;
+  /** Fraction of the scene camera movement followed by background/subject/reading layers. */
+  planes: {background: number; subject: number; reading: number};
+};
+
 export type Theme = {
   name: StyleName;
   background: string;
@@ -57,6 +69,7 @@ export type Theme = {
   type: TypeScale;
   /** Fraction of a second used by an entrance; scaled by `motion`. */
   enter: number;
+  motionProfile: MotionProfile;
   shadow: string;
   /** Deep tone used for the insight card's border and the hero rim. */
   heroRim: string;
@@ -95,6 +108,12 @@ export const themes: Record<StyleName, Theme> = {
     radius: 18,
     type: scale(132, 112, 46, 66),
     enter: 0.52,
+    motionProfile: {
+      staggerSeconds: 0.045, restLift: 0.018, restScale: 0.008, heroPulse: 0.008,
+      cameraMoveSeconds: 0.7, overshoot: true,
+      transitions: {cut: 0, fade: 0.55, slide: 0.62, wipe: 0.58, dip: 0.66, zoom: 0.56},
+      planes: {background: 0.72, subject: 1, reading: 0.28},
+    },
     shadow: '0 26px 90px #00000066',
     heroRim: '#6fe6ef',
     mesh: 'radial-gradient(ellipse 60% 55% at 72% 32%, #1d5a6e42, transparent 68%),'
@@ -120,6 +139,12 @@ export const themes: Record<StyleName, Theme> = {
     radius: 10,
     type: scale(124, 104, 44, 64),
     enter: 0.62,
+    motionProfile: {
+      staggerSeconds: 0.024, restLift: 0.008, restScale: 0.004, heroPulse: 0.003,
+      cameraMoveSeconds: 0.55, overshoot: false,
+      transitions: {cut: 0, fade: 0.38, slide: 0.45, wipe: 0.42, dip: 0.5, zoom: 0.42},
+      planes: {background: 1, subject: 1, reading: 1},
+    },
     shadow: '0 22px 70px #00000059',
     heroRim: '#e8d9a8',
     mesh: 'radial-gradient(ellipse 58% 50% at 70% 30%, #4a422b3a, transparent 70%),'
@@ -145,6 +170,12 @@ export const themes: Record<StyleName, Theme> = {
     radius: 6,
     type: scale(128, 108, 44, 64),
     enter: 0.58,
+    motionProfile: {
+      staggerSeconds: 0.032, restLift: 0.01, restScale: 0.005, heroPulse: 0.004,
+      cameraMoveSeconds: 0.8, overshoot: false,
+      transitions: {cut: 0, fade: 0.65, slide: 0.72, wipe: 0.68, dip: 0.78, zoom: 0.66},
+      planes: {background: 0.45, subject: 1, reading: 0.16},
+    },
     shadow: '0 24px 80px #0000005e',
     heroRim: '#ffc978',
     mesh: 'radial-gradient(ellipse 60% 52% at 72% 30%, #7a53302e, transparent 68%),'

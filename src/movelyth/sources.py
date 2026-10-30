@@ -156,17 +156,25 @@ def fetch_document(url: str, *, resolver=None, opener=None) -> dict:
         path = parsed.path or "/"
         if parsed.query:
             path += "?" + parsed.query
-        connection = (opener or _open_pinned)(host, addresses[0], TIMEOUT_SECONDS)
-        try:
-            connection.request("GET", path, headers={
-                "User-Agent": "Movelyth/1.0 source-verification",
-                "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9",
-                "Accept-Encoding": "identity",
-                "Connection": "close",
-            })
-            status, headers, raw = _read_response(connection.getresponse())
-        finally:
-            connection.close()
+        addresses = addresses[:4]  # Bound worst-case connection time per redirect.
+        for ip in addresses:
+            connection = None
+            try:
+                connection = (opener or _open_pinned)(host, ip, TIMEOUT_SECONDS)
+                connection.request("GET", path, headers={
+                    "User-Agent": "Movelyth/1.0 source-verification",
+                    "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9",
+                    "Accept-Encoding": "identity",
+                    "Connection": "close",
+                })
+                status, headers, raw = _read_response(connection.getresponse())
+                break
+            except (OSError, http.client.HTTPException):
+                if ip == addresses[-1]:
+                    raise
+            finally:
+                if connection is not None:
+                    connection.close()
         if status in {301, 302, 303, 307, 308}:
             location = headers.get("location")
             if not location:
@@ -182,7 +190,7 @@ def fetch_document(url: str, *, resolver=None, opener=None) -> dict:
         for part in (headers.get("content-type") or "").split(";")[1:]:
             if "charset=" in part:
                 charset = part.split("=", 1)[1].strip().strip('"') or "utf-8"
-        return {"final_url": current, "resolved_ip": addresses[0], "status_code": status,
+        return {"final_url": current, "resolved_ip": ip, "status_code": status,
                 "content_type": mime or "text/html", "charset": charset, "raw": raw}
     raise SourceError("重定向次数过多")
 
@@ -200,6 +208,10 @@ def _age(record: dict) -> timedelta | None:
 def _cache_valid(record: dict) -> bool:
     age = _age(record)
     if age is None:
+        return False
+    # Older successful snapshots kept only a prefix and cannot prove an excerpt
+    # is absent from the rest of a document. Refresh them before using them.
+    if record.get("status") == "retrieved" and "search_text" not in record:
         return False
     ttl = SUCCESS_TTL if record.get("status") == "retrieved" else FAILURE_TTL
     return age < ttl
@@ -234,7 +246,7 @@ def collect_sources(sources: list[dict], directory: Path, *, resolver=None, open
                          "content_sha256": hashlib.sha256(document["raw"]).hexdigest(),
                          "title": (parser.title or source.get("label") or "")[:200],
                          "text_length": len(text),
-                         "excerpt": text[:16000]})
+                         "excerpt": text[:16000], "search_text": text})
         except Exception as exc:
             status = "blocked" if isinstance(exc, BlockedSource) else "unavailable"
             item.update({"status": status, "error": f"{type(exc).__name__}: {exc}",
@@ -295,10 +307,11 @@ def verify_claims(research, evidence: list[dict]) -> list[dict]:
             entry.update({"status": "source-unavailable",
                           "detail": f"来源状态 {primary.get('status')}：{primary.get('error', '')}"[:200]})
         else:
-            position = locate_excerpt(claim.excerpt, primary.get("excerpt") or "")
+            position = locate_excerpt(claim.excerpt, primary.get("search_text") or primary.get("excerpt") or "")
             corroboration = [item for item in sources[1:]
                              if item["snapshot"] and item["snapshot"].get("status") == "retrieved"
-                             and locate_excerpt(claim.excerpt, item["snapshot"].get("excerpt") or "")]
+                             and locate_excerpt(claim.excerpt, item["snapshot"].get("search_text")
+                                                or item["snapshot"].get("excerpt") or "")]
             if position is None:
                 entry.update({"status": "excerpt-missing",
                               "detail": "抓取到的正文里找不到这段节选",

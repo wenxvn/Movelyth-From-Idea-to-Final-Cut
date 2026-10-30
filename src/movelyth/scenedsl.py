@@ -86,7 +86,8 @@ LAYOUTS: dict[str, dict[str, dict[str, tuple[int, int, int, int]]]] = {
 # script can never collide with it.
 INSIGHT_BANDS: dict[str, dict[str, tuple[int, int, int, int]]] = {
     "landscape": {"diagram": (96, 740, 520, 140), "immersive": (1290, 180, 534, 180),
-                  "compare": (96, 820, 600, 60), "cover": (96, 760, 700, 60)},
+                  # Match the chart column so values and their takeaway fit on one line.
+                  "compare": (96, 820, 850, 60), "cover": (96, 760, 700, 60)},
     "portrait": {"diagram": (70, 1408, 940, 128), "immersive": (70, 1368, 940, 160),
                  "compare": (50, 1300, 980, 100), "cover": (70, 660, 940, 0)},
 }
@@ -562,11 +563,23 @@ def resolve_events(scene: Scene, duration: float, boundaries: list[dict] | None 
     at, mode = char_timing(scene.narration, boundaries or [], max(1e-6, duration))
     known = {layer.id for layer in scene.layers}
     known |= {layer.subject_id for layer in scene.layers if layer.subject_id}
+    node_owners: dict[str, set[str]] = {}
+    for layer in scene.layers:
+        if layer.type != "diagram":
+            continue
+        for node in layer.nodes:
+            known.add(node.id)
+            node_owners.setdefault(node.id, set()).add(layer.id)
+        for edge in layer.edges:
+            if edge.message_id:
+                known.add(edge.message_id)
     resolved: list[dict] = []
     last_by_target: dict[str, float] = {}
     for event in scene.events:
         if event.target and event.target not in known:
             raise ValueError(f"镜头 {scene.id} 的事件 {event.id} 引用了不存在的目标 {event.target}")
+        if event.target in node_owners and len(node_owners[event.target]) > 1:
+            raise ValueError(f"镜头 {scene.id} 的节点目标 {event.target} 不唯一")
         anchor = event.anchor
         if anchor.kind == "start":
             base = 0.0

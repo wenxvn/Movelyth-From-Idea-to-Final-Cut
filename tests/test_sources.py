@@ -80,6 +80,31 @@ def test_article_text_is_extracted_and_cached(tmp_path):
     assert len(calls) == 1, "缓存命中时不应再次发起请求"
 
 
+def test_retry_other_validated_ip_after_connection_failure():
+    calls = []
+    second = "93.184.216.35"
+
+    def opener(host, ip, timeout):
+        calls.append((host, ip))
+        if ip == PUBLIC:
+            raise TimeoutError("first IP timed out")
+        return FakeConnection(FakeResponse(200, {"content-type": "text/html"}, ARTICLE))
+
+    document = fetch_document("https://example.com/article",
+                              resolver=resolver_for({"example.com": [PUBLIC, second]}), opener=opener)
+    assert calls == [("example.com", PUBLIC), ("example.com", second)]
+    assert document["resolved_ip"] == second
+
+
+def test_all_ip_connection_failures_remain_unavailable():
+    def opener(host, ip, timeout):
+        raise TimeoutError("no address succeeded")
+
+    with pytest.raises(TimeoutError):
+        fetch_document("https://example.com/article", resolver=resolver_for({"example.com": [PUBLIC]}),
+                       opener=opener)
+
+
 @pytest.mark.parametrize("url", [
     "http://example.com/a",
     "https://user:pass@example.com/a",

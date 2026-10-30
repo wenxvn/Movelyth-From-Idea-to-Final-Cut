@@ -16,7 +16,7 @@ from movelyth.models import Research
 from movelyth.policy import claim_usage_checks, decide, source_checks
 from movelyth.sources import coverage_summary, locate_excerpt, verify_claims
 from tests.conftest import make_studio
-from tests.factories import film, research_payload, review_payload
+from tests.factories import chart_layer, film, research_payload, review_payload, scene
 
 
 def research_model(**overrides) -> Research:
@@ -59,6 +59,14 @@ def test_missing_excerpt_is_reported_as_invented_evidence():
     checks = verify_claims(research_model(), [snapshot(excerpt="完全无关的正文")])
     assert checks[0]["status"] == "excerpt-missing"
     assert "找不到" in checks[0]["detail"]
+
+
+def test_claim_beyond_preview_prefix_is_found_in_complete_snapshot():
+    prefix = "无关内容 " * 5000
+    evidence = snapshot(excerpt=prefix[:16000], search_text=prefix + " columns are images of basis vectors.")
+    check = verify_claims(research_model(), [evidence])[0]
+    assert check["status"] == "supported"
+    assert check["position"]["start"] > 16000
 
 
 def test_unfetched_source_never_supports_a_claim():
@@ -120,6 +128,48 @@ def test_a_narration_number_outside_the_evidence_is_reported_not_blocked():
     numbers = [check for check in checks if check.check_id.endswith(".numbers")]
     assert numbers and "37" in numbers[0].observation
     assert decide(checks).decision == "ready"  # recorded as an optional unknown
+
+
+def test_numeric_claim_is_unknown_when_only_subtitles_narrate_the_missing_value():
+    graphic = chart_layer(values=[4], source_note="自行构造示意数据")
+    shot = scene("one", narration="这里说到数字三十四，但图上没有这个值。", layers=[graphic],
+                 claim_ids=["c1"])
+    payload = film(long_scenes=[shot], short_scenes=[{**shot, "id": "s1"}])
+    coverage = [{"claim_id": "c1", "statement": "该数据从 4 变为 34", "status": "supported",
+                 "scope": "established", "importance": "key", "source_index": 0,
+                 "evidence_refs": []}]
+
+    checks = claim_usage_checks(payload, coverage)
+    visual = next(check for check in checks if check.check_id == "source.visual.long.c1.numbers")
+    assert visual.status == "unknown"
+    assert "34" in visual.observation
+    assert decide(checks).decision == "ready"  # optional warning, never a silent pass
+
+
+def test_lost_condition_and_illustrative_scope_are_reported_for_visual_review():
+    shot = scene("one", layers=[chart_layer(values=[4, 34], source_note="")], claim_ids=["c1"])
+    payload = film(long_scenes=[shot], short_scenes=[{**shot, "id": "s1"}])
+    coverage = [{"claim_id": "c1", "statement": "仅在本例中，数据从 4 变为 34", "status": "supported",
+                 "scope": "illustrative", "importance": "key", "source_index": 0,
+                 "evidence_refs": []}]
+
+    checks = claim_usage_checks(payload, coverage)
+    ids = {check.check_id: check for check in checks}
+    assert ids["source.visual.long.c1.scope"].status == "unknown"
+    assert ids["source.visual.long.c1.boundary"].status == "unknown"
+
+
+def test_screen_data_without_claim_or_source_note_is_reported_as_unmapped():
+    shot = scene("one", layers=[chart_layer(values=[4, 99], source_note="")], claim_ids=["c1"])
+    payload = film(long_scenes=[shot], short_scenes=[{**shot, "id": "s1"}])
+    coverage = [{"claim_id": "c1", "statement": "数据从 4 变为 34", "status": "supported",
+                 "scope": "established", "importance": "key", "source_index": 0,
+                 "evidence_refs": []}]
+
+    checks = claim_usage_checks(payload, coverage)
+    visual = next(check for check in checks if check.check_id == "source.visual.long.c1.reverse")
+    assert visual.status == "unknown"
+    assert "99" in visual.observation
 
 
 # --------------------------------------------------------- pipeline ordering

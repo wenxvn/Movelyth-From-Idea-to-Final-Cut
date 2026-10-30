@@ -25,6 +25,14 @@ from movelyth.sound import design_sound_events, soundtrack
 from tests import factories
 
 
+def test_emphasis_at_punctuation_keeps_speakable_segments_and_offsets():
+    narration = "我们看中位数，再看平均数。"
+    segments = prosody_segments(narration, ["中位数", "平均数"])
+    assert "".join(item["text"] for item in segments) == narration
+    assert all(item["text"] == narration[item["start"]:item["end"]] for item in segments)
+    assert all(any(ch.isalnum() for ch in item["text"]) for item in segments)
+
+
 def _page(start: float, end: float, text: str = "一句话") -> dict:
     return {"start": start, "end": end, "text": text, "words": []}
 

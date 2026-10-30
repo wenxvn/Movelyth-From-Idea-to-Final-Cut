@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import time
+import unicodedata
 import wave
 from pathlib import Path
 
@@ -299,8 +300,24 @@ def _split_emphasis(text: str, base: int, words: list[str]) -> list[tuple[int, i
         parts.append((base + before, base + after, True))
         if after < len(text):
             parts.append((base + after, base + len(text), False))
-        return parts
+        # Punctuation alone is not speakable by Edge TTS. Keep it attached to
+        # the neighbouring phrase without losing its original character offset.
+        merged = []
+        for start, end, marked in parts:
+            if _punctuation_only(text[start - base:end - base]) and merged:
+                previous = merged.pop()
+                merged.append((previous[0], end, previous[2]))
+            elif merged and _punctuation_only(text[merged[-1][0] - base:merged[-1][1] - base]):
+                previous = merged.pop()
+                merged.append((previous[0], end, marked))
+            else:
+                merged.append((start, end, marked))
+        return merged
     return [(base, base + len(text), False)]
+
+
+def _punctuation_only(text: str) -> bool:
+    return all(ch.isspace() or unicodedata.category(ch).startswith("P") for ch in text)
 
 
 def prosody_segments(narration: str, emphasis: list[str] | None = None,
@@ -428,7 +445,8 @@ def trim_silence(audio: np.ndarray, *, threshold: float = 0.008,
 
 
 def captions(text: str, boundaries: list[dict], duration: float, max_chars: int,
-             spoken: str | None = None, origin: list[int] | None = None) -> tuple[list[dict], str]:
+             spoken: str | None = None, origin: list[int] | None = None,
+             min_display: float = 0.5, portrait: bool | None = None) -> tuple[list[dict], str]:
     """Time caption pages of *text* (what viewers read) against TTS word boundaries.
 
     ``spoken`` is what the voice actually says, and ``origin`` maps each of its
@@ -445,6 +463,21 @@ def captions(text: str, boundaries: list[dict], duration: float, max_chars: int,
         # A mismatched map would misplace every caption; fall back to display order.
         speech, source = text, list(range(len(text)))
     parts = caption_chunks(text, max_chars)
+    if portrait is not None:
+        from .captions_qc import CAPTION_SIZE, MAX_WIDTH_RATIO
+        from .fonts import text_width_ratio
+        from .scenedsl import caption_band
+
+        cut = "short" if portrait else "long"
+        band = caption_band("portrait" if portrait else "landscape")
+        limit = max_chars
+        while limit > 2:
+            widths = [text_width_ratio(part.strip(" ，。！？；：,.!?;:"), band["w"],
+                                       size=CAPTION_SIZE[cut]) for part in parts]
+            if not any(width is not None and width > MAX_WIDTH_RATIO for width in widths):
+                break
+            limit -= 1
+            parts = caption_chunks(text, limit)
     positions, cursor = [], 0
     for boundary in boundaries:
         start = speech.find(boundary["text"], cursor)
@@ -481,7 +514,10 @@ def captions(text: str, boundaries: list[dict], duration: float, max_chars: int,
     # Silence between clauses keeps the last caption briefly visible, without overlapping the next.
     for i, page in enumerate(pages):
         next_start = pages[i + 1]["start"] if i + 1 < len(pages) else duration
-        page["end"] = max(page["start"], min(next_start, max(page["end"], page["start"] + 0.5)))
+        page["end"] = max(page["start"], min(next_start, max(page["end"], page["start"] + min_display)))
+        previous_end = pages[i - 1]["end"] if i else 0.0
+        if page["end"] - page["start"] < min_display:
+            page["start"] = max(previous_end, page["end"] - min_display)
     return [p for p in pages if p["text"] and p["end"] > p["start"]], mode
 
 
@@ -518,6 +554,7 @@ def speech_plan(narration: str, replacements: dict | None = None) -> tuple[str, 
 
 
 def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait: bool) -> tuple[dict, list[Path]]:
+    from .captions_qc import MIN_SECONDS
     from .models import Scene
     from .scenedsl import normalize_scene
     from .speech import describe, speech_settings
@@ -542,6 +579,11 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
         for segment in prosody_segments(spoken, scene.emphasis, config, role=scene.role):
             begin, end = segment["start"], segment["end"]
             if not spoken[begin:end].strip():
+                continue
+            if _punctuation_only(spoken[begin:end]):
+                pause = float(segment.get("pause_after") or 0.0)
+                pieces.append(np.zeros(int(pause * SAMPLE_RATE), dtype=np.float32))
+                position += pause
                 continue
             before = float(segment.get("pause_before") or 0.0)
             if before > 0:
@@ -576,7 +618,9 @@ def prepare_cut(cut: dict, config: dict, cache: Path, output: Path, *, portrait:
         chunk[begin:begin + len(audio)] = audio
         # The caption shows the written narration; only the voice uses the replacement.
         pages, timing = captions(scene.narration, boundaries, seconds,
-                                 16 if portrait else 25, spoken=spoken, origin=origin)
+                                 16 if portrait else 25, spoken=spoken, origin=origin,
+                                 min_display=MIN_SECONDS["short" if portrait else "long"],
+                                 portrait=portrait)
         for page in pages:
             page["start"] += lead
             page["end"] += lead

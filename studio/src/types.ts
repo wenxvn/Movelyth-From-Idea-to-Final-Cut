@@ -62,7 +62,7 @@ export type Annotation = {x: number; text: string};
 
 export type Series = {label: string; values: number[]; unit: string; x_values: number[]};
 export type DiagramNode = {id: string; label: string; x: number; y: number};
-export type DiagramEdge = {source: string; target: string; label: string};
+export type DiagramEdge = {source: string; target: string; label: string; message_id: string};
 
 export type Layer = {
   id: string;

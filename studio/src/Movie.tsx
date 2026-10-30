@@ -20,10 +20,6 @@ const locate = (scenes: Scene[], frame: number): {index: number; local: number} 
   return {index: last, local: Math.max(0, scenes[last].frames - 1)};
 };
 
-const TRANSITION_SECONDS: Record<string, number> = {
-  cut: 0, fade: 0.55, slide: 0.62, wipe: 0.58, dip: 0.66, zoom: 0.56,
-};
-
 const isCut = (scene: Scene): boolean => (scene.transition || 'fade') === 'cut';
 
 const enterStyle = (scene: Scene, enter: number): React.CSSProperties => {
@@ -213,9 +209,13 @@ const InsightCard: React.FC<{insight: Insight; scene: Scene; theme: Theme; verti
   // 180 px is still a row card: a 80 px number plus two lines of 30 px text
   // needs ~196 px in a column and was silently clipped at the top and bottom.
   const compact = box.h < 210;
-  const valueSize = compact ? (vertical ? 62 : 58) : (vertical ? 84 : 80);
-  const labelSize = compact ? 30 : (vertical ? 34 : 32);
-  const detailSize = compact ? 23 : 30;
+  const narrowBand = box.h <= 100;
+  const shortBand = box.h < 80;
+  const valueSize = narrowBand ? Math.min(36, box.h * 0.55) : compact ? (vertical ? 62 : 58) : (vertical ? 84 : 80);
+  const labelSize = shortBand ? 30 : narrowBand ? Math.max(18, Math.min(28, Math.floor(box.h * 0.35)))
+    : compact ? 30 : (vertical ? 34 : 32);
+  const detailSize = narrowBand ? Math.max(14, Math.min(22, Math.floor(box.h * 0.27)))
+    : compact ? 23 : 30;
   const steps = scene.layers.find((layer) => layer.type === 'timeline' || layer.type === 'diagram')?.steps || [];
   const numeric = /^-?\d+(?:\.\d+)?[%％]?$/.test(insight.value);
   const number = numeric ? Number(insight.value.replace(/[%％]$/, '')) : 0;
@@ -228,7 +228,7 @@ const InsightCard: React.FC<{insight: Insight; scene: Scene; theme: Theme; verti
     background: `linear-gradient(135deg, ${theme.surface}e8, ${theme.backgroundBase}d8)`,
     border: `1px solid ${color}44`, borderLeft: `7px solid ${color}`,
     borderRadius: 16, boxShadow: `0 18px 60px #00000055, inset 0 0 40px ${color}08`,
-    overflow: 'hidden'}}>
+    overflow: 'hidden', boxSizing: 'border-box'}}>
     <div style={{position: 'absolute', right: -30, top: -40, width: 160, height: 160,
       borderRadius: '50%', background: `radial-gradient(circle, ${color}22, transparent 70%)`}}/>
     <div style={{fontSize: valueSize, lineHeight: 1, fontWeight: 800, color,
@@ -238,11 +238,11 @@ const InsightCard: React.FC<{insight: Insight; scene: Scene; theme: Theme; verti
     </div>
     {compact ? <div style={{display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0}}>
       <div style={{fontSize: labelSize, fontWeight: 700, color: theme.text, lineHeight: 1.22,
-        maxWidth: '100%', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2,
+        maxWidth: '100%', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: shortBand ? 1 : 2,
         WebkitBoxOrient: 'vertical'}}>{insight.label}</div>
-      <div style={{fontSize: detailSize, color: theme.muted, lineHeight: 1.22,
+      {!shortBand && <div style={{fontSize: detailSize, color: theme.muted, lineHeight: 1.22,
         maxWidth: '100%', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2,
-        WebkitBoxOrient: 'vertical'}}>{insight.detail}</div>
+        WebkitBoxOrient: 'vertical'}}>{insight.detail}</div>}
     </div> : <>
       <div style={{fontSize: labelSize, fontWeight: 700, color: theme.text, lineHeight: 1.25,
         maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis'}}>{insight.label}</div>
@@ -335,7 +335,7 @@ export const Movie: React.FC<MovieProps> = (props) => {
   const progress = clamp(local / Math.max(1, scene.frames - 1));
 
   const kind = scene.transition || 'fade';
-  const window = (TRANSITION_SECONDS[kind] ?? 0) * fps;
+  const window = (theme.motionProfile.transitions[kind] ?? 0) * fps;
   const enter = window > 0 ? easeOut(clamp(local / window)) : 1;
   const showPrevious = !cover && index > 0 && !isCut(scene) && local < window;
   const previous = showPrevious ? scenes[index - 1] : undefined;
@@ -415,7 +415,7 @@ export const Movie: React.FC<MovieProps> = (props) => {
       justifyContent: 'space-between', gap: 24}}>
       <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
         {cover ? (theme.name === 'documentary' ? '数学与科学 · 看见结构的力量' : 'Movelyth · 幕绎')
-          : `来源：${(props.sources[scene.source_index]?.label || '原理演示').slice(0, 60)}`}
+          : `来源：${props.sources[scene.source_index]?.label || '原理演示'}`}
       </span>
       {!cover && isIllustrative(scene) && <span style={{flexShrink: 0}}>原理示意</span>}
     </div>

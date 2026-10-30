@@ -70,6 +70,67 @@ def test_subject_states_are_listed_in_scene_order():
     assert [item["scene"] for item in states["s"]] == ["a", "b"]
 
 
+def test_non_adjacent_reappearance_is_not_misreported_as_a_scene_seam():
+    scenes = [
+        scene_model("before", layers=[layer("card", type="text", text="均值", subject_id="mean",
+                                             color="cyan", state_after="4")]),
+        scene_model("interlude", layers=[layer("note", type="text", text="先看排序")]),
+        scene_model("after", layers=[layer("point", procedural="vectors", subject_id="mean",
+                                            color="coral", state_before="10")]),
+    ]
+
+    report = continuity_report(scenes)
+    assert report["problems"] == []
+    assert report["handoffs"] == []
+    assert report["shared"][0]["scenes"] == ["before", "after"]
+
+
+def test_adjacent_shared_subject_exposes_a_reviewable_handoff():
+    scenes = [
+        scene_model("before", layers=[layer("underline", type="shape", shape="line", points=[1, 2, 3, 2],
+                                             subject_id="median_rule", color="amber",
+                                             state_after="中位数=4")]),
+        scene_model("after", layers=[layer("axis", type="shape", shape="line", points=[1, 2, 3, 2],
+                                            subject_id="median_rule", color="amber",
+                                            state_before="中位数=4")]),
+    ]
+
+    report = continuity_report(scenes)
+    assert report["problems"] == []
+    assert report["handoffs"] == [{
+        "subject_id": "median_rule", "from": "before", "to": "after",
+        "from_layer": "underline", "to_layer": "axis",
+        "from_state": "中位数=4", "to_state": "中位数=4",
+        "state_matches": True, "color_matches": True,
+    }]
+
+
+def test_co_present_text_note_is_not_a_second_handoff():
+    nodes = [{"id": "sender", "label": "发送端", "x": 200, "y": 200},
+             {"id": "network", "label": "网络", "x": 400, "y": 300}]
+    scenes = [
+        scene_model("before", layers=[
+            layer("route", type="diagram", nodes=nodes, subject_id="message", color="cyan",
+                  state_after="抵达网络节点"),
+            layer("note", type="text", text="同一条消息", subject_id="message",
+                  color="amber", state_after="抵达网络节点"),
+        ]),
+        scene_model("after", layers=[
+            layer("route_next", type="diagram", nodes=nodes, subject_id="message", color="cyan",
+                  state_before="抵达网络节点"),
+            layer("note_next", type="text", text="继续传递", subject_id="message",
+                  color="amber", state_before="抵达网络节点"),
+        ]),
+    ]
+
+    report = continuity_report(scenes)
+    assert report["problems"] == []
+    assert len(report["handoffs"]) == 1
+    assert report["handoffs"][0]["from_layer"] == "route"
+    assert report["handoffs"][0]["to_layer"] == "route_next"
+    assert len(subject_states(scenes)["message"][0]["representations"]) == 2
+
+
 # ----------------------------------------------------------------------- morph
 
 def morph_layer(points, **overrides) -> Scene:

@@ -1,5 +1,6 @@
 ﻿import type {CameraKeyframe, CameraKind, Layer, ResolvedAction} from './types';
 import {clamp, ease, easeOut, springish} from './theme';
+import type {MotionProfile} from './theme';
 
 export type Motion = {
   opacity: number;
@@ -31,11 +32,14 @@ export const motionFor = (
   progress: number,
   index: number,
   motionScale: number,
+  enterSeconds: number,
+  profile: MotionProfile,
 ): Motion => {
   const own = actions.filter((action) => action.target === layer.id);
   // Semantic order: the hero visual arrives first, notes settle after it.
-  const delay = index * 0.045 * motionScale;
-  const settle = springish(clamp((progress - delay) / (0.34 * motionScale)));
+  const delay = index * profile.staggerSeconds * motionScale;
+  const settleProgress = clamp((progress - delay) / (enterSeconds * motionScale));
+  const settle = profile.overshoot ? springish(settleProgress) : easeOut(settleProgress);
   const result: Motion = {
     opacity: 1,
     reveal: 1,
@@ -101,8 +105,8 @@ export const motionFor = (
     // displacement is small on purpose — big slides are what made V1 look like a
     // slide deck rather than a film.
     result.opacity = clamp(settle);
-    result.translateY = 0.018 * (1 - settle);
-    result.scale = 0.992 + 0.008 * settle;
+    result.translateY = profile.restLift * (1 - settle);
+    result.scale = 1 - profile.restScale + profile.restScale * settle;
   } else if (hasDraw) {
     // Keep the layer present; the draw progress controls the stroke itself.
     result.opacity = 1;
@@ -131,6 +135,7 @@ export type CameraState = {scale: number; translateX: number; translateY: number
 export const cameraFromPlan = (
   plan: CameraKeyframe[] | undefined,
   time: number,
+  moveSeconds = 0.7,
 ): CameraState | null => {
   if (!plan || plan.length === 0) return null;
   const at = (key: CameraKeyframe): CameraState => ({
@@ -146,7 +151,7 @@ export const cameraFromPlan = (
       // A keyframe holds its framing until the transition window that *ends* at the
       // next keyframe; easing from the previous keyframe instead would arrive early
       // and sit at the next framing for the whole shot.
-      const window = Math.min(0.7, Math.max(0.001, next.at - previous.at));
+      const window = Math.min(moveSeconds, Math.max(0.001, next.at - previous.at));
       const k = ease(clamp((time - (next.at - window)) / window));
       const a = at(previous);
       const b = at(next);
@@ -164,9 +169,10 @@ export const cameraFor = (
   kind: CameraKind | undefined,
   progress: number,
   options: {beatIndex?: number; beatStartedAt?: number; seconds?: number; time?: number;
-    plan?: CameraKeyframe[]} = {},
+    plan?: CameraKeyframe[]; cameraMoveSeconds?: number} = {},
 ): CameraState => {
-  const planned = cameraFromPlan(options.plan, options.time ?? progress * (options.seconds ?? 10));
+  const planned = cameraFromPlan(options.plan, options.time ?? progress * (options.seconds ?? 10),
+    options.cameraMoveSeconds ?? 0.7);
   if (planned) return planned;
   const beatIndex = options.beatIndex ?? 0;
   const seconds = options.seconds ?? 10;
@@ -205,10 +211,10 @@ export const cameraFor = (
 };
 
 /** A small heartbeat on the hero at each beat: visible, not a bouncing logo. */
-export const beatPulse = (time: number, beatStartedAt: number): number => {
+export const beatPulse = (time: number, beatStartedAt: number, amplitude = 0.008): number => {
   const local = time - beatStartedAt;
   if (local < 0 || local > 1.2) return 0;
-  return Math.sin(Math.PI * clamp(local / 1.2)) * 0.008;
+  return Math.sin(Math.PI * clamp(local / 1.2)) * amplitude;
 };
 
 export const percent = (value: number): string => `${(clamp(value) * 100).toFixed(2)}%`;

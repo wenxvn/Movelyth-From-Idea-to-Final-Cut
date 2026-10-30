@@ -140,6 +140,7 @@ V2 的 12 列栅格仍保留：`immersive` 是标题在上、主画面占满整�
 | `schema_version` | Scene / Cut | 1 或 2；高于实现版本直接拒绝 |
 | `subject_id` | Layer | 小写标识符；跨镜表示“同一个东西”，与 `layer.id`（本镜实例）分开 |
 | `state_before` / `state_after` | Layer | ≤40 字；声明状态必须同时给 `subject_id` |
+| `message_id` | DiagramEdge | 可选小写 id；唯一标记沿边运动的数据包，可作为语义事件的相机目标 |
 | `visual_explanation` | Layer | ≤120 字，说明这层画面在解释什么 |
 | `claim_ids` | Scene | 只能引用 `c1`、`c2` 这样的主张编号 |
 | `hold_reason` / `transition_reason` | Scene | 静止阅读与换场理由，用于解释“为什么不动” |
@@ -157,7 +158,8 @@ V2 的 12 列栅格仍保留：`immersive` 是标题在上、主画面占满整�
 校验（`resolve_events`）：
 
 - `narration` 片段找不到第 N 次出现 → 报错，**不会**静默绑定到第一次。
-- 事件时间落在镜头外、目标图层/subject 不存在、同一目标的事件倒序、id 重复 → 报错。
+- 事件时间落在镜头外、目标图层/subject/node/message 不存在、同一目标的事件倒序、id 重复 → 报错。
+- 重复指向同一 `message_id` 的事件会让相机沿数据包位置做 focus/follow；镜头末尾自动 reframe。
 - 事件时间来自 TTS 边界时 `timing="tts-word-boundaries"`；只有比例估计时
   `timing="estimated-character-timing"`，不被当成精确时间。
 

@@ -24,13 +24,13 @@ const charEm = (ch: string): number => {
   return 0.62;
 };
 
-const fitSize = (text: string, box: Box, base: number, min: number, singleLine = false): number => {
+const fitSize = (text: string, box: Box, base: number, min: number, singleLine = false,
+                 lineHeight = 1.34): number => {
   const lines = text.split('\n');
-  const LINE = 1.34;
   const fits = (size: number): boolean => {
     if (singleLine && lines.length === 1) {
       const width = Array.from(lines[0]).reduce((total, ch) => total + charEm(ch) * size, 0);
-      return width <= box.w && size * LINE <= box.h;
+      return width <= box.w && size * lineHeight <= box.h;
     }
     let rows = 0;
     for (const line of lines) {
@@ -47,7 +47,7 @@ const fitSize = (text: string, box: Box, base: number, min: number, singleLine =
       }
       rows += count;
     }
-    return rows * size * LINE <= box.h;
+    return rows * size * lineHeight <= box.h;
   };
   let size = base;
   while (size > min) {
@@ -104,6 +104,15 @@ export const TextLayer: React.FC<{
   const kicker = layer.region === 'top';
   const base = Math.round((theme.type.body + emphasis * 8) * regionFactor * (vertical ? 1.08 : 1));
   const size = fitSize(layer.text, box, base, 28);
+
+  // Narrow annotation strips cannot accommodate the normal card's padding.
+  // Render an unpadded line within the strip instead of clipping its lower half.
+  if (!kicker && box.h < 60) {
+    const stripSize = fitSize(layer.text, box, Math.min(24, Math.floor(box.h / 1.2)), 14, false, 1.1);
+    return <div style={{width: '100%', height: '100%', display: 'flex', alignItems: 'center',
+      opacity: reveal, color: theme.text, fontFamily: theme.fontFamily, fontSize: stripSize,
+      lineHeight: 1.1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{withBreaks(layer.text)}</div>;
+  }
 
   if (kicker) {
     // A kicker is a label above the visual, not a second paragraph: small, spaced,

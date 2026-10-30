@@ -83,6 +83,14 @@ def test_too_fast_and_too_short_pages_are_reported():
     assert any("只显示" in problem for problem in problems)
 
 
+def test_minimum_duration_tolerates_float_noise_but_not_short_cues():
+    data = scene_data()
+    data["captions"] = [page(21.927, 21.927 + 0.9, "选哪个")]
+    assert not any("只显示" in p for p in cue_report(data, "short", orientation="portrait")["problems"])
+    data["captions"] = [page(21.927, 21.927 + 0.89, "选哪个")]
+    assert any("只显示" in p for p in cue_report(data, "short", orientation="portrait")["problems"])
+
+
 def test_overlapping_pages_are_reported():
     data = scene_data()
     data["captions"] = [page(0.2, 2.0, "第一页字幕"), page(1.5, 3.0, "第二页字幕")]
